@@ -1,0 +1,38 @@
+apiVersion: apps/v1beta1
+kind: StatefulSet
+metadata:
+  name: elasticsearch
+  namespace: civil-connect
+spec:
+  serviceName: "elasticsearch"
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: elasticsearch
+    spec:
+      containers:
+      - name: es5node
+        image: giorgiocasciaro/alpine-es5-cluster:0.0.1
+        command: ["sh"]
+        args: ["-c", "cp /elasticsearch-config-dir/elasticsearch.yml /opt/elasticsearch/config/elasticsearch.yml; /opt/elasticsearch/bin/elasticsearch"]
+        env:
+          - name: ES_JAVA_OPTS
+            value: "-Xms50m -Xmx50m"
+        ports:
+        - containerPort: 9200
+          name: elasticsearch
+        - containerPort: 9300
+          name: elasticsearch2
+        volumeMounts:
+        - name: elasticsearch-volume
+          mountPath: /var/data/elasticsearch
+        - name: elasticsearch-config-dir
+          mountPath: /elasticsearch-config-dir/
+      volumes:
+      - name: elasticsearch-volume
+        hostPath:
+          path: /elasticsearchNodeData
+      - name: elasticsearch-config-dir
+        configMap:
+          name: elasticsearch

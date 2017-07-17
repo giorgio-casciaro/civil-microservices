@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+	<title>test</title>
+	<link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css" />
+	<link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap-theme.min.css" />
+	<link rel="stylesheet" href="http://code.jquery.com/ui/1.10.4/themes/smoothness/jquery-ui.min.css" />
+
+	<style>
+  textarea:empty{display: none}
+	textarea{ min-height:400px; margin-left: 2em; padding: 2em}
+  .notHaveUpdates{ background-color: rgba(0, 255, 128, 0.2);}
+  .haveUpdates{ background-color: rgba( 255, 50, 0, 0.2);}
+  ol li{ border: 1px solid #ccc; padding: 1em}
+  </style>
+
+
+</head>
+<body>
+	<div id="container"></div>
+  <ol id="textareas"></ol>
+	<script type="text/javascript" src="//code.jquery.com/jquery-1.10.2.min.js"></script>
+	<script type="text/javascript" src="//code.jquery.com/ui/1.10.4/jquery-ui.min.js"></script>
+	<script type="text/javascript" src="//netdna.bootstrapcdn.com/bootstrap/3.1.1/js/bootstrap.min.js"></script>
+  <script>
+  const serviceTemplate=service=>`
+  <div class="${service.haveUpdates?'haveUpdates':'notHaveUpdates'}" >
+  <h3>${service.dir}</h3>
+  <ul>
+  <li>name ${service.saved.name}</li>
+  <li>dir ${service.dir}</li>
+  <li>path ${service.path}</li>
+  <li>hash ${service.saved.hash}</li>
+  <li>version ${service.saved.version}</li>
+  <li>image ${service.saved.image}</li>
+  <li>haveUpdates ${service.haveUpdates}</li>
+  <li>node_modules ${service.node_modules}</li>
+  <li>node_modules_compiled ${service.node_modules}</li>
+  </ul>
+  <div>
+  force build <input type="checkbox" id="check_${service.dir}" />
+  <a class="btn btn-default compileService" onclick="compileService('${service.dir}')">compileService</a>
+  <a class="btn btn-default publishService" onclick="publishService('${service.dir}')">publishService</a>
+  <a class="btn btn-default getUpdatedKubernetesYaml" onclick="getUpdatedKubernetesYaml('${service.dir}')">getUpdatedKubernetesYaml</a>
+  <a class="btn btn-default getAllKubernetesYaml" onclick="getAllKubernetesYaml('${service.dir}')">getAllKubernetesYaml</a>
+  </div>
+  </div>
+  `
+	const responseTemplate=(id,title,data,response)=>`
+  <li>
+  <h4 >${data.service||""} <small >${title}  ${JSON.stringify(data,null,4)}</small></h4>
+	<a class="btn btn-default copy" onclick="copy('#textarea_dep_${id}')">copy Deployment</a>
+	<a class="btn btn-default copy" onclick="copy('#textarea_stat_${id}')">copy StatefulSet</a>
+  <textarea class="form-control" id="textarea_dep_${id}">${response.deployment}</textarea>
+	<textarea class="form-control" id="textarea_stat_${id}">${response.statefulSet||""}</textarea>
+	<textarea class="form-control" id="textarea_stat_${id}">${(!response.deployment&&!response.statefulSet)?JSON.stringify(response,null,4):""}</textarea>
+  </li>
+  `
+	const rawResponseTemplate=(id,title,data,response)=>`
+	<li>
+	<h4 >${data.service||""} <small >${title}  ${JSON.stringify(data,null,4)}</small></h4>
+	<textarea class="form-control" id="textarea_stat_${id}">${JSON.stringify(response,null,4)}</textarea>
+	</li>
+	`
+
+  const responseMultiTemplate=(id,title,data,response)=>`
+  <li>
+  <h4 >${data.service||""} <small >${title}  ${JSON.stringify(data,null,4)}</small></h4>
+	<a class="btn btn-default copy" onclick="copy('#textarea_${id}')">copy</a>
+  <textarea id="textarea_${id}" class="form-control" >${response}</textarea>
+  </li>
+  `
+	var copy=(query)=>{
+		document.querySelector(query).select();
+		document.execCommand('copy');
+  }
+	var compileService=(service)=>{
+    var data={service}
+    $.get( "compileService", data,function( json ) {
+      var response=JSON.parse(json)
+      console.log(data);
+      $("#textareas").prepend(rawResponseTemplate(ids++,"compile",data,response))
+    });
+  }
+	var publishService=(service)=>{
+    var force=$("#check_"+service).prop("checked")
+    var data={service}
+    if(force)data.force=force
+    $.get( "publishService", data,function( json ) {
+      var response=JSON.parse(json)
+      console.log(data);
+      $("#textareas").prepend(rawResponseTemplate(ids++,"build",data,response))
+    });
+  }
+  var getUpdatedKubernetesYaml=(service)=>{
+    $.get( "getUpdatedKubernetesYaml", {service},function( json ) {
+      $("#textareas").prepend(responseTemplate(ids++,"Updated Yaml",{service},JSON.parse(json)))
+    });
+  }
+	var ids=0
+  var getAllKubernetesYaml=(service)=>{
+    $.get( "getAllKubernetesYaml", {service},function( json ) {
+      var data=JSON.parse(json)
+      for (var i in data){
+        $("#textareas").prepend(responseMultiTemplate(ids++,i,{service},data[i]))
+      }
+
+    });
+  }
+  $(document).on("ready",()=>{
+    $.get( "analizeDev", function( json ) {
+      var data=JSON.parse(json)
+      console.log(data);
+      data.services.forEach(service=>$("#container").append(serviceTemplate(service)))
+    });
+  })
+  </script>
+</body>
+</html>

@@ -1,0 +1,90 @@
+version: '3'
+
+services:
+   es5master:
+     image: giorgiocasciaro/alpine-es5-cluster:v1
+     entrypoint: /opt/elasticsearch/bin/elasticsearch
+     volumes:
+       - ./config/master.yml:/opt/elasticsearch/config/elasticsearch.yml
+     networks:
+       baseNetwork:
+          aliases:
+           - es5master
+     ports:
+       - 9200:9200
+
+   es5node01:
+     image: giorgiocasciaro/alpine-es5-cluster:v1
+     entrypoint: /opt/elasticsearch/bin/elasticsearch
+     volumes:
+       - ./config/node01.yml:/opt/elasticsearch/config/elasticsearch.yml
+     networks:
+       baseNetwork:
+          aliases:
+           - es5node01
+    #  ports:
+    #    - "9201:9200"
+
+
+   es5node02:
+     image: giorgiocasciaro/alpine-es5-cluster:v1
+     entrypoint: /opt/elasticsearch/bin/elasticsearch
+     volumes:
+       - ./config/node02.yml:/opt/elasticsearch/config/elasticsearch.yml
+     networks:
+       baseNetwork:
+          aliases:
+           - es5node02
+
+
+   es5node03:
+     image: giorgiocasciaro/alpine-es5-cluster:v1
+     entrypoint: /opt/elasticsearch/bin/elasticsearch
+     volumes:
+       - ./config/node03.yml:/opt/elasticsearch/config/elasticsearch.yml
+     networks:
+       baseNetwork:
+          aliases:
+           - es5node03
+
+   es5head:
+     image: mobz/elasticsearch-head:5-alpine
+     networks:
+       - baseNetwork
+     ports:
+       - 9100:9100
+
+# connect to http://es5master:9200
+
+  #  dockbeat:
+  #    image: ingensi/dockbeat
+  #    entrypoint: dockbeat
+  #    volumes:
+  #      - /var/run/docker.sock:/var/run/docker.sock
+  #      - ./config/dockbeat.yml:/etc/dockbeat/dockbeat.yml
+  #    networks:
+  #      - baseNetwork
+
+# connect to http://es5master:9200
+  #  cerebro:
+  #    image: yannart/cerebro
+  #    networks:
+  #      - baseNetwork
+  #    ports:
+  #      - 9000:9000
+
+
+   kibana:
+     image: giorgiocasciaro/alpine-kibana:v1
+     volumes:
+       - ./config/kibana.yml:/opt/kibana/config/kibana.yml
+     entrypoint:
+       - /opt/kibana/bin/kibana
+     ports:
+       - 5601:5601
+     networks:
+       - baseNetwork
+
+
+networks:
+  baseNetwork:

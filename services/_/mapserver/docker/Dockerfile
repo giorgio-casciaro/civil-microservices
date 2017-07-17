@@ -1,0 +1,1 @@
+FROM klokantech/tileserver-gl

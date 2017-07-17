@@ -1,0 +1,9 @@
+version: '3'
+
+services:
+   aerospike:
+     command: bash -c "cp  /config/test.conf /etc/aerospike/aerospike.conf ; sh /scripts/start.sh"
+
+networks:
+  aerospike:
+    driver: overlay

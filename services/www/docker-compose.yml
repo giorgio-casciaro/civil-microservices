@@ -1,0 +1,47 @@
+version: '3'
+
+services:
+   www:
+     image: nginx:1.12.0-alpine
+     entrypoint: sh -c "echo "$$NGINX_CONF" > /etc/nginx/nginx.conf ;  nginx -g 'daemon off;' "
+     environment:
+       NGINX_CONF: |-
+          events {
+              worker_connections  1024;
+          }
+          http {
+            client_max_body_size 500M;
+            include       /etc/nginx/mime.types;
+            default_type  application/octet-stream;
+            resolver 127.0.0.11;
+            server {
+                listen 81 ;
+                location ~ /api/([-_a-zA-z0-9]*)/(.*) {
+                  proxy_pass http://$$1:10080/$$2 ;
+                }
+                location ~ /api_static/([-_a-zA-z0-9]*)/(.*) {
+                  proxy_pass http://$$1:10070/$$2 ;
+                }
+                location / {
+                    root /service;
+                }
+            }
+          }
+     volumes:
+        - ../www/service:/service
+     networks:
+       - microservicesNet
+      # dockerfile: Dockerfile
+     ports:
+      - 81:81
+      # - 10080:10080
+     deploy:
+      # placement:
+      #   constraints: [node.role == manager]
+      mode: global
+      # replicas: 3
+
+
+networks:
+  microservicesNet:
+    driver: bridge

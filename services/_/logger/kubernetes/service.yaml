@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: civil-microservices-logger
+  namespace: civil-connect
+spec:
+  ports:
+  - port: 10080
+    name: jesusPublicHttp
+  - port: 10081
+    name: jesusPrivateHttp
+  - port: 10082
+    name: jesusPrivateZeromq
+  clusterIP: None
+  selector:
+    app: civil-microservices-logger

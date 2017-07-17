@@ -1,0 +1,17 @@
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: test-deployment
+  namespace: civil-connect
+spec:
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+        - name: nginx
+          image: 'giorgiocasciaro/civil-microservices-deploy-test:version-36'
+          ports:
+            - containerPort: 80

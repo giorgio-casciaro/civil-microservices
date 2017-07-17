@@ -1,0 +1,28 @@
+{
+  "name": "civil-microservices-test",
+  "version": "0.0.1",
+  "description": "",
+  "main": "start.js",
+  "scripts": {
+    "test": "node ./service/tests/base.testraw.js",
+    "link_sint_modules": "npm link sint-bit-jesus && npm link sint-bit-schema-manager && npm link sint-bit-cqrs",
+    "start": "npm test && node service/start.js",
+    "test_remote": "node ./service/tests/remote.testraw.js",
+    "watch_test_remote": "node ./service/lib/watch.js ./service/tests/remote.testraw.js ./service/tests/remote.testraw.js",
+    "watch_test": "node ./service/lib/watch.js ./service ./service/tests/base.testraw.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "aerospike": "^2.5.2",
+    "nodemon": "^1.11.0"
+  },
+  "dependencies": {
+    "sint-bit-jesus": "",
+    "sint-bit-schema-manager": "",
+    "chalk": "^1.1.3",
+    "elasticsearch": "^13.0.0-rc2",
+    "sint-bit-cqrs": "",
+    "uuid": "^3.0.1"
+  }
+}

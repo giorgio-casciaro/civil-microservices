@@ -1,0 +1,37 @@
+version: '3'
+
+services:
+   elasticsearch:
+     image: giorgiocasciaro/alpine-es5-cluster:v1
+     command: bash -c "echo \"$$ELASTICSEARCH_CONF\" > /opt/elasticsearch/config/elasticsearch.yml ; /opt/elasticsearch/bin/elasticsearch "
+     networks:
+       - elasticsearch
+     environment:
+       ELASTICSEARCH_CONF: |-
+          cluster.name: elasticsearch
+          node.name: ${HOSTNAME}
+
+          node.master: true
+          node.data: true
+          node.ingest: true
+
+          http.host: 0.0.0.0
+          network.host: _site_
+          discovery.zen.ping.unicast.hosts:
+             - elasticsearch
+          path:
+            data: /var/data/elasticsearch
+
+     build:
+      context: ./
+      dockerfile: Dockerfile
+     deploy:
+      # placement:
+      #   constraints: [node.role == manager]
+      #mode: global
+      replicas: 3
+
+
+networks:
+  elasticsearch:
+    driver: bridge

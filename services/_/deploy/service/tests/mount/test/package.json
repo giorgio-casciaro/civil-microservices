@@ -1,0 +1,22 @@
+{
+  "name": "civil-microservices-deploy-test",
+  "version": "0.0.1",
+  "description": "",
+  "main": "start.js",
+  "scripts": {
+    "link_sint_modules": "npm link sint-bit-jesus && npm link sint-bit-schema-manager && npm link sint-bit-cqrs",
+    "unlink_sint_modules": "npm unlink sint-bit-jesus && npm unlink sint-bit-schema-manager && npm unlink sint-bit-cqrs",
+    "start": "npm test && node service/start.js",
+    "test": "node ./service/tests/base.testraw.js",
+    "watch_test": "node ./service/lib/watch.js ./service,./service/tests/base.testraw.js ./service/tests/base.testraw.js",
+    "watch_start": "node ./service/lib/watch.js ./service,./service/tests/base.testraw.js ./service/start.js",
+    "docker_compile": "npm install && cd docker && sh compile.sh",
+    "docker_build": "npm install && cd docker && sh build.sh",
+    "docker_push": "cd docker && sh push.sh"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+  "chalk": "^1.1.3"
+  }
+}

@@ -1,0 +1,252 @@
+version: '3'
+
+services:
+   aerospike:
+     image: aerospike/aerospike-server
+
+     expose:
+        - "3000"
+        - "3001"
+        - "3002"
+        - "3003"
+     ports:
+        - "3000:3000"
+        - "3001:3001"
+        - "3002:3002"
+        - "3003:3003"
+     entrypoint: sh -c " /usr/bin/asd --fgdaemon --config-file /opt/aerospike/etc/aerospike.conf"
+    #  entrypoint: bash
+     volumes:
+       - ./aerospike.conf:/opt/aerospike/etc/aerospike.conf
+     networks:
+       civilmicroservices:
+          ipv4_address: 172.16.100.10
+
+   smtp:
+     image: mailhog/mailhog
+     ports:
+       - "1025:1025"
+       - "8025:8025"
+     volumes:
+       - ./email:/email
+    #  environment:
+    #    MH_STORAGE: maildir
+    #    MH_MAILDIR_PATH: /email
+     networks:
+       civilmicroservices:
+          ipv4_address: 172.16.100.09
+
+   aerospike-tools:
+     stdin_open: true
+     tty: true
+     image: aerospike/aerospike-tools
+     networks:
+       civilmicroservices:
+          # aliases:
+          #  - aerospike-tools
+
+   aerospike-amc:
+     image: mrbar42/aerospike-amc
+     expose:
+        - "9001"
+        - "8081"
+     ports:
+        - "8081:8081"
+        - "9001:9001"
+    #  entrypoint: /opt/elasticsearch/bin/elasticsearch
+    #  volumes:
+    #    - ./aerospike.conf:/etc/aerospike/aerospike.conf
+     networks:
+       civilmicroservices:
+          # aliases:
+          #  - aerospike-amc
+
+
+   elasticsearch:
+      image: itzg/elasticsearch:latest
+      ports:
+        - "9200:9200"
+        - "9300:9300"
+      # tty : true
+    #  image: docker.elastic.co/elasticsearch/elasticsearch:5.3.1
+    #  ports:
+    #     - "9200:9200"
+    #     - "9300:9300"
+      # environment:
+      #  ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    #    transport.host: 127.0.0.1
+    #    http.host: 0.0.0.0
+    #   #  xpack.security.enabled: "false"
+    #   #  xpack.monitoring.enabled: "false"
+    #   #  xpack.graph.enabled: "false"
+    #   #  xpack.watcher.enabled: "false"
+      networks:
+       civilmicroservices:
+          ipv4_address: 172.16.100.11
+
+   test:
+     image: giorgiocasciaro/alpine-node-lua-aerospike:v2
+     #entrypoint: sh -c "ifconfig -a && node /service/service/tests/base.test"
+     entrypoint: sh -c "cd /service/ && npm run watch_start"
+     #entrypoint: sh -c "cd /service/ && npm run watch_test"
+    #  ports:
+    #    - "9229"
+     environment:
+       schemaHost: 'http://172.16.100.17:10000'
+       netHost: 172.16.100.12
+       serviceName: test
+       elasticsearchHost: 172.16.100.11:9200
+       aerospikeHosts: 172.16.100.10:3000
+       NODE_ENV: development
+     volumes:
+        - ./test/service:/service/service
+        - ./test/node_modules_compiled:/service/node_modules
+        - ./test/package.json:/service/package.json
+        - ./NPM/jesus/:/service/node_modules/sint-bit-jesus/
+        # - ./NPM/cqrs/:/service/node_modules/sint-bit-cqrs/
+     networks:
+       civilmicroservices:
+          ipv4_address: 172.16.100.12
+
+   test-remote:
+     image: giorgiocasciaro/alpine-node-lua-aerospike:v2
+     #entrypoint: bash
+     entrypoint: sh -c "cd /service/ && npm run watch_test_remote"
+    #  ports:
+    #    - "9229"
+     environment:
+       schemaHost: 'http://172.16.100.17:10000'
+       serviceName: testRemote
+       netHost: 172.16.100.13
+       elasticsearchHost: 172.16.100.11:9200
+       aerospikeHosts: 172.16.100.10:3000
+       NODE_ENV: development
+     volumes:
+        - ./test/service:/service/service
+        - ./test/node_modules_compiled:/service/node_modules
+        - ./test/package.json:/service/package.json
+        - ./NPM/jesus/:/service/node_modules/sint-bit-jesus/
+        - ./NPM/cqrs/:/service/node_modules/sint-bit-cqrs/
+     networks:
+       civilmicroservices:
+          ipv4_address: 172.16.100.13
+
+   www:
+     image: nginx:1.12.0-alpine
+    #  entrypoint: sh -c "nginx -g 'daemon off;'"
+     ports:
+       - "10080:10080"
+     volumes:
+        # - ./email:/usr/share/nginx/html/email
+        - ./www/nginx.conf:/etc/nginx/nginx.conf:ro
+        - ./www/service:/usr/share/nginx/html
+        # - ./www/app:/usr/share/nginx/html/app
+        # - ./www/admin:/usr/share/nginx/html/admin
+     networks:
+       civilmicroservices:
+          ipv4_address: 172.16.100.14
+
+   users:
+     image: giorgiocasciaro/ubuntu-node:v1
+    #  entrypoint: sh -c "cd /service/ && npm run watch_test"
+     entrypoint: sh -c "cd /service/ && npm run watch_start"
+    #  ports:
+      #  - "9229"
+     environment:
+       uploadPath: /uploads/
+       schemaHost: 'http://172.16.100.17:10000'
+       confirmEmailUrl: http://localhost:8080/#/registration/ConfirmEmail/
+       serviceName: users
+       netHost: 172.16.100.15
+       netHostHttpPublicPort: 10080
+       netCors: http://172.16.100.14:80,http://172.16.100.14,http://localhost:8080,http://127.0.0.1:8080,http://localhost:10080,http://127.0.0.1:10080
+       elasticsearchHost: 172.16.100.11:9200
+       aerospikeHosts: aerospike:3000
+       NODE_ENV: development
+       sendEmails: 'true'
+       smtpConfigJson: '{ "host": "smtp", "port": 1025, "secure": false }'
+     volumes:
+        - ../FS/users/:/uploads/
+        - ./users/service:/service/service
+        - ./users/node_modules_compiled:/service/node_modules
+        - ./users/package.json:/service/package.json
+        - ./NPM/jesus/:/service/node_modules/sint-bit-jesus/
+        - ./NPM/cqrs/:/service/node_modules/sint-bit-cqrs/
+     networks:
+       civilmicroservices:
+          ipv4_address: 172.16.100.15
+
+   app:
+     image: giorgiocasciaro/ubuntu-node:v1
+    #  entrypoint: sh -c "cd /service/ && npm run watch_test_remote"
+     entrypoint: sh -c "cd /service/ && npm run watch_start"
+    #  ports:
+      #  - "10080"
+      #  - "9229"
+     environment:
+       serviceName: app
+       schemaHost: 'http://172.16.100.17:10000'
+       netHost: 172.16.100.16
+       netHostHttpPublicPort: 10080
+       netCors: http://172.16.100.14:80,http://172.16.100.14,http://localhost:8080,http://127.0.0.1:8080,http://localhost:10080,http://127.0.0.1:10080
+       elasticsearchHost: 172.16.100.11:9200
+       aerospikeHosts: 172.16.100.10:3000
+       NODE_ENV: development
+     volumes:
+        - ./app/service:/service/service
+        - ./app/node_modules_compiled:/service/node_modules
+        - ./app/package.json:/service/package.json
+        - ./NPM/jesus/:/service/node_modules/sint-bit-jesus/
+        - ./NPM/cqrs/:/service/node_modules/sint-bit-cqrs/
+     networks:
+       civilmicroservices:
+         ipv4_address: 172.16.100.16
+
+   schema:
+     image: giorgiocasciaro/ubuntu-node:v1
+    #  entrypoint: sh -c "cd /service/ && npm run watch_test_remote"
+     entrypoint: sh -c "cd /service/ && npm run watch_start"
+     ports:
+       - "10000:10000"
+     environment:
+       netHost: 172.16.100.17
+       netHostPort: 10000
+       aerospikeHosts: 172.16.100.10:3000
+       NODE_ENV: development
+     volumes:
+        - ./schema/service:/service/service
+        - ./schema/node_modules_compiled:/service/node_modules
+        - ./schema/package.json:/service/package.json
+        - ./NPM/jesus/:/service/node_modules/sint-bit-jesus/
+        - ./NPM/cqrs/:/service/node_modules/sint-bit-cqrs/
+     networks:
+       civilmicroservices:
+         ipv4_address: 172.16.100.17
+
+  #  deploy:
+  #    image: giorgiocasciaro/alpine-node-lua-aerospike:v2
+  #    entrypoint: sh -c "cd /service/ && npm start"
+  #    environment:
+  #      mountPath: deploy
+  #      httpHost: 172.16.100.18
+  #      httpPort: 12000
+  #      NODE_ENV: development
+  #    volumes:
+  #       - ./deploy/service:/service/service
+  #       - ./:/service/service/mount
+  #       - ./deploy/node_modules_compiled:/service/node_modules
+  #       - ./deploy/package.json:/service/package.json
+  #       - ./NPM/jesus/:/service/node_modules/sint-bit-jesus/
+  #       - ./NPM/cqrs/:/service/node_modules/sint-bit-cqrs/
+  #    networks:
+  #      civilmicroservices:
+  #        ipv4_address: 172.16.100.18
+
+
+networks:
+  civilmicroservices:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+      - subnet: 172.16.100.0/24
