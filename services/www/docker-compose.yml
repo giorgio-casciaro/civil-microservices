@@ -31,15 +31,8 @@ services:
         - ../www/service:/service
      networks:
        - microservicesNet
-      # dockerfile: Dockerfile
      ports:
       - 81:81
-      # - 10080:10080
-     deploy:
-      # placement:
-      #   constraints: [node.role == manager]
-      mode: global
-      # replicas: 3
 
 
 networks:

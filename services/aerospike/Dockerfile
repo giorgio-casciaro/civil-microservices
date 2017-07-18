@@ -1,4 +1,4 @@
-FROM blitznote/debootstrap-amd64:16.04
+FROM phusion/baseimage:0.9.22
 # RUN  mkdir /aerospike
 # COPY ./aerospike /aerospike
 # WORKDIR /aerospike/aerospike-server
@@ -20,9 +20,8 @@ RUN \
   && rm -rf aerospike-server.tgz aerospike /var/lib/apt/lists/* \
   && dpkg -r wget \
   && dpkg --purge wget \
-  && apt-get update
-
-ENV AEROSPIKE_VERSION 3.12.1
+  && apt-get autoremove -y \
+  && apt-get purge -y
 
 ENV CONFIG_FILE test.conf
 

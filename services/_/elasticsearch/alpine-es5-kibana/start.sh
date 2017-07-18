@@ -1,9 +1,10 @@
 #!/bin/bash
 #set -x
+DIR=$(dirname "$(readlink -f "$0")")
 MICROSERVICE_NAME=${PWD##*/};
 MICROSERVICE_SLUG=$(echo "$MICROSERVICE_NAME" | tr '[:upper:]' '[:lower:]') ;
 MICROSERVICE_ID=${PWD##*/};
-MICROSERVICE_LOCAL_PATH="$PWD/data";
+MICROSERVICE_LOCAL_PATH="$DIR/data";
 MICROSERVICE_DOCKER_PATH="/data";
 MICROSERVICE_DOCKER_IMAGE_NAME="giorgiocasciaro/$MICROSERVICE_ID:v1";
 MICROSERVICE_USER="elasticsearch";

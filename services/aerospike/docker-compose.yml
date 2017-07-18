@@ -49,11 +49,6 @@ services:
           		filesize 500M
           	}
           }
-     deploy:
-      # placement:
-      #   constraints: [node.role == manager]
-      #mode: global
-      replicas: 3
 
 
 networks:

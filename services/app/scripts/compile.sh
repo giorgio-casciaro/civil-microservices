@@ -1,3 +1,4 @@
 #!/bin/bash
 #set -x
-docker run -v "$PWD/..":"/service"  giorgiocasciaro/ubuntu-node-compiler:v2
+DIR=$(dirname "$(readlink -f "$0")")
+docker run -v "$DIR/..":"/service"  giorgiocasciaro/ubuntu-node-compiler:v2

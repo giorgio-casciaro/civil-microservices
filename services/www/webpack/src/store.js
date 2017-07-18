@@ -2,10 +2,12 @@ import Vue from 'vue'
 import Vuex from 'vuex'
 // import createPersistedState from 'vuex-persistedstate'
 Vue.use(Vuex)
-
+var apiServer = '/api'
+console.log(`process.env`, )
+if (process.env.NODE_ENV === 'development')apiServer = 'http://localhost:81/api'
 const store = new Vuex.Store({
   state: {
-    apiServer: '/api',
+    apiServer: apiServer,
     viewport: 'main',
     errors: []
   },

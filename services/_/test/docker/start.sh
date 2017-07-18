@@ -1,5 +1,6 @@
 #!/bin/bash
 #set -x
+DIR=$(dirname "$(readlink -f "$0")")
 MICROSERVICE_ID="civil-microservices-test";
 MICROSERVICE_DOCKER_IMAGE_NAME="giorgiocasciaro/$MICROSERVICE_ID:v1";
 
