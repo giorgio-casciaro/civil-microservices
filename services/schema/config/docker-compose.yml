@@ -4,7 +4,7 @@ services:
   schema:
     # user:           root
     working_dir:      /service
-    image:            giorgiocasciaro/ubuntu-node:v1
+    image:            giorgiocasciaro/civil-microservices-schema:0
     # entrypoint:     -c "cd /service/ && npm run watch_test_remote"
     command:          -c "sleep 10 && npm run start"
     # ports:

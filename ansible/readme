@@ -1,0 +1,6 @@
+ansible -i ./test/hosts -u root all -m ping
+ansible -i ./test/hosts -u root all -m setup
+
+ansible-playbook -i ./test/hosts -u root  ./playbook/install_docker.yml
+ansible-playbook -i ./test/hosts -u root  ./playbook/init_swarm_manager.yml
+ansible-playbook -i ./test/hosts -u root  ./playbook/init_swarm_worker.yml

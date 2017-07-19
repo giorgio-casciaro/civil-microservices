@@ -2,7 +2,7 @@ version:                '3'
 
 services:
    users:
-     image:             giorgiocasciaro/ubuntu-node:v1
+     image:             giorgiocasciaro/civil-microservices-users:0
      working_dir:       /service
      command:           -c "sleep 60 && npm run start "
      environment:

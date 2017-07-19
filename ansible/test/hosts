@@ -1,4 +1,19 @@
-host_01 ansible_port=22 ansible_host=212.47.239.153
+swarm-01 ansible_host=212.47.239.153
+swarm-02 ansible_host=51.15.131.206
 
-[master]
-host_01
+[docker_engine]
+swarm-[01:02]
+
+[docker_swarm_manager]
+swarm-01
+
+[docker_swarm_secondary_manager]
+
+[docker_swarm_secondary_manager:vars]
+swarm_manager=212.47.239.153
+
+[docker_swarm_worker]
+swarm-[02:02]
+
+[docker_swarm_worker:vars]
+swarm_manager=212.47.239.153

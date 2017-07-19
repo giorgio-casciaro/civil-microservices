@@ -1,5 +1,5 @@
 #!/bin/bash
-cd /service/
+cd /microservice/service/
 # rm -r ./node_modules_compiled
 # mv ./node_modules ./node_modules_original
 # mv ./node_modules_compiled ./node_modules

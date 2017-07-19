@@ -1,4 +1,4 @@
-FROM giorgiocasciaro/ubuntu-node:v1
+FROM giorgiocasciaro/ubuntu-node:v2
 # COPY ./docker/scripts /scripts
 COPY . /service
 RUN rm -r /service/node_modules

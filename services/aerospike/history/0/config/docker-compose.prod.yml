@@ -2,7 +2,7 @@ version: '3'
 
 services:
    aerospike:
-     image: giorgiocasciaro/civil-microservices-aerospike:0
+     image: giorgiocasciaro/civil-microservices-aerospike:1
      command: bash -c "echo \"$$AEROSPIKE_CONF\" > /etc/aerospike/aerospike.conf ; cat /etc/aerospike/aerospike.conf ; asd --foreground "
      networks:
        - aerospike

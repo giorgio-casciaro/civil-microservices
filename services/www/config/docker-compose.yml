@@ -2,7 +2,7 @@ version: '3'
 
 services:
    www:
-     image: nginx:1.12.0-alpine
+     image: giorgiocasciaro/civil-microservices-users:0
      entrypoint: sh -c "echo "$$NGINX_CONF" > /etc/nginx/nginx.conf ;  nginx -g 'daemon off;' "
      environment:
        NGINX_CONF: |-
