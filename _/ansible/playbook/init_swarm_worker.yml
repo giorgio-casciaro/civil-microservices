@@ -1,0 +1,16 @@
+---
+- hosts:              docker_swarm_worker
+  vars:
+    http_port:        80
+    max_clients:      200
+  remote_user:        root
+  tasks:
+
+    - name:           Copy Docker Swarm Token worker
+      copy:
+        src:          ../tokens/{{swarm_manager}}/worker.tkn
+        dest:         /worker.tkn
+        owner:        root
+
+    - name:           Init Swarm Manager
+      shell: "docker swarm join {{swarm_manager}} --advertise-addr {{ansible_host}} --token $(cat /worker.tkn) || echo 1"

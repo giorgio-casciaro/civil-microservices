@@ -6,7 +6,7 @@ if [ -f "$file" ]
 then
   echo "ALL APP: OK"
   echo $file
-  sh $file
+  sh $file ${2} ${3}
 fi
 
 
@@ -16,13 +16,13 @@ do
  # cat "$file" >> /var/www/cdn.example.com/cache/large.css
  serviceName=$(basename $dir)
  file="${dir}/scripts/${1}"
+ # echo "CHECK: $file"
  if [ -f "$file" ]
   then
       echo "$serviceName: OK"
-      echo $file
-      sh $file
-  else
-      echo "$serviceName: SKIPPED"
+      sh $file ${2} ${3}
+  # else
+      # echo "$serviceName: SKIPPED"
   fi
 done
 echo "\n"

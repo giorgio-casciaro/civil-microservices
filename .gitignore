@@ -1,3 +1,5 @@
+tokens/*
+*.tkn
 .vagrant
 *.zip
 

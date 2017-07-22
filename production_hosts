@@ -1,0 +1,19 @@
+swarm-01 ansible_host=163.172.140.249
+swarm-02 ansible_host=212.47.253.160
+
+[docker_swarm_secondary_manager:vars]
+swarm_manager=163.172.140.249
+
+[docker_swarm_worker:vars]
+swarm_manager=163.172.140.249
+
+[docker_engine]
+swarm-[01:02]
+
+[docker_swarm_manager]
+swarm-01
+
+[docker_swarm_secondary_manager]
+
+[docker_swarm_worker]
+swarm-[02:02]

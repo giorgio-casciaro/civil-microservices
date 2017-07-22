@@ -1,0 +1,12 @@
+---
+- hosts:              docker_swarm_manager
+  remote_user:        root
+  tasks:
+    - name:           Copy Swarm STACK config
+      copy:
+        src:          /home/giorgio/Scrivania/PROJECTS/civil-microservices/services/aerospike/config/docker-compose.prod.yml
+        dest:         /service_deploy.yml
+        owner:        root
+
+    - name:           Deploy stack civil-microservices
+      shell: "docker stack deploy -c /service_deploy.yml civil-microservices"

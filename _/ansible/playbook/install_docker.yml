@@ -1,0 +1,56 @@
+---
+- hosts:
+    - all
+  vars:
+    http_port:        80
+    max_clients:      200
+  remote_user:        root
+  tasks:
+    # - name:         REMOVE ERRORS
+    #   command:      add-apt-repository --remove "deb [arch=amd64] https://download.docker.com/linux/ubuntu $$(lsb_release -cs) stable"
+    #
+    # - name:         REMOVE ERRORS
+    #   command:      add-apt-repository --remove "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+
+    - name:           Install Docker prerequisites on Ubuntu xenial
+      apt:
+        update_cache: yes
+        pkg:          "{{ item }}"
+        state:        latest
+      with_items:
+        - apt-transport-https
+        - ca-certificates
+        - curl
+        - software-properties-common
+        - unzip
+
+    - name:           Install Docker key on Ubuntu
+      apt_key:
+        url:          "https://download.docker.com/linux/ubuntu/gpg"
+
+    - name:           Install Docker repository on Ubuntu xenial
+      apt_repository:
+        repo:         deb [arch=amd64] https://download.docker.com/linux/ubuntu xenial stable
+        state:        present
+
+    - name:           Install Docker packages on Ubuntu xenial
+      apt:
+        pkg:          "docker-ce"
+        state:        latest
+        update_cache: yes
+
+    - name:           Copy Docker Service Config /etc/docker/daemon.json
+      copy:
+        src:          ../config/docker_daemon.json
+        dest:         /etc/docker/daemon.json
+        owner:        root
+    # 
+    # - name:           Stop Docker Service
+    #   service:
+    #     name:         docker
+    #     state:        stopped
+
+    - name:           Start Docker Service
+      service:
+        name:         docker
+        state:        started

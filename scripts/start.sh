@@ -1,12 +1,14 @@
 #/bin/bash
 DIR=$(dirname "$(readlink -f "$0")")
+cd $DIR
+$TERM -e 'sh webpack.sh' &
 cd $DIR/..
 
 services_compose=""
 for dir in ./services/*
 do
  serviceName=$(basename $dir)
- file="${dir}/docker-compose.yml"
+ file="${dir}/config/docker-compose.yml"
  if [ -f "$file" ]; then services_compose="$services_compose -f $file" ;fi
 done
 bash -c "docker-compose $services_compose down"
@@ -17,8 +19,7 @@ sleep 1
 sudo sysctl -w vm.max_map_count=262144
 
 bash -c "docker-compose $services_compose up"
-cd $DIR
-sh start_webpack_dev.sh
+
 
 # docker-compose  \
 #  -f ./services/aerospike/docker-compose.yml \
