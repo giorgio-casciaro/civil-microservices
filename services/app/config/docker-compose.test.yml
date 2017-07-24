@@ -1,9 +1,40 @@
 version:              '3.2'
 
 services:
+  portainer:
+    image: portainer/portainer
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+       - target:    9000
+         published: 9000
+         protocol:  tcp
+         mode:      host
+    deploy:
+     placement:
+       constraints: [node.role == manager]
+     endpoint_mode: dnsrr
+     replicas: 1
+
+
+  viz:
+    image: dockersamples/visualizer
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    deploy:
+     placement:
+       constraints: [node.role == manager]
+     endpoint_mode: dnsrr
+     replicas: 1
+    ports:
+       - target:    9090
+         published: 8080
+         protocol:  tcp
+         mode:      host
+
   app:
-    image:            giorgiocasciaro/civil-microservices-app:3
-    command:          -c "npm run start"
+    image:            giorgiocasciaro/civil-microservices-app:7
+    command:          sh -c "npm run start"
     environment:
       netHost:        app
       schemaHost:     'http://schema:10000'

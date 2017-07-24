@@ -1,0 +1,36 @@
+version:                '3.2'
+
+services:
+   users:
+     image:             giorgiocasciaro/civil-microservices-users:6
+     command:           -c "sleep 60 && npm run start "
+     environment:
+       uploadPath:      /uploads/
+       schemaHost:      'http://schema:10000'
+       confirmEmailUrl: http://localhost:8080/#/registration/ConfirmEmail/
+       serviceName:     users
+       netHost:         users
+      #  netHostHttpPublicPort: 10080
+       netCors:         http://localhost:82,http://127.0.0.1:82,http://localhost:8080,http://127.0.0.1:8080,http://localhost:10080,http://127.0.0.1:10080
+      #  elasticsearchHost: elasticsearch:9200
+       aerospikeHosts:  aerospike:3000
+       NODE_ENV:        development
+       sendEmails:      'true'
+       smtpConfigJson: '{ "host": "fakesmtp", "port": 1025, "secure": false }'
+     volumes:
+       - ../../users:/microservice
+       - ../../../NPM/jesus:/microservice/service/node_modules/sint-bit-jesus
+       - ../../../NPM/cqrs:/microservice/service/node_modules/sint-bit-cqrs
+       - ../../../FS/:/uploads/
+
+     depends_on:
+       - aerospike
+     networks:
+       - microservicesNet
+       - aerospike
+
+networks:
+  microservicesNet:
+    driver:             bridge
+  aerospike:
+    driver:             bridge

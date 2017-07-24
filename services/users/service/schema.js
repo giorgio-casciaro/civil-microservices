@@ -19,6 +19,9 @@ var loginRes = { properties: {
   token: { type: 'string' },
   currentState: { type: 'object' }
 }}
+var testRes = { additionalProperties: true, properties: { success: { type: 'string' }, error: { type: 'string' }, subtests: { type: 'array', items: subtestRes } } }
+var subtestRes = { properties: { count: { type: 'integer' }, success: { type: 'string' }, error: { type: 'string' } } }
+
 var jsRead = { properties: { id: jsFields.id, publicName: jsFields.publicName, hasPic: jsFields.hasPic, tags: jsFields.tags } }
 var jsReadPrivate = { properties: { id: jsFields.id, email: jsFields.email, emailStatus: jsFields.emailStatus, publicName: jsFields.publicName, hasPic: jsFields.hasPic, tags: jsFields.tags } }
 var jsQueryRes = { type: 'array', items: jsRead }
@@ -188,6 +191,12 @@ module.exports = {
       responseType: 'response',
       requestSchema: { required: ['from'], properties: { from: { type: 'integer' }, to: { type: 'integer' } } },
       responseSchema: jsQueryRes
+    },
+    'test': {
+      public: true,
+      responseType: 'response',
+      requestSchema: {},
+      responseSchema: testRes
     }
   }
 }

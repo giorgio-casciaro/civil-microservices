@@ -2,8 +2,8 @@ version:                '3.2'
 
 services:
    users:
-     image:             giorgiocasciaro/civil-microservices-users:4
-     command:           -c "npm run start "
+     image:             giorgiocasciaro/civil-microservices-users:6
+     command:           sh -c "npm run start "
      environment:
        uploadPath:      /uploads/
        schemaHost:      'http://schema:10000'

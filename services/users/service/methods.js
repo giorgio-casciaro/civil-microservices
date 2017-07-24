@@ -66,7 +66,10 @@ var service = async function getMethods (CONSOLE, netClient, CONFIG = require('.
           await kvDb.createIndex(kvDbClient, { ns: CONFIG.aerospike.namespace, set: CONFIG.aerospike.set, bin: 'created', index: CONFIG.aerospike.set + '_created', datatype: Aerospike.indexDataType.NUMERIC })
         }
         await kvDb.put(kvDbClient, key, {version: 1, timestamp: Date.now()})
-      } catch (error) { throw new Error('problems during init') }
+      } catch (error) {
+        CONSOLE.log('problems during init', error)
+        throw new Error('problems during init')
+      }
     }
     // VIEWS
     // const updateRawView = async function (view) {
@@ -177,38 +180,7 @@ var service = async function getMethods (CONSOLE, netClient, CONFIG = require('.
         await updateView(id, [mutation])
         return {success: `Public Name updated`}
       },
-      // async updatePic (reqData, meta = {directCall: true}, getStream = null) {
-      //   var sharp = require('sharp')
-      //   var unlink = (file) => new Promise((resolve, reject) => fs.unlink(file, (err, data) => err ? resolve(err) : resolve(data)))
-      //   var id = reqData.id
-      //   try {
-      //     await auth.userCan('user.' + id + '.write', meta, CONFIG.jwt)
-      //   } catch (error) {
-      //     await unlink(reqData.pic.path)
-      //     throw error
-      //   }
-      //   var picNewPathMini = getPicPath(reqData.id, 'mini')
-      //   var picNewPathMiniCrop = getPicPath(reqData.id, 'minicrop')
-      //   var tempFile = reqData.pic.path + 'temp'
-      //   fs.renameSync(reqData.pic.path, tempFile)
-      //   var baseImg = sharp(tempFile).resize(500, 500).max()
-      //   await new Promise((resolve, reject) => baseImg.toFile(reqData.pic.path, (err, data) => err ? reject(err) : resolve(data)))
-      //   await new Promise((resolve, reject) => baseImg.resize(100, 100).crop().toFile(picNewPathMiniCrop, (err, data) => err ? reject(err) : resolve(data)))
-      //   await new Promise((resolve, reject) => baseImg.resize(100, 100).max().toFile(picNewPathMini, (err, data) => err ? reject(err) : resolve(data)))
-      //   unlink(tempFile)
-      //   var mutation = await mutate({data: reqData, objId: id, mutation: 'updatePic', meta})
-      //   await updateView(id, [mutation])
-      //   return {success: `Pic updated`}
-      // },
-      // async getPic (reqData, meta = {directCall: true}, getStream = null) {
-      //   var picNewPath = getPicPath(reqData.id, 'minicrop')
-      //   try {
-      //     var pic = await new Promise((resolve, reject) => fs.readFile(picNewPath, (err, data) => err ? reject(err) : resolve(data)))
-      //   } catch (error) {
-      //     return null
-      //   }
-      //   return pic
-      // },
+
       async updatePic (reqData, meta = {directCall: true}, getStream = null) {
         var sharp = require('sharp')
         var unlink = (file) => new Promise((resolve, reject) => fs.unlink(file, (err, data) => err ? resolve(err) : resolve(data)))
@@ -379,6 +351,11 @@ var service = async function getMethods (CONSOLE, netClient, CONFIG = require('.
         query = Object.assign({from: 0, to: 100000000000000}, query)
         var rawResults = await kvDb.query(kvDbClient, CONFIG.aerospike.namespace, CONFIG.aerospike.set, (dbQuery) => { dbQuery.where(Aerospike.filter.range('updated', query.from, query.to)) })
         var results = await Promise.all(rawResults.map((result) => getView(result.id, result)))
+        return results
+      },
+      async test (query = {}, meta = {directCall: true}, getStream = null) {
+        var results = await require('./tests/base.test')(netClient)
+        CONSOLE.log('test results', results)
         return results
       }
     }

@@ -20,6 +20,7 @@ var consoleResume = function () {
 
 module.exports = function getTest (name, testVerbose) {
   var testNumber = 0
+  var testData = {name, verbose: testVerbose, subtests: []}
   var errors = 0
   var success = 0
   var skipped = 0
@@ -42,6 +43,7 @@ module.exports = function getTest (name, testVerbose) {
         if (errors < maxErrors) {
           // if (JSONcomparation(actual, expected) !== expected) throw new Error(message)
           assert.deepEqual(comparation(actual, expected), expected, 'deepEqual')
+
           success++
           console.info(chalk.green(`- ${testNumber} SUCCESS ${message}`))
           if (verbose)console.info(chalk.grey(JSON.stringify(actual, null, 4)))
@@ -50,12 +52,14 @@ module.exports = function getTest (name, testVerbose) {
             console.info(chalk.white.bgBlue('  CONSOLE LOGS  '))
             console.info(chalk.grey(stdoutData.join('\n\n')))
           }
+          testData.subtests.push({count: testNumber, success: message, stdout: stdoutData.join('\n\n'), stderr: stderrData.join('\n\n')})
         } else {
           if (skipped === 0) {
             console.info()
             console.info(chalk.yellow(`---> SKIPPING (errors > ${maxErrors})`))
           }
           skipped++
+          testData.subtests.push({count: testNumber, skipped: true, stdout: stdoutData.join('\n\n'), stderr: stderrData.join('\n\n')})
         }
       } catch (error) {
         errors++
@@ -68,6 +72,7 @@ module.exports = function getTest (name, testVerbose) {
         console.info()
         console.info(chalk.white.bgBlue('  CONSOLE LOGS  '))
         console.info(chalk.grey(stdoutData.join('\n\n')))
+        testData.subtests.push({count: testNumber, comparation: comparation(actual, expected), expected: expected, error: message, stdout: stdoutData.join('\n\n'), stderr: stderrData.join('\n\n')})
       }
       consoleMute()
     },
@@ -79,6 +84,11 @@ module.exports = function getTest (name, testVerbose) {
       console.info(`NAME: ${name}`)
       console.info(chalk.grey(`TOTAL: ${testNumber}`), chalk.green(`SUCCESS: ${success}`), chalk.red(`ERRORS: ${errors}`), chalk.yellow(`SKIPPED: ${skipped}`))
       console.info(chalk.grey(`----------------------------------------------------------------`))
+      testData.total = testNumber
+      testData.success = success
+      testData.errors = errors
+      testData.skipped = skipped
+      return testData
     }
   }
 }

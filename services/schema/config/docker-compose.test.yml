@@ -2,8 +2,8 @@ version:              '3.2'
 
 services:
   schema:
-    image:            giorgiocasciaro/civil-microservices-schema:2
-    command:          -c "npm run start"
+    image:            giorgiocasciaro/civil-microservices-schema:5
+    command:          sh -c "npm run start"
     environment:
       netHost:        schema
       netHostPort:    10000

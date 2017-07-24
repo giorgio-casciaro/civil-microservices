@@ -1,0 +1,26 @@
+{
+  "name": "civil-microservices-schema",
+  "version": "0.0.1",
+  "description": "",
+  "main": "start.js",
+  "scripts": {
+    "start": "node ./service/start.js",
+    "test": "node ./service/tests/base.launcher.js",
+    "watch_test": "node ./service/lib/watch.js ./service/methods.js,./service/config.js,./service/tests/base.test.js ./service/tests/base.launcher.js",
+    "watch_start": "node ./service/lib/watch.js ./service/methods.js,./service/config.js,./service/tests/base.test.js ./service/start.js",
+    "build": "cd docker && sh build.sh",
+    "docker_start": "cd docker && sh start.sh"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+  },
+  "dependencies": {
+    "aerospike": "^2.5.2",
+    "body-parser": "^1.17.2",
+    "request": "^2.81.0",
+    "request-promise-native": "^1.0.4",
+    "chalk": "^1.1.3",
+    "express": "^4.15.3"
+  }
+}

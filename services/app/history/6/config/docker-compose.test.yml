@@ -1,0 +1,27 @@
+version:              '3.2'
+
+services:
+  app:
+    image:            giorgiocasciaro/civil-microservices-app:6
+    command:          -c "npm run start"
+    environment:
+      netHost:        app
+      schemaHost:     'http://schema:10000'
+      aerospikeHosts: aerospike:3000
+      # netCors:        http://localhost:82,http://127.0.0.1:82,http://localhost:8080,http://127.0.0.1:8080,http://localhost:10080,http://127.0.0.1:10080
+      NODE_ENV:       test
+    networks:
+      - microservicesNet
+      - aerospike
+    deploy:
+     # placement:
+     #   constraints: [node.role == manager]
+    #  mode: global
+     endpoint_mode: dnsrr
+     replicas: 1
+
+networks:
+  microservicesNet:
+    driver:           overlay
+  aerospike:
+    driver:           overlay

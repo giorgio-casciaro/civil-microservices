@@ -1,5 +1,5 @@
 var stdin = process.stdin
-if(stdin.setRawMode)stdin.setRawMode(true)
+if (stdin.setRawMode)stdin.setRawMode(true)
 stdin.resume()
 stdin.setEncoding('utf8')
 
@@ -32,7 +32,7 @@ var execCommandFunc = function () {
 filesWatch.forEach((fileWatch) => {
   console.log(fileWatch)
   fs.watch(path.join(basePath, fileWatch), {recursive: true}, (eventType, filename) => {
-    execCommandFunc()
+    if (filename.indexOf('.js'))execCommandFunc()
   })
 })
 
