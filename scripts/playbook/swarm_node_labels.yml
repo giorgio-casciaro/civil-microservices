@@ -1,0 +1,12 @@
+---
+- hosts:              docker_swarm_manager
+  # connection: local
+  # gather_facts: no
+
+  tasks:
+    # - debug: var=hostvars
+    # - debug: var=groups
+    - name: add node labels
+      shell: |
+          {% for node in item.value %} docker node update --label-add={{ item.key  }}=1 {{ node  }} ||  {% endfor %}  echo 1
+      with_dict: "{{ groups }}"

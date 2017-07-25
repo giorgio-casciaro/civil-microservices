@@ -2,7 +2,6 @@
 
 ## SERVICES
 
-
 ## APP
   - ansible hosts: gruppo aeropike -> add label aerospike to swarm node
   - service aerospike global solo su node con label aerospike
@@ -18,7 +17,6 @@ dashboards
   - dashs: id, nome, descrizione, area di interesse, public
   - iscrizioni: userid, dash id, and dash setting
   - iscrizione a dashboard: userid, dash id, tags, user dash setting
-
 
 ### LISTS QUERIES uses cases
 - DASHBOARDS

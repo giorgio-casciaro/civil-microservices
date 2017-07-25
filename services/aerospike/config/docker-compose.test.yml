@@ -2,6 +2,16 @@ version:               '3.2'
 
 services:
    aerospike:
+     volumes:
+       - type: bind
+         source: /data/aerospike
+         target: /data/aerospike
+     deploy:
+       mode: global
+       endpoint_mode: dnsrr
+       placement:
+         constraints:
+           - node.labels.aerospike == 1
      image:            giorgiocasciaro/civil-microservices-aerospike:7
      command:          bash -c "echo \"$$AEROSPIKE_CONF\" > /etc/aerospike/aerospike.conf ; cat /etc/aerospike/aerospike.conf ; asd --foreground "
      networks:
@@ -54,9 +64,7 @@ services:
           		filesize 500M
           	}
           }
-     deploy:
-       endpoint_mode:  dnsrr
-       replicas:       1
+
 
 
 networks:

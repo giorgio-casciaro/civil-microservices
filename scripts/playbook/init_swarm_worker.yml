@@ -5,12 +5,11 @@
     max_clients:      200
   remote_user:        root
   tasks:
-
     - name:           Copy Docker Swarm Token worker
       copy:
         src:          ../tokens/{{swarm_manager}}/worker.tkn
         dest:         /worker.tkn
         owner:        root
 
-    - name:           Init Swarm Manager
+    - name:           Init Swarm Worker
       shell: "docker swarm join {{swarm_manager}} --advertise-addr {{swarm_host}} --token $(cat /worker.tkn) || echo 1"
