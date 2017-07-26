@@ -1,0 +1,15 @@
+version:              '3.2'
+
+services:
+  mapserver:
+    image:            klokantech/tileserver-gl:latest
+    networks:
+      - microservicesNet
+    ports:
+      - target: 80
+        published: 10080
+        protocol: tcp
+        mode: host
+networks:
+  microservicesNet:
+    driver:           overlay

@@ -7,7 +7,7 @@
     },
     "sources": {
         "mapbox": {
-            "url": "mapbox://mapbox.mapbox-streets-v7",
+            "url": "163.172.140.249/mapserver/",
             "type": "vector"
         }
     },

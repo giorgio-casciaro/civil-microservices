@@ -1,0 +1,16 @@
+FROM giorgiocasciaro/ubuntu-node:v3
+
+RUN mkdir -p /app/node_modules
+WORKDIR /app
+RUN apt-get -qq update && apt-get -y install build-essential libcairo2-dev libprotobuf-dev \
+RUN cd /app && npm install -g tileserver-gl \
+RUN apt-get -y remove build-essential && apt-get purge --auto-remove build-essential && apt-get clean
+
+VOLUME /data
+WORKDIR /data
+
+ENV NODE_ENV="production"
+ENV HTTP_PORT="10080"
+
+EXPOSE 10080
+ENTRYPOINT  "node /app/node_modules/tileserver-gl -p \$HTTP_PORT \"\$@\""

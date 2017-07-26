@@ -1,0 +1,14 @@
+{
+  "name": "civil-microservices-mapserver",
+  "version": "0.0.1",
+  "description": "",
+  "main": "start.js",
+  "scripts": {
+    "start": "node ./service/start.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "tileserver-gl": "^2.1.0"
+  }
+}

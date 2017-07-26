@@ -15,18 +15,6 @@ services:
             default_type  application/octet-stream;
             resolver 127.0.0.11;
             server {
-                listen 81 ;
-                location ~ /api/([-_a-zA-z0-9]*)/(.*) {
-                  proxy_pass http://$$1:10080/$$2 ;
-                }
-                location ~ /api_static/([-_a-zA-z0-9]*)/(.*) {
-                  proxy_pass http://$$1:10070/$$2 ;
-                }
-                location / {
-                    root /microservice/service;
-                }
-            }
-            server {
                 listen 443;
                 ssl on;
                 ssl_certificate /microservice/certs/cacert.pem;
@@ -36,6 +24,9 @@ services:
                 }
                 location ~ /api_static/([-_a-zA-z0-9]*)/(.*) {
                   proxy_pass http://$$1:10070/$$2 ;
+                }
+                location ~ /mapserver/(.*) {
+                  proxy_pass http://mapserver:80/$$1 ;
                 }
                 location / {
                     root /microservice/service;
