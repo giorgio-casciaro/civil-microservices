@@ -3,9 +3,10 @@ process.on('unhandledRejection', function (reason) {
   process.exit(1)
 })
 var path = require('path')
+var request = require('request-promise-native')
 
-var startTest = async function (netClient) {
-  var config = require('../config');
+var startTest = async function () {
+  var config = require('../config')
   var aerospike = require('../config').aerospike
   aerospike.set = 'users_test_set'
   aerospike.mutationsSet = 'users_test_mutations_set'
@@ -42,6 +43,7 @@ var startTest = async function (netClient) {
   microTest(JSON.parse(getSchemaEmpty), {}, 'getSchema Empty ')
 
   // process.exit()
+
   return finishTest()
 }
 module.exports = startTest

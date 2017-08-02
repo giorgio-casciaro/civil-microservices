@@ -37,11 +37,10 @@ function getAerospikeClient (config) {
 var startTest = async function () {
   await getAerospikeClient(require('../config').aerospike)
   var SERVICE = require('../start')
-  var netClient = SERVICE.netClient
-  await require('./base.test')(netClient)
+  await new Promise((resolve) => setTimeout(resolve, 2000))
+  await require('./base.test')()
 
-  SERVICE.netServer.stop()
-  // SERVICE.schemaClient.stop()
+  SERVICE.server.connection.close()
   await new Promise((resolve) => setTimeout(resolve, 1000))
   process.exit()
 }

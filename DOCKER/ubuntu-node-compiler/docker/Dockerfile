@@ -6,5 +6,6 @@ RUN apt-get install -y python
 RUN apt-get install -y libssl1.0.0 libssl-dev liblua5.1-dev
 RUN ln -s /usr/lib/x86_64-linux-gnu/liblua5.1.so /usr/lib/liblua.so
 RUN ln -s /usr/lib/x86_64-linux-gnu/liblua5.1.a /usr/lib/liblua.a
+RUN apt-get install -y libcairo2-dev libprotobuf-dev
 ENV NODE_ENV=production
 ENV USELUA=1

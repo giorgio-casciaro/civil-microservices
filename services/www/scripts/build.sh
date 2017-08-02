@@ -6,7 +6,10 @@ RAW_IMAGE_NAME=$(cat "$DIR/../info/service.image")
 IMAGE_NAME="$RAW_IMAGE_NAME:$VERSION";
 IMAGE_NAME_LATEST="$RAW_IMAGE_NAME:latest";
 
+cd $DIR/../webpack
+npm run build
 
+cd $DIR
 #  docker update
 echo  "Docker build and push"
 docker build -t $IMAGE_NAME  -t $IMAGE_NAME_LATEST  -f "$DIR/../config/Dockerfile" $DIR/..

@@ -35,9 +35,14 @@ export default {
   name: 'app',
   mounted(){
     // mapboxgl.accessToken = 'pk.eyJ1Ijoic2ludGJpdCIsImEiOiJjajIzMnk3NDUwMDExMnlvNzc2MXk2dXNuIn0.fmB5CPQudFNP9CqssSHG9g';
+    var url="/styles/osm-bright/style.json"
+    // var url="/styles/klokantech-basic/style.json"
+    // if(window.location.port==8080)url="https://localhost"+url
+    console.log("mapstyle new",style)
     var map = new mapboxgl.Map({
         container: 'map',
-        style
+        center: [41.902783, 12.496366],
+        style : style
     });
   },
   methods: {

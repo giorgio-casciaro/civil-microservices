@@ -33,7 +33,8 @@ var webpackConfig = merge(baseWebpackConfig, {
     }),
     new webpack.optimize.UglifyJsPlugin({
       compress: {
-        warnings: false
+        warnings: false,
+        comparisons: false
       },
       noParse: /(mapbox-gl)\.js$/,
       sourceMap: true

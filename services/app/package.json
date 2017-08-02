@@ -20,6 +20,6 @@
     "express": "^4.15.3",
     "request": "^2.81.0",
     "request-promise-native": "^1.0.4",
-    "sint-bit-jesus": ""
+    "sint-bit-jesus": "^0.0.19"
   }
 }

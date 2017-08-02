@@ -27,8 +27,8 @@
     "nodemailer": "^4.0.1",
     "request": "^2.81.0",
     "request-promise-native": "^1.0.4",
-    "sint-bit-cqrs": "",
-    "sint-bit-jesus": "",
+    "sint-bit-cqrs": "^0.0.6",
+    "sint-bit-jesus": "^0.0.19",
     "uuid": "^3.0.1"
   }
 }

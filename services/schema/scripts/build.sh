@@ -6,6 +6,7 @@ RAW_IMAGE_NAME=$(cat "$DIR/../info/service.image")
 IMAGE_NAME="$RAW_IMAGE_NAME:$VERSION";
 IMAGE_NAME_LATEST="$RAW_IMAGE_NAME:latest";
 
+sh $DIR/compile.sh
 
 #  docker update
 echo  "Docker build and push"

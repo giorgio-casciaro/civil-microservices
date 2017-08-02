@@ -45,7 +45,7 @@ services:
           	memory-size 500M
 
           	storage-engine device {
-          		file /data/aerospike/civilconnect.dat
+          		file /opt/aerospike/data/civilconnect.dat
           		filesize 500M
           	}
           }

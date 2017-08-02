@@ -5,7 +5,6 @@ process.on('unhandledRejection', function (reason) {
 
 
 var startTest = async function () {
-  await getAerospikeClient(require('../config').aerospike)
   var SERVICE = require('../start')
   var netClient = SERVICE.netClient
   await require('./base.test')(netClient)

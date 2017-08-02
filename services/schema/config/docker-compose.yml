@@ -3,7 +3,7 @@ version:              '3.2'
 services:
   schema:
     image:            giorgiocasciaro/civil-microservices-schema:5
-    command:          sh -c "sleep 10 && npm run test && npm run watch_start"
+    command:          sh -c "sleep 10 && npm run test && npm run start"
     environment:
       netHost:        schema
       netHostPort:    10000

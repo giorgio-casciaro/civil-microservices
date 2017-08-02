@@ -2,13 +2,7 @@ tokens/*
 *.tkn
 .vagrant
 *.zip
-
-# Kubernetes secrets and configMap
-configMap*
-secret.yaml
-
-# Docker compiled modules
-node_modules_compiled
+*.mbtiles
 
 
 # Logs
@@ -41,7 +35,8 @@ build/Release
 
 # Dependency directories
 node_modules
-node_modules_compiled
+npm_cache
+
 jspm_packages
 
 # Optional npm cache directory

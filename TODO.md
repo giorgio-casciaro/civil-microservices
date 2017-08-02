@@ -1,11 +1,16 @@
 # civil-microservices
+updaate jesus
 
 ## SERVICES
 
 ## APP
-  - map server
   - smtp server
   - logger
+  -
+## NGINX
+  - add cache minima su pagine base
+  - cache alta su maps
+  - compress gzip su tutto
 
 ## DOMAIN
 posts
