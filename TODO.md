@@ -4,6 +4,7 @@ updaate jesus
 ## SERVICES
 
 ## APP
+  - map: controllare test online e 127.0.0.1 su locale (non 8080)
   - smtp server
   - logger
   -
