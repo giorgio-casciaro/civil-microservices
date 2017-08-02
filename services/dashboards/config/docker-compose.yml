@@ -18,7 +18,9 @@ services:
        sendEmails:      'true'
        smtpConfigJson: '{ "host": "fakesmtp", "port": 1025, "secure": false }'
      volumes:
-       - ../../dashboards:/microservice
+       - ../../dashboards/service:/microservice/service
+       - ../../dashboards/package.json:/microservice/package.json
+       - ../../../../civil_microservices_shared_modules/:/microservice/node_modules
        - ../../../NPM/jesus:/microservice/service/node_modules/sint-bit-jesus
        - ../../../NPM/cqrs:/microservice/service/node_modules/sint-bit-cqrs
        - ../../../FS/:/uploads/

@@ -10,9 +10,12 @@ services:
       aerospikeHosts: aerospike:3000
       NODE_ENV:       development
     volumes:
-       - ../../schema:/microservice
+       - ../../schema/service:/microservice/service
+       - ../../schema/package.json:/microservice/package.json
+       - ../../../../civil_microservices_shared_modules/:/microservice/node_modules
        - ../../../NPM/jesus:/microservice/service/node_modules/sint-bit-jesus
        - ../../../NPM/cqrs:/microservice/service/node_modules/sint-bit-cqrs
+       - ../../../FS/:/uploads/
     depends_on:
       - aerospike
     ports:

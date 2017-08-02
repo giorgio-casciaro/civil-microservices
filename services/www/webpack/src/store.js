@@ -3,6 +3,8 @@ import Vuex from 'vuex'
 // import createPersistedState from 'vuex-persistedstate'
 Vue.use(Vuex)
 var apiServer = '/api'
+if (window.location.port == 8080)apiServer = `https://${window.location.hostname}/api`
+
 // if (process.env.NODE_ENV === 'development')apiServer = 'http://localhost:81/api'
 // else if (process.env.NODE_ENV === 'test')apiServer = 'http://localhost:81/api'
 // else if (process.env.NODE_ENV === 'production')apiServer = 'http://localhost:81/api'
