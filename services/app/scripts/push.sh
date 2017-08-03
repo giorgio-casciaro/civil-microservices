@@ -6,11 +6,10 @@ RAW_IMAGE_NAME=$(cat "$DIR/../info/service.image")
 IMAGE_NAME="$RAW_IMAGE_NAME:$VERSION";
 IMAGE_NAME_LATEST="$RAW_IMAGE_NAME:latest";
 
-sh $DIR/compile.sh
+sh $DIR/build.sh
 
 #  docker update
-echo  "Docker build and push"
-docker build -t $IMAGE_NAME  -t $IMAGE_NAME_LATEST  -f "$DIR/../config/Dockerfile" $DIR/..
+echo  "Docker push"
 docker push $IMAGE_NAME
 
 echo  "Update config"
