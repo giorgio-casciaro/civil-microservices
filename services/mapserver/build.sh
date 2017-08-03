@@ -1,7 +1,7 @@
 #!/bin/bash
 set -x
 DIR=$(dirname "$(readlink -f "$0")")
-VERSION=1
+VERSION="test"
 RAW_IMAGE_NAME="giorgiocasciaro/civil-microservices-map"
 IMAGE_NAME="$RAW_IMAGE_NAME:$VERSION";
 IMAGE_NAME_LATEST="$RAW_IMAGE_NAME:latest";

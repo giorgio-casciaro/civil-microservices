@@ -2,7 +2,7 @@ version:              '3.2'
 
 services:
   mapserver:
-    image:            giorgiocasciaro/civil-microservices-map:1
+    image:            giorgiocasciaro/civil-microservices-map:test
     entrypoint: bash -c "echo \"$$MS_CONF\" > /config.json ; ls /microservice/data ; /usr/src/app/run.sh -c /config.json --verbose"
     environment:
        MS_CONF: |-
@@ -52,8 +52,8 @@ services:
       - 90:80
     networks:
       - microservicesNet
-    volumes:
-       - ../../mapserver:/microservice
+    # volumes:
+    #    - ../../mapserver:/microservice
 
 networks:
   microservicesNet:
