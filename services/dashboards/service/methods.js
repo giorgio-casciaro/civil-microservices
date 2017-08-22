@@ -30,13 +30,14 @@ var service = async function getMethods (CONSOLE, netClient, CONFIG = require('.
       var result = await new Promise((resolve, reject) => fs.readFile(path.join(__dirname, '/emails/', template + ext), 'utf8', (err, data) => err ? reject(err) : resolve(populate(data))))
       return result
     }
-    const sendMail = async (template = 'userCreated', mailOptions, mailContents) => {
+    const sendMail = async (template = 'dashboardCreated', mailOptions, mailContents) => {
       mailOptions.html = await getMailTemplate(template, mailContents, '.html')
       mailOptions.txt = await getMailTemplate(template, mailContents, '.txt')
       CONSOLE.log('sendMail', mailOptions)
       if (!process.env.sendEmails) return true
       return await new Promise((resolve, reject) => smtpTrans.sendMail(mailOptions, (err, data) => err ? reject(err) : resolve(data)))
     }
+
     // MUTATIONS
     var mutationsPack = require('sint-bit-cqrs/mutations')({ mutationsPath: path.join(__dirname, '/mutations') })
     const mutate = async function (args) {
@@ -47,45 +48,66 @@ var service = async function getMethods (CONSOLE, netClient, CONFIG = require('.
         await kvDb.put(kvDbClient, key, mutation)
         return mutation
       } catch (error) {
-        throw new Error('problems during mutate b ' + error)
+        throw new Error('problems during mutate a ' + error)
       }
     }
+
     // INIT
     const init = async function () {
       try {
-        CONSOLE.log('init start')
         var key = new Key(CONFIG.aerospike.namespace, CONFIG.aerospike.set, 'dbInitStatus')
+        await kvDb.put(kvDbClient, key, {version: 0, timestamp: Date.now()})
         var dbInitStatus = await kvDb.get(kvDbClient, key)
-        if (!dbInitStatus) {
-          dbInitStatus = {version: 0, timestamp: Date.now()}
-          await kvDb.put(kvDbClient, key, dbInitStatus)
-        }
+        if (!dbInitStatus) await kvDb.put(kvDbClient, key, {version: 0, timestamp: Date.now()})
         CONSOLE.log('dbInitStatus', dbInitStatus)
         if (dbInitStatus.version === 1) return true
         if (dbInitStatus.version < 1) {
-          CONSOLE.log('dbInitStatus v1', dbInitStatus)
-          await kvDb.createIndex(kvDbClient, { ns: CONFIG.aerospike.namespace, set: CONFIG.aerospike.set, bin: 'email', index: CONFIG.aerospike.set + '_email', datatype: Aerospike.indexDataType.STRING })
-          await kvDb.createIndex(kvDbClient, { ns: CONFIG.aerospike.namespace, set: CONFIG.aerospike.set, bin: 'updated', index: CONFIG.aerospike.set + '_updated', datatype: Aerospike.indexDataType.NUMERIC })
+        //   CONSOLE.log('dbInitStatus v1', dbInitStatus)
           await kvDb.createIndex(kvDbClient, { ns: CONFIG.aerospike.namespace, set: CONFIG.aerospike.set, bin: 'created', index: CONFIG.aerospike.set + '_created', datatype: Aerospike.indexDataType.NUMERIC })
+
+          await kvDb.createIndex(kvDbClient, { ns: CONFIG.aerospike.namespace, set: CONFIG.aerospike.DashUsersSet, bin: 'userId', index: CONFIG.aerospike.DashUsersSet + '_userId', datatype: Aerospike.indexDataType.STRING })
+          await kvDb.createIndex(kvDbClient, { ns: CONFIG.aerospike.namespace, set: CONFIG.aerospike.DashUsersSet, bin: 'dashId', index: CONFIG.aerospike.DashUsersSet + '_dashId', datatype: Aerospike.indexDataType.STRING })
         }
         await kvDb.put(kvDbClient, key, {version: 1, timestamp: Date.now()})
-        CONSOLE.log('init ok')
       } catch (error) {
         CONSOLE.log('problems during init', error)
         throw new Error('problems during init')
       }
     }
-    // VIEWS
-    // const updateRawView = async function (view) {
-    //   try {
-    //     var key = new Key(CONFIG.aerospike.namespace, CONFIG.aerospike.set, view.id)
-    //     await kvDb.put(kvDbClient, key, view)
-    //     return view
-    //   } catch (error) { throw new Error('problems during updateRawView ' + error) }
-    // }
-    const updateView = async function (id, mutations, isNew) {
+
+    const updateDashUserView = async function (id, mutations, isNew, set) {
+      try {
+        var key = new Key(CONFIG.aerospike.namespace, CONFIG.aerospike.DashUsersSet, id)
+        var rawView = await getView(id, null, false) || {state: {}}
+        var state = mutationsPack.applyMutations(rawView.state, mutations)
+        var view = {
+          updated: Date.now(),
+          created: rawView.created || Date.now(),
+          userId: state.userId,
+          dashId: state.dashId,
+          id: state.id,
+          tags: state.tags || [],
+          state: JSON.stringify(state)
+        }
+        await kvDb.put(kvDbClient, key, view)
+        return view
+      } catch (error) { throw new Error('problems during updateView ' + error) }
+    }
+
+    const getDashUserView = async function (id, view = null, stateOnly = true) {
       try {
         var key = new Key(CONFIG.aerospike.namespace, CONFIG.aerospike.set, id)
+        if (!view) view = await kvDb.get(kvDbClient, key)
+        if (!view) return null
+        if (view.state)view.state = JSON.parse(view.state)
+        if (stateOnly) return view.state
+        return view
+      } catch (error) { throw new Error('problems during getView ' + error) }
+    }
+
+    const updateView = async function (id, mutations, isNew, set) {
+      try {
+        var key = new Key(CONFIG.aerospike.namespace, set || CONFIG.aerospike.set, id)
         var rawView = await getView(id, null, false) || {state: {}}
         var state = mutationsPack.applyMutations(rawView.state, mutations)
         var view = {
@@ -110,15 +132,6 @@ var service = async function getMethods (CONSOLE, netClient, CONFIG = require('.
         return view
       } catch (error) { throw new Error('problems during getView ' + error) }
     }
-    const getUserByMail = async function (email) {
-      try {
-        var result = await kvDb.query(kvDbClient, CONFIG.aerospike.namespace, CONFIG.aerospike.set, (dbQuery) => {
-          dbQuery.where(Aerospike.filter.equal('email', email))
-        })
-        if (!result[0]) return null
-        return await getView(result[0].id, result[0])
-      } catch (error) { throw new Error('problems during getUserByMail ' + error) }
-    }
     const addTag = async function (id, tag, meta) {
       var mutation = await mutate({data: tag, objId: id, mutation: 'addTag', meta})
       await updateView(id, [mutation])
@@ -128,74 +141,98 @@ var service = async function getMethods (CONSOLE, netClient, CONFIG = require('.
       await updateView(id, [mutation])
     }
 
-    const getToken = async function (id, meta, jwt) {
-      var permissions = await netClient.emit('getPermissions', {id}, meta)
-      return await auth.createToken(id, permissions, meta, CONFIG.jwt)
-    }
-
     const getPicPath = (id, type = 'mini', format = 'jpeg') => path.join(CONFIG.uploadPath, `pic-${type}-${id}.${format}`)
+
+    // const subscribe = async function (dashId, userId, type) {
+    //   var id = dashId + userId
+    //   var DashUser = {id, dashId, userId, type, created: Date.now()}
+    //   // var token = await auth.createToken(id, permissions, meta, CONFIG.jwt)
+    //   var key = new Key(CONFIG.aerospike.namespace, CONFIG.aerospike.DashUsersSet, id)
+    //   await kvDb.put(kvDbClient, key, DashUser)
+    //   return {success: `subscribed`}
+    // }
+    // const checkDashUser = async function (dashId, userId, type) {
+    //   var id = dashId + userId
+    //   var DashUser = {id, dashId, userId, type, created: Date.now()}
+    //   var key = new Key(CONFIG.aerospike.namespace, CONFIG.aerospike.DashUsersSet, id)
+    //   var DashUser = await kvDb.get(kvDbClient, key)
+    //   if (DashUser && DashUser.type === type) return true
+    //   return false
+    // }
+
     await init()
 
     return {
       async getPermissions (reqData, meta = {directCall: true}, getStream = null) {
-        return { permissions: [ [10, 'user.' + reqData.id + '.*', 1], [5, 'user.*.read', 1] ] }
+        // recuperare iscrizioni
+        return { permissions: [ [10, 'dashboard.create', 1], [10, 'dashboard.read', 1] ] }
       },
       async create (reqData, meta = {directCall: true}, getStream = null) {
-        var mailExists = await getUserByMail(reqData.email)
-        if (mailExists) throw new Error('User exists')
         var id = uuid()
         reqData.id = id
-        reqData.emailConfirmationCode = uuid()
+        await auth.userCan('dashboard.create', meta, CONFIG.jwt)
         var mutation = await mutate({data: reqData, objId: id, mutation: 'create', meta})
-        await sendMail('userCreated', {to: reqData.email, from: CONFIG.mailFrom, subject: 'Benvenuto in CivilConnect - conferma la mail'}, Object.assign({CONFIG}, reqData))
         await updateView(id, [mutation], true)
-        return {success: `User created`, id, email: reqData.email}
-      },
-      async readEmailConfirmationCode (reqData, meta = {directCall: true}, getStream = null) {
-        var id = reqData.id
-        var currentState = await getView(id)
-        return {emailConfirmationCode: currentState.emailConfirmationCode}
-      },
-      async confirmEmail (reqData, meta = {directCall: true}, getStream = null) {
-        var currentState = await getUserByMail(reqData.email, [0])
-        if (!currentState) throw new Error('email is confirmed or user is not registered')
-        if (currentState.emailConfirmationCode !== reqData.emailConfirmationCode) throw new Error('email confirmation code not valid')
-        var id = currentState.id
-        // var mutation = await mutate({ data: {}, objId: id, mutation: 'confirmEmail', meta })
-        // await updateView(id, [mutation])
-        await addTag(id, 'emailConfirmed', meta)
-        return {success: `Email confirmed`, email: reqData.email}
+        var userId = auth.getUserIdFromToken(meta, CONFIG.jwt)
+        await subscribe(id, userId, 'admin')
+        return {success: `Dashboard created`, id}
       },
       async read (reqData, meta = {directCall: true}, getStream = null) {
         var id = reqData.id
-        await auth.userCan('user.' + id + '.read', meta, CONFIG.jwt)
+        await auth.userCan('dashboard.read', meta, CONFIG.jwt)
         var currentState = await getView(id)
-        if (!currentState || currentState.tags.indexOf('removed') >= 0 || currentState.tags.indexOf('emailConfirmed') < 0 || currentState.tags.indexOf('passwordAssigned') < 0) {
-          throw new Error('user not active')
+        if (!currentState || currentState.tags.indexOf('removed') >= 0) {
+          throw new Error('dashboard not active')
         }
         return currentState
       },
+      async update (reqData, meta = {directCall: true}, getStream = null) {
+        var id = reqData.id
+        var userId = getUserIdFromToken(meta)
+        // checkDashUser(id, userId, 'admin')
+        // await auth.userCan('dashboard.' + id + '.write', meta, CONFIG.jwt)
+        var mutation = await mutate({data: reqData, objId: id, mutation: 'update', meta})
+        await updateView(id, [mutation])
+        return {success: `Dashboard updated`}
+      },
+      async setRole (reqData, meta = {directCall: true}, getStream = null) {
+      },
+      async getRole (reqData, meta = {directCall: true}, getStream = null) {
+      },
+      // async subscribe (reqData, meta = {directCall: true}, getStream = null) {
+      //   var userId = getUserIdFromToken(meta)
+      //   return await subscribe(reqData.dashId, userId, 'basic')
+      // },
+      // async unsubscribe (reqData, meta = {directCall: true}, getStream = null) {
+      //   var id = reqData.dashId + reqData.userId
+      //   var userId = getUserIdFromToken(meta)
+      //   // checkDashUser(id, userId, 'user')
+      //   var key = new Key(CONFIG.aerospike.namespace, CONFIG.aerospike.DashUsersSet, id)
+      //   var rawResults = await kvDb.remove(kvDbClient, key)
+      //   return {success: `unsubscribed`}
+      // },
       async readPrivate (reqData, meta = {directCall: true}, getStream = null) {
         var id = reqData.id
-        await auth.userCan('user.' + id + '.private.read', meta, CONFIG.jwt)
+        var userId = getUserIdFromToken(meta)
+        // checkDashUser(id, userId)
         var currentState = await getView(id)
-        if (!currentState) throw new Error('user not active')
+        if (!currentState) throw new Error('dashboard not active')
         return currentState
       },
-      async updatePublicName (reqData, meta = {directCall: true}, getStream = null) {
+      async remove (reqData, meta = {directCall: true}, getStream = null) {
         var id = reqData.id
-        await auth.userCan('user.' + id + '.write', meta, CONFIG.jwt)
-        var mutation = await mutate({data: reqData, objId: id, mutation: 'updatePublicName', meta})
-        await updateView(id, [mutation])
-        return {success: `Public Name updated`}
+        var userId = getUserIdFromToken(meta)
+        // checkDashUser(id, userId, 'admin')
+        // await auth.userCan('dashboard.' + id + '.write.' + id, meta, CONFIG.jwt)
+        await addTag(id, 'removed', meta)
+        return {success: `Dashboard removed`}
       },
-
       async updatePic (reqData, meta = {directCall: true}, getStream = null) {
         var sharp = require('sharp')
         var unlink = (file) => new Promise((resolve, reject) => fs.unlink(file, (err, data) => err ? resolve(err) : resolve(data)))
         var id = reqData.id
         try {
-          await auth.userCan('user.' + id + '.write', meta, CONFIG.jwt)
+          // await auth.userCan('dashboard.' + id + '.write', meta, CONFIG.jwt)
         } catch (error) {
           await unlink(reqData.pic.path)
           throw error
@@ -280,105 +317,36 @@ var service = async function getMethods (CONSOLE, netClient, CONFIG = require('.
           return null
         }
       },
-      async updatePassword (reqData, meta = {directCall: true}, getStream = null) {
+      async createDashUser (reqData, meta = {directCall: true}, getStream = null) {
+        var id = uuid()
+        reqData.id = id
+        // await auth.userCan('dashboard.create', meta, CONFIG.jwt)
+        var mutation = await mutate({data: reqData, objId: id, mutation: 'create', meta})
+        await updateView(id, [mutation], true)
+        var userId = auth.getUserIdFromToken(meta, CONFIG.jwt)
+        await subscribe(id, userId, 'admin')
+        return {success: `Dashboard created`, id}
+      },
+      async readDashUser (reqData, meta = {directCall: true}, getStream = null) {
         var id = reqData.id
-        await auth.userCan('user.' + id + '.private.write', meta, CONFIG.jwt)
-        if (reqData.password !== reqData.confirmPassword) throw new Error('Confirm Password not equal')
+        // await auth.userCan('dashboard.read', meta, CONFIG.jwt)
         var currentState = await getView(id)
-        if (!currentState || currentState.tags.indexOf('removed') >= 0 || currentState.tags.indexOf('emailConfirmed') < 0 || currentState.tags.indexOf('passwordAssigned') < 0) {
-          throw new Error('user not active')
-        }
-        var bcrypt = require('bcrypt')
-        if (currentState.password && !bcrypt.compareSync(reqData.oldPassword, currentState.password)) throw new Error('Old Password not valid')
-        var data = {password: bcrypt.hashSync(reqData.password, 10)}
-        var mutation = await mutate({data, objId: id, mutation: 'updatePassword', meta})
-        await updateView(id, [mutation])
-        return {success: `Password updated`}
-      },
-      async assignPassword (reqData, meta = {directCall: true}, getStream = null) {
-        if (reqData.password !== reqData.confirmPassword) throw new Error('Confirm Password not equal')
-        var currentState = await getUserByMail(reqData.email, [1])
-        if (!currentState || currentState.tags.indexOf('removed') >= 0 || currentState.tags.indexOf('passwordAssigned') >= 0 || currentState.tags.indexOf('emailConfirmed') < 0) {
-          throw new Error('user not active')
-        }
-        var id = currentState.id
-        var data = {password: require('bcrypt').hashSync(reqData.password, 10)}
-        var mutation = await mutate({data, objId: id, mutation: 'assignPassword', meta})
-        await updateView(id, [mutation])
-        await addTag(id, 'passwordAssigned', meta)
-        return {success: `Password assigned`}
-      },
-      async tokenReload (reqData, meta = {directCall: true}, getStream = null) {
-        var id = currentState.id
-        var newToken = await getToken(id, meta, DONFIG.jwt)
-        var mutation = await mutate({data: {token}, objId: id, mutation: 'login', meta})
-        updateView(id, [mutation])
-        delete currentState.password
-        return { success: `Login`, token, currentState }
-      },
-      async login (reqData, meta = {directCall: true}, getStream = null) {
-        var bcrypt = require('bcrypt')
-        var currentState = await getUserByMail(reqData.email)
-        if (!currentState || currentState.tags.indexOf('removed') >= 0 || currentState.tags.indexOf('passwordAssigned') < 0 || currentState.tags.indexOf('emailConfirmed') < 0) {
-          throw new Error('Wrong username or password')
-        }
-        if (!bcrypt.compareSync(reqData.password, currentState.password)) throw new Error('Wrong username or password')
-        delete reqData.password
-        var id = currentState.id
-        var token = await getToken(id, meta, DONFIG.jwt)
-        var mutation = await mutate({data: {token}, objId: id, mutation: 'login', meta})
-        updateView(id, [mutation])
-        delete currentState.password
-        return { success: `Login`, token, currentState }
-      },
-      async login (reqData, meta = {directCall: true}, getStream = null) {
-        var bcrypt = require('bcrypt')
-        var currentState = await getUserByMail(reqData.email)
-        if (!currentState || currentState.tags.indexOf('removed') >= 0 || currentState.tags.indexOf('passwordAssigned') < 0 || currentState.tags.indexOf('emailConfirmed') < 0) {
-          throw new Error('Wrong username or password')
-        }
-        if (!bcrypt.compareSync(reqData.password, currentState.password)) throw new Error('Wrong username or password')
-        delete reqData.password
-        var id = currentState.id
-        var token = await getToken(id, meta, DONFIG.jwt)
-        var mutation = await mutate({data: {token}, objId: id, mutation: 'login', meta})
-        updateView(id, [mutation])
-        delete currentState.password
-        return { success: `Login`, token, currentState }
-      },
-      async logout (reqData, meta = {directCall: true}, getStream = null) {
-        var id = reqData.id
-        var currentState = await getView(id)
-        if (!currentState || currentState.tags.indexOf('removed') >= 0 || currentState.tags.indexOf('passwordAssigned') < 0 || currentState.tags.indexOf('emailConfirmed') < 0) {
-          throw new Error('user not active')
-        }
-        if (currentState.email !== reqData.email) throw new Error('Problems durig logout')
-        return {success: `Logout`, id, email: reqData.email}
-      },
-      async updatePersonalInfo (reqData, meta = {directCall: true}, getStream = null) {
-        var id = reqData.id
-        await auth.userCan('user.' + id + '.write', meta, CONFIG.jwt)
-        var mutation = await mutate({data: reqData, objId: id, mutation: 'updatePersonalInfo', meta})
-        await updateView(id, [mutation])
-        return {success: `Personal Info updated`}
-      },
-      async readPersonalInfo (reqData, meta = {directCall: true}, getStream = null) {
-        var id = reqData.id
-        await auth.userCan('user.' + id + '.write', meta, CONFIG.jwt)
-        var currentState = await getView(id)
-        if (!currentState || currentState.tags.indexOf('removed') >= 0 || currentState.tags.indexOf('passwordAssigned') < 0 || currentState.tags.indexOf('emailConfirmed') < 0) {
-          throw new Error('user not active')
+        if (!currentState || currentState.tags.indexOf('removed') >= 0) {
+          throw new Error('dashboard not active')
         }
         return currentState
       },
-      async remove (reqData, meta = {directCall: true}, getStream = null) {
+      async updateDashUser (reqData, meta = {directCall: true}, getStream = null) {
         var id = reqData.id
-        await auth.userCan('user.' + id + '.write.' + id, meta, CONFIG.jwt)
-        await addTag(id, 'removed', meta)
-        return {success: `User removed`}
+        var userId = getUserIdFromToken(meta)
+        // checkDashUser(id, userId, 'admin')
+        // await auth.userCan('dashboard.' + id + '.write', meta, CONFIG.jwt)
+        var mutation = await mutate({data: reqData, objId: id, mutation: 'update', meta})
+        await updateView(id, [mutation])
+        return {success: `Dashboard updated`}
       },
       async queryByTimestamp (query = {}, meta = {directCall: true}, getStream = null) {
-        await auth.userCan('user.read.query', meta, CONFIG.jwt)
+        // await auth.userCan('dashboard.read.query', meta, CONFIG.jwt)
         query = Object.assign({from: 0, to: 100000000000000}, query)
         var rawResults = await kvDb.query(kvDbClient, CONFIG.aerospike.namespace, CONFIG.aerospike.set, (dbQuery) => { dbQuery.where(Aerospike.filter.range('updated', query.from, query.to)) })
         var results = await Promise.all(rawResults.map((result) => getView(result.id, result)))

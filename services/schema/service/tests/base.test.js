@@ -8,12 +8,12 @@ var request = require('request-promise-native')
 var startTest = async function () {
   var config = require('../config')
   var aerospike = require('../config').aerospike
-  aerospike.set = 'users_test_set'
-  aerospike.mutationsSet = 'users_test_mutations_set'
-  aerospike.viewsSet = 'users_test_views_set'
+  aerospike.set = 'schema_test_set'
+  aerospike.mutationsSet = 'schema_test_mutations_set'
+  aerospike.viewsSet = 'schema_test_views_set'
 
   // PREPARE DB
-  var mainTest = require('../lib/microTest')('test Microservice local methods and db conenctions', 0)
+  var mainTest = require('sint-bit-utils/utils/microTest')('test Microservice local methods and db conenctions', -1)
   var microTest = mainTest.test
   var finishTest = mainTest.finish
 
@@ -32,18 +32,19 @@ var startTest = async function () {
 
   var setServiceSchema = await request.post(`http://${config.httpHost}:${config.httpPort}/setServiceSchema`, { form: { service: 'test', schema: JSON.stringify({ test_field: 'test' }) } })
   microTest(JSON.parse(setServiceSchema), {success: 'schema received'}, 'setServiceSchema')
+  var setServiceSchema2 = await request.post(`http://${config.httpHost}:${config.httpPort}/setServiceSchema`, { form: { service: 'test2', schema: JSON.stringify({ test_field: 'test2' }) } })
+  microTest(JSON.parse(setServiceSchema2), {success: 'schema received'}, 'setServiceSchema')
 
   var getSchema = await request.get(`http://${config.httpHost}:${config.httpPort}/getSchema`)
-  microTest(JSON.parse(getSchema), {test: { test_field: 'test' }}, 'getSchema')
+  microTest(JSON.parse(getSchema), {test: { test_field: 'test' },test2: { test_field: 'test2' }}, 'getSchema')
 
   var removeServiceSchema = await request.post(`http://${config.httpHost}:${config.httpPort}/removeServiceSchema`, { form: { service: 'test' } })
-  microTest(JSON.parse(removeServiceSchema), {success: 'schema removed'}, 'removeServiceSchema', undefined, 2)
+  microTest(JSON.parse(removeServiceSchema), {success: 'schema removed'}, 'removeServiceSchema')
 
-  var getSchemaEmpty = await request.get(`http://${config.httpHost}:${config.httpPort}/getSchema`)
-  microTest(JSON.parse(getSchemaEmpty), {}, 'getSchema Empty ')
-
-  // process.exit()
+  var getSchema2 = await request.get(`http://${config.httpHost}:${config.httpPort}/getSchema`)
+  microTest(JSON.parse(getSchema2), {test2: { test_field: 'test2' }}, 'getSchema Removed ')
 
   return finishTest()
+
 }
 module.exports = startTest

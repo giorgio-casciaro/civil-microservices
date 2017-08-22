@@ -1,5 +1,5 @@
 var jsFields = require('sint-bit-utils/utils/JSchemaFields')
-var jsUserById = { properties: { id: jsFields.id }, required: ['id'] }
+var jsItemById = { properties: { id: jsFields.id }, required: ['id'] }
 var jsRes = {
   properties: {
     success: { type: 'string' },
@@ -11,28 +11,21 @@ var jsRes = {
   },
   'additionalProperties': true
 }
-var loginRes = { properties: {
-  success: { type: 'string' },
-  error: { type: 'string' },
-  method: { type: 'string' },
-  type: { type: 'string' },
-  token: { type: 'string' },
-  currentState: { type: 'object' }
-}}
+
 var testRes = { additionalProperties: true, properties: { success: { type: 'string' }, error: { type: 'string' }, subtests: { type: 'array', items: subtestRes } } }
 var subtestRes = { properties: { count: { type: 'integer' }, success: { type: 'string' }, error: { type: 'string' } } }
 
-var jsRead = { properties: { id: jsFields.id, publicName: jsFields.name, hasPic: jsFields.hasPic, tags: jsFields.tags } }
-var jsReadPrivate = { properties: { id: jsFields.id, email: jsFields.email, emailStatus: jsFields.emailStatus, publicName: jsFields.name, hasPic: jsFields.hasPic, tags: jsFields.tags } }
+var jsRead = { properties: { id: jsFields.id, name: jsFields.name, public: jsFields.public, tags: jsFields.tags } }
+var jsReadPrivate = { properties: { id: jsFields.id, name: jsFields.name, public: jsFields.public, tags: jsFields.tags, maps: jsFields.maps } }
 var jsQueryRes = { type: 'array', items: jsRead }
 
-var jsCanReq = { properties: { data: { type: 'object' } } }
 var toBool = (string, defaultVal = false) => {
   if (typeof string === 'undefined') return defaultVal
   if (typeof string === 'boolean') return string
   if (typeof string === 'string' && string === 'true') return true
   return false
 }
+var jsCanReq = { properties: { data: { type: 'object' } } }
 var jsCanRes = { properties: { success: { type: 'string' }, error: { type: 'string' } } }
 
 module.exports = {
@@ -53,59 +46,41 @@ module.exports = {
     }
   },
   eventsOut: {
-    'getPermissions': {
-      multipleResponse: true,
-      requestSchema: jsCanReq,
-      responseSchema: jsCanRes
-    }
+    // 'getPermissions': {
+    //   multipleResponse: true,
+    //   requestSchema: jsCanReq,
+    //   responseSchema: jsCanRes
+    // }
   },
   methods: {
-    'create': {
-      public: true,
-      responseType: 'response',
-      requestSchema: { properties: { email: jsFields.email }, required: [ 'email' ] },
-      responseSchema: jsRes
-    },
     'getPermissions': {
       public: false,
       responseType: 'response',
       requestSchema: { properties: { id: jsFields.id } },
       responseSchema: { properties: { permissions: jsFields.permissions } }
     },
-    'readEmailConfirmationCode': {
-      public: (process.env.NODE_ENV === 'development'),
-      responseType: 'response',
-      requestSchema: jsUserById,
-      responseSchema: { properties: { emailConfirmationCode: jsFields.emailConfirmationCode } }
-    },
-    'confirmEmail': {
+    'create': {
       public: true,
       responseType: 'response',
-      requestSchema: {
-        properties: { email: jsFields.email, emailConfirmationCode: jsFields.emailConfirmationCode },
-        required: [ 'email', 'emailConfirmationCode' ]
-      },
+      requestSchema: { properties: jsRead.properties, required: [ 'name', 'maps' ] },
       responseSchema: jsRes
     },
     'read': {
       public: true,
       responseType: 'response',
-      requestSchema: jsUserById,
+      requestSchema: jsItemById,
       responseSchema: jsRead
     },
     'readPrivate': {
       public: true,
       responseType: 'response',
-      requestSchema: jsUserById,
+      requestSchema: jsItemById,
       responseSchema: jsReadPrivate
     },
-    'updatePublicName': {
+    'update': {
       public: true,
       responseType: 'response',
-      requestSchema: {
-        properties: { id: jsFields.id, publicName: jsFields.name },
-        required: [ 'id', 'publicName' ]
-      },
+      requestSchema: { properties: jsRead.properties, required: [ 'id' ] },
       responseSchema: jsRes
     },
     'updatePic': {
@@ -120,70 +95,55 @@ module.exports = {
     'getPic': {
       public: true,
       responseType: 'response',
-      requestSchema: jsUserById,
+      requestSchema: jsItemById,
       responseSchema: false
-    },
-    'updatePassword': {
-      public: true,
-      responseType: 'response',
-      requestSchema: {
-        properties: { id: jsFields.id, password: jsFields.password, confirmPassword: jsFields.password, oldPassword: jsFields.password },
-        required: [ 'id', 'password', 'confirmPassword', 'oldPassword' ]
-      },
-      responseSchema: jsRes
-    },
-    'assignPassword': {
-      public: true,
-      responseType: 'response',
-      requestSchema: {
-        properties: { email: jsFields.email, password: jsFields.password, confirmPassword: jsFields.password },
-        required: [ 'email', 'password', 'confirmPassword' ]
-      },
-      responseSchema: jsRes
-    },
-    'login': {
-      public: true,
-      responseType: 'response',
-      requestSchema: {
-        properties: { email: jsFields.email, password: jsFields.password },
-        required: [ 'email', 'password' ]
-      },
-      responseSchema: loginRes
-    },
-    'logout': {
-      public: true,
-      responseType: 'response',
-      requestSchema: {
-        properties: { id: jsFields.id, email: jsFields.email },
-        required: [ 'email', 'id' ]
-      },
-      responseSchema: jsRes
-    },
-    'updatePersonalInfo': {
-      public: true,
-      responseType: 'response',
-      requestSchema: {
-        properties: { id: jsFields.id, firstName: jsFields.firstName, lastName: jsFields.lastName, birth: jsFields.birth },
-        required: [ 'id' ]
-      },
-      responseSchema: jsRes
-    },
-    'readPersonalInfo': {
-      public: false,
-      responseType: 'response',
-      requestSchema: jsUserById,
-      responseSchema: {
-        properties: { id: jsFields.id, firstName: jsFields.firstName, lastName: jsFields.lastName, birth: jsFields.birth },
-        required: [ 'id' ]
-      }
     },
     'remove': {
       public: true,
       responseType: 'response',
+      requestSchema: jsItemById,
+      responseSchema: jsRes
+    },
+    'setRole': {
+      public: true,
+      responseType: 'response',
       requestSchema: {
-        properties: { id: jsFields.id },
-        required: [ 'id' ]
+        properties: { dashId: jsFields.id, slug: jsFields.slug, name: jsFields.name, description: jsFields.description, permissions: jsFields.permissions },
+        required: [ 'dashId', 'permissions', 'slug' ]
       },
+      responseSchema: jsRes
+    },
+    'getRole': {
+      public: true,
+      responseType: 'response',
+      requestSchema: {
+        properties: { dashId: jsFields.id, slug: jsFields.slug},
+        required: [ 'dashId', 'slug']
+      },
+      responseSchema: {
+        properties: { dashId: jsFields.id, slug: jsFields.slug, name: jsFields.name, description: jsFields.description, permissions: jsFields.permissions },
+        required: [ 'dashId', 'permissions', 'slug' ]
+      }
+    },
+    'createDashUser': {
+      public: true,
+      responseType: 'response',
+      requestSchema: {
+        properties: { dashId: jsFields.id, role: jsFields.id },
+        required: [ 'dashId' ]
+      },
+      responseSchema: jsRes
+    },
+    'readDashUser': {
+      public: true,
+      responseType: 'response',
+      requestSchema: jsItemById,
+      responseSchema: jsRead
+    },
+    'updateDashUser': {
+      public: true,
+      responseType: 'response',
+      requestSchema: { properties: jsRead.properties, required: [ 'id' ] },
       responseSchema: jsRes
     },
     'queryByTimestamp': {

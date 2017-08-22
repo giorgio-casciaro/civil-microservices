@@ -2,6 +2,8 @@ version: '3.2'
 
 services:
    aerospike:
+     logging:
+       driver: none
      image: giorgiocasciaro/civil-microservices-aerospike:7
      command: bash -c "echo \"$$AEROSPIKE_CONF\" > /etc/aerospike/aerospike.conf ; cat /etc/aerospike/aerospike.conf ; asd --foreground "
      networks:
@@ -43,7 +45,7 @@ services:
           namespace civilconnect {
           	replication-factor 1
           	memory-size 500M
-
+            
           	storage-engine device {
           		file /opt/aerospike/data/civilconnect.dat
           		filesize 500M

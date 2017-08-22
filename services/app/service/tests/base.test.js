@@ -19,7 +19,7 @@ var startTest = async function (netClient) {
   }
   const COUNT = (actual, expected) => actual.length
 
-  var mainTest = require('../lib/microTest')('test Microservice local methods and db conenctions')
+  var mainTest = require('sint-bit-utils/utils/microTest')('test Microservice local methods and db connections')
   var microTest = mainTest.test
   var finishTest = mainTest.finish
 

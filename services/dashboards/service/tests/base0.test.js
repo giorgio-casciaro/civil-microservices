@@ -6,9 +6,9 @@ var path = require('path')
 
 var startTest = async function (netClient) {
   var aerospike = require('../config').aerospike
-  aerospike.set = 'users_test_set'
-  aerospike.mutationsSet = 'users_test_mutations_set'
-  aerospike.viewsSet = 'users_test_views_set'
+  aerospike.set = 'dashboards_test_set'
+  aerospike.mutationsSet = 'dashboards_test_mutations_set'
+  aerospike.viewsSet = 'dashboards_test_views_set'
 
   // PREPARE DB
   var microRandom = Math.floor(Math.random() * 100000)
@@ -56,7 +56,7 @@ var startTest = async function (netClient) {
   const COUNT = (actual, expected) => actual.length
 
   var createWrongMail = await netClient.testLocalMethod('create', { email: `${microRandom}` }, basicMeta)
-  microTest(createWrongMail, {error: 'string'}, 'wrong request: email not valid', TYPE_OF)
+  microTest(createWrongMail, {error: 'string'}, 'wrong request: email not valid', TYPE_OF, 2)
 
   var create = await netClient.testLocalMethod('create', { email: fields.email }, basicMeta)
   microTest(create, { success: 'User created' }, 'User Create', FILTER_BY_KEYS)

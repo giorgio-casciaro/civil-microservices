@@ -3,7 +3,7 @@ version:              '3.2'
 services:
   app:
     image:            giorgiocasciaro/civil-microservices-app:9
-    command:          sh -c "sleep 30 && npm run test && npm run start"
+    command:          sh -c "npm run start"
     environment:
       netHost:        app
       schemaHost:     'http://schema:10000'
@@ -16,6 +16,7 @@ services:
        - ../../../../civil_microservices_shared_modules/:/microservice/node_modules
        - ../../../NPM/jesus:/microservice/service/node_modules/sint-bit-jesus
        - ../../../NPM/cqrs:/microservice/service/node_modules/sint-bit-cqrs
+       - ../../../NPM/sint-bit-utils:/microservice/service/node_modules/sint-bit-utils
        - ../../../FS/:/uploads/
     # depends_on:
     #   - aerospike

@@ -1,13 +1,13 @@
 {
-  "name": "civil-microservices-users",
+  "name": "civil-microservices-dashboards",
   "version": "0.0.1",
   "description": "",
   "main": "start.js",
   "scripts": {
     "start": "node ./service/start.js",
     "test": "node ./service/tests/base.launcher.js",
-    "watch_test": "node ./node_modules/sint-bit-utils/utils/watch.js ./service/methods.js,./service/config.js,./service/tests/base.test.js ./service/tests/base.launcher.js",
-    "watch_start": "node ./node_modules/sint-bit-utils/utils/watch.js ./service/methods.js,./service/config.js,./service/tests/base.test.js ./service/start.js"
+    "watch_test": "node ./node_modules/sint-bit-utils/utils/watch.js ./service/methods.js,./service/config.js,./service/service.js,./service/tests/base.test.js ./service/tests/base.launcher.js",
+    "watch_start": "node ./node_modules/sint-bit-utils/utils/watch.js ./service/methods.js,./service/config.js,./service/service.js,./service/tests/base.test.js ./service/start.js"
   },
   "author": "",
   "license": "ISC",

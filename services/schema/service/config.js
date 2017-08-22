@@ -4,7 +4,7 @@ module.exports={
   aerospike: {
     hosts: process.env.aerospikeHosts || '127.0.0.1:3000',
     // log: {level: process.env.aerospikeLogLevel || 4},
-    set: process.env.aerospikeSet || 'test',
+    set: process.env.aerospikeSet || 'schema',
     namespace: process.env.aerospikeNamespace || 'civilconnect',
     policies: { timeout: 10000 }
   }

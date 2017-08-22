@@ -2,6 +2,8 @@ version:                  '3.2'
 
 services:
    fakesmtp:
+     logging:
+       driver: none
      image:               giorgiocasciaro/civil-microservices-fakesmtp:6
      ports:
        - 8025:8025

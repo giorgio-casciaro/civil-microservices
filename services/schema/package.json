@@ -6,10 +6,8 @@
   "scripts": {
     "start": "node ./service/start.js",
     "test": "node ./service/tests/base.launcher.js",
-    "watch_test": "node ./service/lib/watch.js ./service/start.js./service/config.js,./service/tests/base.test.js ./service/tests/base.launcher.js",
-    "watch_start": "node ./service/lib/watch.js ./service/config.js,./service/tests/base.test.js ./service/start.js",
-    "build": "cd docker && sh build.sh",
-    "docker_start": "cd docker && sh start.sh"
+    "watch_test": "node ./node_modules/sint-bit-utils/utils/watch.js ./service/start.js,./service/config.js,./service/tests/base.test.js ./service/tests/base.launcher.js",
+    "watch_start": "node ./node_modules/sint-bit-utils/utils/watch.js ./service/start.js,./service/config.js,./service/tests/base.test.js ./service/start.js"
   },
   "author": "",
   "license": "ISC",

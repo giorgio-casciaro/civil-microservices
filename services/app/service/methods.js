@@ -12,6 +12,7 @@ var service = async function getMethods (CONSOLE, netClient, CONFIG = require('.
     CONSOLE.debug('CONFIG', CONFIG)
     return {
       async getSchema (reqData, meta = {directCall: true}, getStream = null) {
+        CONSOLE.log('getSchemagetSchema', getServiceSchema())
         return { schema: getServiceSchema('*', '*') }
       },
       async getPublicApiSchema (reqData, meta = {directCall: true}, getStream = null) {

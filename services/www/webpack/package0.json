@@ -2,7 +2,7 @@
   "name": "civilconnect",
   "version": "1.0.0",
   "description": "Civil connect",
-  "author": "giorgio-casciaro <giorgio.casciaro@gmail.com>",
+  "author": "giorgio-casciaro <sint.bit@gmail.com>",
   "private": true,
   "scripts": {
     "dev": "node build/dev-server.js ",

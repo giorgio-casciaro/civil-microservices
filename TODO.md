@@ -1,5 +1,23 @@
+problema token assegnati dinamicamente
+es. uno user si disiscrive da una dashboard
+viene creato un nuovo token con i nuovi permessi
+il vecchio token viene invalidato: tokenRemoved lista di token non ammessi, da controllare prima di getPermission
+getPermission controlla sempre che il token non sia stato invalidato
+
+permissions list: lista di tutti i permessi usati
+
+setRole: crea una nuova ruolo: permissions list
+unsetRole
+
+create User Dashboard: crea una nuova iscrizione: id dash, id user, tags, role
+update User Dashboard: id, id dash, id user, tags, role
+remove User Dashboard: id, id dash,  id user, tags, role
+
+checkDashPermission
+
+
 # civil-microservices
-updaate jesus
+update jesus
 
 ## SERVICES
 
