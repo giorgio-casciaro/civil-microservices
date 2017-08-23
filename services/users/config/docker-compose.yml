@@ -3,7 +3,7 @@ version:                '3.2'
 services:
    users:
      image:             giorgiocasciaro/civil-microservices-users:12
-     command:           sh -c "npm run watch_start"
+     command:           sh -c "npm run watch_test"
      environment:
        uploadPath:      /uploads/
        schemaHost:      'http://schema:10000'

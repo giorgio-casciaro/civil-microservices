@@ -20,8 +20,8 @@ const auth = require('sint-bit-utils/utils/auth')
 
 var service = async function getMethods (CONSOLE, netClient, CONFIG = require('./config')) {
   try {
-    CONSOLE.debug('CONFIG', CONFIG)
-    CONSOLE.log('CONFIG', CONFIG)
+    // CONSOLE.debug('CONFIG', CONFIG)
+    // console.log('CONFIG', CONFIG)
     var kvDbClient = await kvDb.getClient(CONFIG.aerospike)
     // SMTP
     var smtpTrans = nodemailer.createTransport(require('./config').smtp)
@@ -138,7 +138,7 @@ var service = async function getMethods (CONSOLE, netClient, CONFIG = require('.
 
     return {
       async getPermissions (reqData, meta = {directCall: true}, getStream = null) {
-        return { permissions: [ [10, 'user.' + reqData.id + '.*', 1], [5, 'user.*.read', 1] ] }
+        return { permissions: [ [10, 'user.' + reqData.id + '.*', 1], [5, 'user.*.read', 1]] }
       },
       async create (reqData, meta = {directCall: true}, getStream = null) {
         var mailExists = await getUserByMail(reqData.email)
@@ -177,6 +177,7 @@ var service = async function getMethods (CONSOLE, netClient, CONFIG = require('.
       },
       async readPrivate (reqData, meta = {directCall: true}, getStream = null) {
         var id = reqData.id
+        console.log('reqData', {jwt: CONFIG.jwt})
         await auth.userCan('user.' + id + '.private.read', meta, CONFIG.jwt)
         var currentState = await getView(id)
         if (!currentState) throw new Error('user not active')
@@ -310,12 +311,27 @@ var service = async function getMethods (CONSOLE, netClient, CONFIG = require('.
       },
       async tokenReload (reqData, meta = {directCall: true}, getStream = null) {
         var id = currentState.id
-        var newToken = await getToken(id, meta, DONFIG.jwt)
+        var newToken = await getToken(id, meta, CONFIG.jwt)
         var mutation = await mutate({data: {token}, objId: id, mutation: 'login', meta})
         updateView(id, [mutation])
         delete currentState.password
         return { success: `Login`, token, currentState }
       },
+      // async login (reqData, meta = {directCall: true}, getStream = null) {
+      //   var bcrypt = require('bcrypt')
+      //   var currentState = await getUserByMail(reqData.email)
+      //   if (!currentState || currentState.tags.indexOf('removed') >= 0 || currentState.tags.indexOf('passwordAssigned') < 0 || currentState.tags.indexOf('emailConfirmed') < 0) {
+      //     throw new Error('Wrong username or password')
+      //   }
+      //   if (!bcrypt.compareSync(reqData.password, currentState.password)) throw new Error('Wrong username or password')
+      //   delete reqData.password
+      //   var id = currentState.id
+      //   var token = await getToken(id, meta, CONFIG.jwt)
+      //   var mutation = await mutate({data: {token}, objId: id, mutation: 'login', meta})
+      //   updateView(id, [mutation])
+      //   delete currentState.password
+      //   return { success: `Login`, token, currentState }
+      // },
       async login (reqData, meta = {directCall: true}, getStream = null) {
         var bcrypt = require('bcrypt')
         var currentState = await getUserByMail(reqData.email)
@@ -325,22 +341,7 @@ var service = async function getMethods (CONSOLE, netClient, CONFIG = require('.
         if (!bcrypt.compareSync(reqData.password, currentState.password)) throw new Error('Wrong username or password')
         delete reqData.password
         var id = currentState.id
-        var token = await getToken(id, meta, DONFIG.jwt)
-        var mutation = await mutate({data: {token}, objId: id, mutation: 'login', meta})
-        updateView(id, [mutation])
-        delete currentState.password
-        return { success: `Login`, token, currentState }
-      },
-      async login (reqData, meta = {directCall: true}, getStream = null) {
-        var bcrypt = require('bcrypt')
-        var currentState = await getUserByMail(reqData.email)
-        if (!currentState || currentState.tags.indexOf('removed') >= 0 || currentState.tags.indexOf('passwordAssigned') < 0 || currentState.tags.indexOf('emailConfirmed') < 0) {
-          throw new Error('Wrong username or password')
-        }
-        if (!bcrypt.compareSync(reqData.password, currentState.password)) throw new Error('Wrong username or password')
-        delete reqData.password
-        var id = currentState.id
-        var token = await getToken(id, meta, DONFIG.jwt)
+        var token = await getToken(id, meta, CONFIG.jwt)
         var mutation = await mutate({data: {token}, objId: id, mutation: 'login', meta})
         updateView(id, [mutation])
         delete currentState.password
@@ -378,7 +379,7 @@ var service = async function getMethods (CONSOLE, netClient, CONFIG = require('.
         return {success: `User removed`}
       },
       async queryByTimestamp (query = {}, meta = {directCall: true}, getStream = null) {
-        await auth.userCan('user.read.query', meta, CONFIG.jwt)
+        // await auth.userCan('user.read.query', meta, CONFIG.jwt)
         query = Object.assign({from: 0, to: 100000000000000}, query)
         var rawResults = await kvDb.query(kvDbClient, CONFIG.aerospike.namespace, CONFIG.aerospike.set, (dbQuery) => { dbQuery.where(Aerospike.filter.range('updated', query.from, query.to)) })
         var results = await Promise.all(rawResults.map((result) => getView(result.id, result)))

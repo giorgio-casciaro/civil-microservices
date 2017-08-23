@@ -7,6 +7,7 @@ module.exports = async function service () {
 
   // SERVICES DEPENDECIES
   const wait = require('sint-bit-utils/utils/wait')
+  console.log('PREINIT SCHEMA')
   await wait.aerospike(CONFIG.aerospike)
   console.log('INIT SCHEMA')
 

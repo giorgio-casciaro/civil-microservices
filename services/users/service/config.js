@@ -7,7 +7,7 @@ module.exports = {
   schemaHost: process.env.schemaHost || 'http://127.0.0.1:10000',
   confirmEmailUrl: process.env.confirmEmailUrl || 'http://127.0.0.1:10080/#/confirmEmailUrl',
   sendEmails: process.env.sendEmails || true,
-  mailFrom: process.env.mailFrom || 'notifications@civilconnect.it',
+  mailFrom: process.env.mailFrom || 'notifications1@civilconnect.it',
   uploadPath: process.env.uploadPath || '/upload/',
   smtp: process.env.smtpConfigJson ? JSON.parse(process.env.smtpConfigJson) : {
     host: '127.0.0.1',
@@ -16,7 +16,7 @@ module.exports = {
     debug: true
   },
   jwt: {
-    // 'passphrase': process.env.jwtPassphrase || 'CJhbGciOiJIUzI1NiJ9eyJ0eXAiOiJKV1QiL',
+    'passphrase': process.env.jwtPassphrase || 'CJhbGciOiJIUzI1NiJ9eyJ0eXAiOiJKV1QiL',
     'path': path.join(__dirname, './permissions/'),
     'privateCert': process.env.jwtPrivateCert || fs.readFileSync(path.join(__dirname, './server.key')),
     'publicCert': process.env.jwtPublicCert || fs.readFileSync(path.join(__dirname, './server.cert'))

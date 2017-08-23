@@ -187,7 +187,7 @@ module.exports = {
       responseSchema: jsRes
     },
     'queryByTimestamp': {
-      public: true,
+      public: false,
       responseType: 'response',
       requestSchema: { required: ['from'], properties: { from: { type: 'integer' }, to: { type: 'integer' } } },
       responseSchema: jsQueryRes
