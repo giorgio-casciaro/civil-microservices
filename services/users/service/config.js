@@ -29,7 +29,7 @@ module.exports = {
     filesSet: process.env.aerospikeFilesSet || 'filesSet',
     filesChunksSet: process.env.aerospikeFilesChunksSet || 'filesChunksSet',
     viewsSet: process.env.aerospikeViewsSet || 'viewsUsers',
-    namespace: process.env.aerospikeNamespace || 'civilconnect',
+    namespace: process.env.aerospikeNamespace || 'cc_users',
     policies: { timeout: parseInt(process.env.aerospikeTimeout) || 600000 }
   },
   console: { error: process.env.consoleError || true, debug: process.env.consoleDebug || true, log: process.env.consoleLog || true, warn: process.env.consoleWarn || true }

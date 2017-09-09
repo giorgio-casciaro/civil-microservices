@@ -11,6 +11,7 @@ const uuid = require('uuid/v4')
 const Aerospike = require('aerospike')
 const Key = Aerospike.Key
 const kvDb = require('sint-bit-utils/utils/kvDb')
+const pic = require('sint-bit-utils/utils/pic')
 
 const nodemailer = require('nodemailer')
 const vm = require('vm')
@@ -35,7 +36,8 @@ var service = async function getMethods (CONSOLE, netClient, CONFIG = require('.
       mailOptions.txt = await getMailTemplate(template, mailContents, '.txt')
       CONSOLE.log('sendMail', mailOptions)
       if (!process.env.sendEmails) return true
-      return await new Promise((resolve, reject) => smtpTrans.sendMail(mailOptions, (err, data) => err ? reject(err) : resolve(data)))
+      var returnResult = await new Promise((resolve, reject) => smtpTrans.sendMail(mailOptions, (err, data) => err ? reject(err) : resolve(data)))
+      return returnResult
     }
     // MUTATIONS
     var mutationsPack = require('sint-bit-cqrs/mutations')({ mutationsPath: path.join(__dirname, '/mutations') })
@@ -190,97 +192,109 @@ var service = async function getMethods (CONSOLE, netClient, CONFIG = require('.
         await updateView(id, [mutation])
         return {success: `Public Name updated`}
       },
-
       async updatePic (reqData, meta = {directCall: true}, getStream = null) {
-        var sharp = require('sharp')
-        var unlink = (file) => new Promise((resolve, reject) => fs.unlink(file, (err, data) => err ? resolve(err) : resolve(data)))
         var id = reqData.id
         try {
           await auth.userCan('user.' + id + '.write', meta, CONFIG.jwt)
         } catch (error) {
-          await unlink(reqData.pic.path)
+          await new Promise((resolve, reject) => fs.unlink(reqData.pic.path, (err, data) => err ? resolve(err) : resolve(data)))
           throw error
         }
-        // RESIZE
-        var picNewPathFullSize = getPicPath(reqData.id, 'full')
-        var picNewPathMini = getPicPath(reqData.id, 'mini')
-        var baseImg = sharp(reqData.pic.path).resize(1000, 1000).max()
-        await new Promise((resolve, reject) => baseImg.toFile(picNewPathFullSize, (err, data) => err ? reject(err) : resolve(data)))
-        await new Promise((resolve, reject) => baseImg.resize(100, 100).crop().toFile(picNewPathMini, (err, data) => err ? reject(err) : resolve(data)))
-
-        // SAVE FILE IN DB
-        const saveFileInDb = (file, id = uuid()) => new Promise((resolve, reject) => {
-          const XXHash = require('xxhash')
-          var chunkSize = 1024 * 128
-          var chunkIt = fs.statSync(file).size > chunkSize
-          CONSOLE.log('saveFileInDb', chunkIt, chunkSize)
-          var stream = fs.createReadStream(file)
-          var chunks = []
-          stream.on('data', async function (chunk) {
-            try {
-              var chunkId = XXHash.hash(chunk, 0xCAFEBABE)
-
-              var key = new Key(CONFIG.aerospike.namespace, CONFIG.aerospike.filesChunksSet, chunkId)
-              CONSOLE.log('chunk', chunkId, {chunk})
-              if (chunkIt) {
-                chunks.push(chunkId)
-                await kvDb.put(kvDbClient, key, {chunk})
-              } else {
-                chunks = chunk
-              }
-            } catch (error) {
-              reject(error)
-            }
-          })
-          stream.on('end', async function () {
-            try {
-              CONSOLE.log('end')
-              var key = new Key(CONFIG.aerospike.namespace, CONFIG.aerospike.filesSet, id)
-              var dbFile = {id, chunks}
-              CONSOLE.log('end', id, dbFile)
-              await kvDb.put(kvDbClient, key, dbFile)
-            } catch (error) {
-              reject(error)
-            }
-            resolve({id, chunks})
-          })
-        })
-
-        var fullSize = await saveFileInDb(picNewPathFullSize, reqData.id + '_profile_full')
-        var mini = await saveFileInDb(picNewPathMini, reqData.id + '_profile_mini')
-
-        // CLEAR TEMP FILES
-        unlink(reqData.pic.path)
-        unlink(picNewPathFullSize)
-        unlink(picNewPathMini)
-
-        // UPDATE DB
-        // var mutation = await mutate({data: reqData, objId: id, mutation: 'updatePic', meta})
-        // await updateView(id, [mutation])
-        return {success: `Pic updated`}
+        return await pic.updatePic(CONFIG.aerospike, kvDbClient, id, reqData.pic.path, CONFIG.uploadPath, [['mini', 100, 100]])
       },
       async getPic (reqData, meta = {directCall: true}, getStream = null) {
-        const readFileInDb = async (id) => {
-          var key = new Key(CONFIG.aerospike.namespace, CONFIG.aerospike.filesSet, id)
-          var dbFile = await kvDb.get(kvDbClient, key)
-
-          if (dbFile && dbFile.chunks) {
-            CONSOLE.log('dbFile', dbFile)
-            if (dbFile.chunks instanceof Buffer) return dbFile.chunks // SINGLE CHUNK
-            var chunksPromises = dbFile.chunks.map((chunkId) => kvDb.get(kvDbClient, new Key(CONFIG.aerospike.namespace, CONFIG.aerospike.filesChunksSet, chunkId)))
-            var allChunks = await Promise.all(chunksPromises)
-            var complete = allChunks.reduce((a, b) => Buffer.concat([a, b.chunk]), Buffer.alloc(0))
-            CONSOLE.log('complete', complete)
-            return complete
-          }
-          return null
-        }
-        try {
-          return await readFileInDb(reqData.id + '_profile_mini')
-        } catch (error) {
-          return null
-        }
+        return await pic.getPic(CONFIG.aerospike, kvDbClient, reqData.id, reqData.size || 'mini')
       },
+      // async updatePic (reqData, meta = {directCall: true}, getStream = null) {
+      //   var sharp = require('sharp')
+      //   var unlink = (file) => new Promise((resolve, reject) => fs.unlink(file, (err, data) => err ? resolve(err) : resolve(data)))
+      //   var id = reqData.id
+      //   try {
+      //     await auth.userCan('user.' + id + '.write', meta, CONFIG.jwt)
+      //   } catch (error) {
+      //     await unlink(reqData.pic.path)
+      //     throw error
+      //   }
+      //   // RESIZE
+      //   var picNewPathFullSize = getPicPath(reqData.id, 'full')
+      //   var picNewPathMini = getPicPath(reqData.id, 'mini')
+      //   var baseImg = sharp(reqData.pic.path).resize(1000, 1000).max()
+      //   await new Promise((resolve, reject) => baseImg.toFile(picNewPathFullSize, (err, data) => err ? reject(err) : resolve(data)))
+      //   await new Promise((resolve, reject) => baseImg.resize(100, 100).crop().toFile(picNewPathMini, (err, data) => err ? reject(err) : resolve(data)))
+      //
+      //   // SAVE FILE IN DB
+      //   const saveFileInDb = (file, id = uuid()) => new Promise((resolve, reject) => {
+      //     const XXHash = require('xxhash')
+      //     var chunkSize = 1024 * 128
+      //     var chunkIt = fs.statSync(file).size > chunkSize
+      //     CONSOLE.log('saveFileInDb', chunkIt, chunkSize)
+      //     var stream = fs.createReadStream(file)
+      //     var chunks = []
+      //     stream.on('data', async function (chunk) {
+      //       try {
+      //         var chunkId = XXHash.hash(chunk, 0xCAFEBABE)
+      //
+      //         var key = new Key(CONFIG.aerospike.namespace, CONFIG.aerospike.filesChunksSet, chunkId)
+      //         CONSOLE.log('chunk', chunkId, {chunk})
+      //         if (chunkIt) {
+      //           chunks.push(chunkId)
+      //           await kvDb.put(kvDbClient, key, {chunk})
+      //         } else {
+      //           chunks = chunk
+      //         }
+      //       } catch (error) {
+      //         reject(error)
+      //       }
+      //     })
+      //     stream.on('end', async function () {
+      //       try {
+      //         CONSOLE.log('end')
+      //         var key = new Key(CONFIG.aerospike.namespace, CONFIG.aerospike.filesSet, id)
+      //         var dbFile = {id, chunks}
+      //         CONSOLE.log('end', id, dbFile)
+      //         await kvDb.put(kvDbClient, key, dbFile)
+      //       } catch (error) {
+      //         reject(error)
+      //       }
+      //       resolve({id, chunks})
+      //     })
+      //   })
+      //
+      //   var fullSize = await saveFileInDb(picNewPathFullSize, reqData.id + '_profile_full')
+      //   var mini = await saveFileInDb(picNewPathMini, reqData.id + '_profile_mini')
+      //
+      //   // CLEAR TEMP FILES
+      //   unlink(reqData.pic.path)
+      //   unlink(picNewPathFullSize)
+      //   unlink(picNewPathMini)
+      //
+      //   // UPDATE DB
+      //   // var mutation = await mutate({data: reqData, objId: id, mutation: 'updatePic', meta})
+      //   // await updateView(id, [mutation])
+      //   return {success: `Pic updated`}
+      // },
+      // async getPic (reqData, meta = {directCall: true}, getStream = null) {
+      //   const readFileInDb = async (id) => {
+      //     var key = new Key(CONFIG.aerospike.namespace, CONFIG.aerospike.filesSet, id)
+      //     var dbFile = await kvDb.get(kvDbClient, key)
+      //
+      //     if (dbFile && dbFile.chunks) {
+      //       CONSOLE.log('dbFile', dbFile)
+      //       if (dbFile.chunks instanceof Buffer) return dbFile.chunks // SINGLE CHUNK
+      //       var chunksPromises = dbFile.chunks.map((chunkId) => kvDb.get(kvDbClient, new Key(CONFIG.aerospike.namespace, CONFIG.aerospike.filesChunksSet, chunkId)))
+      //       var allChunks = await Promise.all(chunksPromises)
+      //       var complete = allChunks.reduce((a, b) => Buffer.concat([a, b.chunk]), Buffer.alloc(0))
+      //       CONSOLE.log('complete', complete)
+      //       return complete
+      //     }
+      //     return null
+      //   }
+      //   try {
+      //     return await readFileInDb(reqData.id + '_profile_mini')
+      //   } catch (error) {
+      //     return null
+      //   }
+      // },
       async updatePassword (reqData, meta = {directCall: true}, getStream = null) {
         var id = reqData.id
         await auth.userCan('user.' + id + '.private.write', meta, CONFIG.jwt)
@@ -309,14 +323,14 @@ var service = async function getMethods (CONSOLE, netClient, CONFIG = require('.
         await addTag(id, 'passwordAssigned', meta)
         return {success: `Password assigned`}
       },
-      async tokenReload (reqData, meta = {directCall: true}, getStream = null) {
-        var id = currentState.id
-        var newToken = await getToken(id, meta, CONFIG.jwt)
-        var mutation = await mutate({data: {token}, objId: id, mutation: 'login', meta})
-        updateView(id, [mutation])
-        delete currentState.password
-        return { success: `Login`, token, currentState }
-      },
+      // async tokenReload (reqData, meta = {directCall: true}, getStream = null) {
+      //   var id = currentState.id
+      //   var newToken = await getToken(id, meta, CONFIG.jwt)
+      //   var mutation = await mutate({data: {token}, objId: id, mutation: 'login', meta})
+      //   updateView(id, [mutation])
+      //   delete currentState.password
+      //   return { success: `Login`, token, currentState }
+      // },
       // async login (reqData, meta = {directCall: true}, getStream = null) {
       //   var bcrypt = require('bcrypt')
       //   var currentState = await getUserByMail(reqData.email)
@@ -355,6 +369,10 @@ var service = async function getMethods (CONSOLE, netClient, CONFIG = require('.
         }
         if (currentState.email !== reqData.email) throw new Error('Problems durig logout')
         return {success: `Logout`, id, email: reqData.email}
+      },
+      async refreshToken (reqData, meta = {directCall: true}, getStream = null) {
+        var token = await auth.refreshToken(meta.token, CONFIG.jwt)
+        return {success: `New token generated`, token}
       },
       async updatePersonalInfo (reqData, meta = {directCall: true}, getStream = null) {
         var id = reqData.id

@@ -45,7 +45,7 @@ module.exports = {
           meta: { type: 'object' }
         }
       },
-      responseSchema: { 'additionalProperties': true }
+      responseSchema: false
     }
   }
 }

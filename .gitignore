@@ -1,4 +1,8 @@
 tokens/*
+gitignore
+gitignore/*
+*gitignore/*
+
 *.tkn
 .vagrant
 *.zip

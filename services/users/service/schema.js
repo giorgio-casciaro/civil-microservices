@@ -150,6 +150,12 @@ module.exports = {
       },
       responseSchema: loginRes
     },
+    'refreshToken': {
+      public: true,
+      responseType: 'response',
+      requestSchema: jsReadPrivate,
+      responseSchema: loginRes
+    },
     'logout': {
       public: true,
       responseType: 'response',
@@ -192,6 +198,7 @@ module.exports = {
       requestSchema: { required: ['from'], properties: { from: { type: 'integer' }, to: { type: 'integer' } } },
       responseSchema: jsQueryRes
     },
+
     'test': {
       public: true,
       responseType: 'response',

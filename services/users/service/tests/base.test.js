@@ -87,6 +87,15 @@ var startTest = async function (netClient) {
   var readPublicName = await netClient.testLocalMethod('read', {id: create.id}, basicMeta)
   microTest(readPublicName, {publicName: fields.publicName}, 'readPublicName', FILTER_BY_KEYS)
 
+  var refreshToken = await netClient.testLocalMethod('refreshToken', {}, basicMeta)
+  microTest(refreshToken, { success: 'string', token: 'string' }, 'refreshToken', TYPE_OF)
+
+  basicMeta.token = refreshToken.token
+
+  var readPrivate2 = await netClient.testLocalMethod('readPrivate', {id: create.id}, basicMeta)
+  microTest(readPrivate2, {email: fields.email}, 'readPrivate', FILTER_BY_KEYS)
+  microTest(readPrivate2, {emailConfirmationCode: 'undefined'}, 'readPrivate', TYPE_OF)
+
   var updatePic = await netClient.testLocalMethod('updatePic', {id: create.id, pic: fields.pic}, basicMeta)
   microTest(updatePic, { success: 'string' }, 'updatePic', TYPE_OF)
   var getPic = await netClient.testLocalMethod('getPic', {id: create.id}, basicMeta)
@@ -111,6 +120,7 @@ var startTest = async function (netClient) {
   await rpcCreateUserN(1)
   await rpcCreateUserN(2)
   await rpcCreateUserN(3)
+  await new Promise((resolve) => setTimeout(resolve, 100))
   var testTimestamp2 = Date.now()
   await rpcCreateUserN(4)
   await rpcCreateUserN(5)

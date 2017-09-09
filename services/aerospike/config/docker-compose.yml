@@ -6,6 +6,10 @@ services:
        driver: none
      image: giorgiocasciaro/civil-microservices-aerospike:7
      command: bash -c "echo \"$$AEROSPIKE_CONF\" > /etc/aerospike/aerospike.conf ; cat /etc/aerospike/aerospike.conf ; asd --foreground "
+     volumes:
+       - ../gitignore/data:/opt/aerospike/data
+       - ../gitignore/smd:/opt/aerospike/smd
+       - ../gitignore/usr:/opt/aerospike/usr/udf/lua
      networks:
        - aerospike
      environment:
@@ -42,12 +46,29 @@ services:
           	}
           }
 
-          namespace civilconnect {
+          namespace cc_schema {
           	replication-factor 1
           	memory-size 500M
-            
           	storage-engine device {
-          		file /opt/aerospike/data/civilconnect.dat
+          		file /opt/aerospike/data/cc_schema.dat
+          		filesize 500M
+          	}
+          }
+
+          namespace cc_users {
+          	replication-factor 1
+          	memory-size 500M
+          	storage-engine device {
+          		file /opt/aerospike/data/cc_users.dat
+          		filesize 500M
+          	}
+          }
+
+          namespace cc_dashboards {
+          	replication-factor 1
+          	memory-size 500M
+          	storage-engine device {
+          		file /opt/aerospike/data/cc_dashboards.dat
           		filesize 500M
           	}
           }
