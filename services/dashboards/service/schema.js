@@ -26,8 +26,8 @@ var jsRes = {
 var subtestRes = { properties: { count: { type: 'integer' }, success: { type: 'string' }, error: { type: 'string' } } }
 var testRes = { additionalProperties: true, properties: { success: { type: 'string' }, error: { type: 'string' }, subtests: { type: 'array', items: subtestRes } } }
 
-var jsInfo = { properties: { id: dashId, name: jsFields.name, description: jsFields.description, public: jsFields.public, tags: jsFields.tags, maps: jsFields.maps } }
-var jsRead = { properties: { id: dashId, name: jsFields.name, description: jsFields.description, public: jsFields.public, tags: jsFields.tags, maps: jsFields.maps } }
+var jsInfo = { properties: { id: dashId, name: jsFields.name, description: jsFields.description, public: jsFields.public, tags: jsFields.tags, maps: jsFields.maps, pics: {type: 'array'} } }
+var jsRead = { properties: { id: dashId, name: jsFields.name, description: jsFields.description, public: jsFields.public, tags: jsFields.tags, maps: jsFields.maps, pics: {type: 'array'}, roles: {type: 'object'} } }
 var jsQueryRes = { type: 'array', items: jsInfo }
 
 var jsRoleProp = { id: jsFields.id, dashId: dashId, slug: jsFields.slug, name: jsFields.name, public: jsFields.public, description: jsFields.description, tags: jsFields.tags, permissions: jsFields.rolePermissions }
@@ -112,7 +112,7 @@ module.exports = {
     'getPic': {
       public: true,
       responseType: 'response',
-      requestSchema: { properties: jsInfo.properties, required: [ 'id' ] },
+      requestSchema: { properties: { id: {type: 'string'}, size: {type: 'string'} }, required: [ 'id' ] },
       responseSchema: false
     },
     'remove': {
@@ -168,6 +168,25 @@ module.exports = {
       requestSchema: jsItemBySubscriptionId,
       responseSchema: {
         properties: jsSubscriptionProp
+      }
+    },
+    'readSubscriptions': {
+      public: true,
+      responseType: 'response',
+      requestSchema: {
+        properties: {
+          ids: {
+            type: 'array',
+            items: { type: 'string' }
+          }
+        },
+        required: [ 'ids' ]
+      },
+      responseSchema: {
+        type: 'array',
+        items: {
+          properties: jsSubscriptionProp
+        }
       }
     },
     'updateSubscription': {

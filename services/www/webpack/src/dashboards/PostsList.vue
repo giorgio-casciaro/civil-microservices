@@ -6,15 +6,16 @@
     <!-- {{post}} -->
     <!-- <h4>{{subscription.role}}</h4> -->
     <!-- <h3>{{post.name}}</h3> -->
-    <div class="from"><SingleSubscription :subscriptionId="post.subscriptionId"></SingleSubscription></div>
+    <!-- <div class="from"></div>
     <div class="tags">
       <span v-for="(item, index) in post.tags">
         #{{ item }}
       </span>
     </div>
-    <div class="body">{{post.body}}</div>
+    <div class="body">{{post.body}}</div> -->
+    <SinglePost :post="post"></SinglePost>
     <!-- <a class="button" :href="'/#/dashboard/'+subscription.dashInfo.id">{{strEnter}}</a> -->
-    <pre>{{post}}</pre>
+    <!-- <pre>{{post}}</pre> -->
   </div>
   <!-- <pre>{{posts}}</pre> -->
   <!-- </div> -->
@@ -27,7 +28,7 @@
 </div>
 </template>
 <script>
-import SingleSubscription from '@/dashboards/SingleSubscription'
+import SinglePost from '@/dashboards/SinglePost'
 import {
   translate
 } from '@/i18n'
@@ -44,7 +45,7 @@ export default {
       dashId: this.dashId
     })
   },
-  components: {SingleSubscription},
+  components: {SinglePost},
   computed: {
     strDashboardPostsList: function() {
       return t('Lista Posts')

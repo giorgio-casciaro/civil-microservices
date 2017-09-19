@@ -5,14 +5,11 @@
     <h4>{{dashboard.name}}</h4>
     <div class="tags">{{dashboard.tags.join(",")}}</div>
     <p>{{dashboard.description}}</p>
+    <div v-if="dashboard.pics&&dashboard.pics[0]" class="image"><img :src="`${$store.state.apiServer}/dashboards/getPic/id/${dashboard.pics[0]}`" /></div>
     <a v-if="getSubscription(dashboard.id)" class="button" :href="'/#/dashboard/'+dashboard.id">{{strEnter}}</a>
-    <a v-if="!getSubscription(dashboard.id)&&parseInt(dashboard.public)===1" class="button" :href="'/#/dashboard/'+dashboard.id">{{strRegister}}</a>
-    <a v-if="!getSubscription(dashboard.id)&&parseInt(dashboard.public)===0" class="button" :href="'/#/dashboard/'+dashboard.id">{{strRegisterRequest}}</a>
+    <a v-if="!getSubscription(dashboard.id)&&parseInt(dashboard.public)===1" @click="subscribe(dashboard.id)" class="button" >{{strRegister}}</a>
+    <a v-if="!getSubscription(dashboard.id)&&parseInt(dashboard.public)===0" @click="subscriptionRequest(dashboard.id)" class="button" >{{strRegisterRequest}}</a>
   </div>
-  <!-- <Login v-if="show==='Login'" @success="$emit('loginSuccess')"></Login>
-  <Register v-if="show==='Register'"  @success="$emit('registerSuccess')"></Register>
-  <div class="toLogin" v-if="show==='Register'">{{strHaveAccount}}<a class="button" @click="show='Login'">{{strLogin}}</a></div>
-  <div class="toRegister" v-if="show==='Login'">{{strNotHaveAccount}}<a class="button" @click="show='Register'">{{strRegister}}</a></div> -->
   <div><a class="button" @click="loadMore">{{strLoadMore}}</a></div>
 </div>
 </template>
@@ -44,6 +41,9 @@ export default {
     },
     getSubscription(dashId){
       return this.$store.state.dashboards.subscriptionsByDashboardId[dashId]
+    },
+    subscribe(dashId){
+      this.$store.dispatch("dashboards/subscribe",{dashId})
     }
   },
   data() {

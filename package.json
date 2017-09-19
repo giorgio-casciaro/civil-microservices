@@ -7,9 +7,10 @@
     "type": "git",
     "url": "https://github.com/giorgio-casciaro/civil-microservices.git"
   },
-  "scripts": {
-  },
+  "scripts": {},
   "license": "ISC",
   "devDependencies": {},
-  "dependencies": {}
+  "dependencies": {
+    "moment": "^2.18.1"
+  }
 }

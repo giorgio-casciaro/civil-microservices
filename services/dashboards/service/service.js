@@ -1,3 +1,9 @@
+process.on('unhandledRejection', (err, p) => {
+  console.error(err)
+  console.log('An unhandledRejection occurred')
+  console.log(`Rejected Promise: ${p}`)
+  console.log(`Rejection: ${err}`)
+})
 module.exports = async function start () {
   // BASE
   var CONFIG = require('./config')

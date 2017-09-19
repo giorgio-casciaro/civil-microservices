@@ -1,4 +1,6 @@
 import {validate, call} from '@/api'
+import Vue from 'vue'
+
 import * as Cookies from 'js-cookie'
 var initState = {
   id: false,
@@ -10,7 +12,8 @@ var initState = {
   emailConfirmed: false,
   passwordAssigned: false,
   rememberMe: false,
-  publicName: false
+  publicName: false,
+  usersById: {}
 }
 if (localStorage && localStorage.getItem('userState')) {
   var lsState = JSON.parse(localStorage.getItem('userState'))
@@ -19,7 +22,7 @@ var token = Cookies.getJSON('civil-connect-token')
 
 export default {
   namespaced: true,
-  state: Object.assign({}, lsState || initState, {token}),
+  state: Object.assign({}, initState, lsState, {token}),
   mutations: {
     LOGGEDIN (state, {token, rememberMe, currentState}) {
       Object.assign(state, currentState)
@@ -58,6 +61,13 @@ export default {
     },
     PERSONAL_INFO_UPDATED (state, {firstName, lastName, birth}) {
       Object.assign(state, {firstName, lastName, birth})
+    },
+    USERS_LOADED (state, list) {
+      console.log('USERS_LOADED', list)
+      if (!state.usersById)state.usersById = {}
+      list.forEach((user) => {
+        Vue.set(state.usersById, user.id, user)
+      })
     }
   },
   actions: {
@@ -86,6 +96,24 @@ export default {
         delete store.state.token
         localStorage.setItem('userState', JSON.stringify(store.state))
         store.state.token = temp
+      }
+    },
+    readUsers (store, payload) {
+      var id
+      var ids = []
+      if (!payload.refresh) {
+        for (var i = 0; i < payload.ids.length; i++) {
+          id = payload.ids[i]
+          if (store.state.usersById && !store.state.usersById[id])ids.push(id)
+        }
+      } else {
+        ids = payload.ids
+      }
+      console.log('readSubscriptions', {ids})
+      if (ids.length) {
+        call('users', 'readUsers', {ids: payload.ids}, (response) => {
+          store.commit('USERS_LOADED', response)
+        })
       }
     },
     logout (store, apiResponse) {

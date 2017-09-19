@@ -36,7 +36,11 @@ async function getView (id, view = null, stateOnly = true) {
     if (!view) view = await kvDb.get(kvDbClient, key)
     if (!view) return null
     if (view.state)view.state = JSON.parse(view.state)
-    if (stateOnly) return view.state
+    if (stateOnly) {
+      view.state.created = view.created
+      view.state.updated = view.updated
+      return view.state
+    }
     return view
   } catch (error) { throw new Error(MODULE_NAME + 'problems during getView ' + error) }
 }

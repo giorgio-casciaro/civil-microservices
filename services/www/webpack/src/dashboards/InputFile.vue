@@ -26,7 +26,6 @@ export default {
       // console.log("$event FormData",data)
       var img = new Image();
       this.rawData = window.URL.createObjectURL($event.target.files[0]);
-      this.file = $event.target.files[0];
       this.$emit('update:file',$event.target.files[0])
     }
   }

@@ -2,7 +2,7 @@
 <div class="DashboardPostCreateForm">
   <!-- <div class="createIntro" v-if="show==='createIntro'"><a class="button" @click="show='createForm'">{{strDashboardsCreate}}</a></div>
   <div class="createForm" v-if="show==='createForm'"> -->
-  <form class="Create" @click="active=true" @submit.prevent="waiting=true;call('dashboards','createPost',form,succ,err)" @input="validation=validate('dashboards','createPost',form)" :class="{validForm:validation.valid,activeForm:active}">
+  <form class="Create" @click="active=true" @submit.prevent="submitForm()" @input="validateForm()" :class="{validForm:validation.valid,activeForm:active}">
     <div><input class="name" :placeholder="strName" :disabled="waiting" type="text" v-model="form.name" :class="{notValid:validation.errors.name}" /></div>
     <div><textarea class="body" :placeholder="strBody" :disabled="waiting" type="text" v-model="form.body" :class="{notValid:validation.errors.body}" /></div>
     <div>
@@ -29,7 +29,7 @@
     <div id='postCreateMap' style='width: 400px; height: 300px;'></div>
     {{form.location}}
     <input type="reset" class="annulla button" :disabled="waiting" :class="{error,success,waiting}" :value="strReset" @click="show='createIntro'">
-    <input type="submit" class="create button" :disabled="waiting" :class="{error,success,waiting}" :value="strCreate">
+    <input type="submit" class="create button" :disabled="waiting" :class="{error,success,waiting}" :value="strSubmit">
     <div v-if="success" class="success" v-html="success"></div>
     <div v-if="error" class="error" v-html="error"></div>
     <div v-if="errors" class="errors">
@@ -65,24 +65,13 @@ var mapMouseLngLat
 var mapMousePosition
 var activeMarker = false
 
-// var updateMapForm=function(msg, extra = false) {
-//   var bounds=map.getBounds()
-//   bounds._ne.lat,bounds._ne.lng,bounds._sw.lat,bounds._sw.lng
-// }
 
 export default {
   name: 'DashboardPostCreate',
   mounted() {
-    // mapboxgl.accessToken = 'pk.eyJ1Ijoic2ludGJpdCIsImEiOiJjajIzMnk3NDUwMDExMnlvNzc2MXk2dXNuIn0.fmB5CPQudFNP9CqssSHG9g';
-    // if(!dashId||!dashboard){
-    //
-    // }
+    if(this.post)this.form=JSON.parse(JSON.stringify(this.post));
     var url = "/styles/osm-bright/style.json"
-    // var url="/styles/klokantech-basic/style.json"
-    // if(window.location.port==8080)url="https://localhost"+url
-    // var dashboard = this.$store.state.dashboards.dashboardsById[this.dashId]
     var mapInfo = this.dashboard.maps[0]
-    console.log("mapstyle new", style)
 
     map = new mapboxgl.Map({
       container: 'postCreateMap',
@@ -91,7 +80,6 @@ export default {
       zoom: mapInfo.zoom,
       interactive: true
     });
-    // map.addControl(new mapboxgl.Navigation({position: 'top-left'}));
     map.addControl(new mapboxgl.NavigationControl())
     map.on('mousedown', function(e) {
       mapMousePosition = e.lngLat
@@ -103,20 +91,20 @@ export default {
         activeMarker.input.lat = e.lngLat.lat
         activeMarker.input.lng = e.lngLat.lng
       }
-      console.log("mousemove", mapMouseLngLat, mapMousePosition)
+      // console.log("mousemove", mapMouseLngLat, mapMousePosition)
     });
 
   },
   props: {
-    "dashId": Number
+    "dashId": Number,
+    "post":Object,
+    "new_post":Number,
   },
   components: {},
   computed: {
-    strPostCreate: function() {
-      return t('Crea un Post')
-    },
-    strCreate: function() {
-      return t('Crea')
+    strSubmit: function() {
+      if(this.new_post)return t('Crea')
+      else return t('Salva')
     },
     strReset: function() {
       return t('Annulla')
@@ -195,6 +183,15 @@ export default {
     removeTag(tag) {
       var index = this.form.tags.indexOf(tag);
       if (index > -1) this.form.tags.splice(index, 1);
+    },
+    submitForm() {
+      this.waiting=true;
+      if(this.new_post)call('dashboards','createPost',this.form,this.succ,this.err)
+      else call('dashboards','updatePost',this.form,this.succ,this.err)
+    },
+    validateForm() {
+      if(this.new_post)this.validation=validate('dashboards','createPost',this.form)
+      else this.validation=validate('dashboards','updatePost',this.form)
     },
     // updateMapForm() {
     //   var center=map.getCenter()

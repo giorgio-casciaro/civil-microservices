@@ -10,8 +10,16 @@ const getCompiledSchema = (service, schemaMethod) => {
   return ajv.compile(schema.publicSchema[service][schemaMethod])
 }
 const clearModel = function (model) { for (var i in model) if (model[i] === '')model[i] = undefined }
+
 export function validate (service, schemaMethod, model, clear = true, extraValidation = (model, valid, errors) => false) {
   var validate = getCompiledSchema(service, schemaMethod)
+  return validateCore(validate, model, clear, extraValidation)
+}
+export function validateRaw (schema, model, clear = true, extraValidation = (model, valid, errors) => false) {
+  var validate = ajv.compile(schema)
+  return validateCore(validate, model, clear, extraValidation)
+}
+function validateCore (validate, model, clear = true, extraValidation = (model, valid, errors) => false) {
   if (clear)clearModel(model)
   var valid = validate(model)
   var errors = {}
@@ -33,12 +41,12 @@ export function validate (service, schemaMethod, model, clear = true, extraValid
   console.log('validation', {model, valid, validate: validate.errors, errors})
   return {valid, errors}
 }
-export function call (service, method, model, successFunc, errorFunc, validation, clear = true) {
+export function call (service, method, model, successFunc, errorFunc, validation = true, clear = true) {
   if (!errorFunc) errorFunc = (msg, error) => console.error('API CALL', msg, error, {service, method, model, successFunc, errorFunc, validation, clear})
   try {
     if (clear)clearModel(model)
-    if (!validation)validation = validate(service, method, model)
-    if (!validation.valid) return errorFunc('Campi non validi, controlla il form e riprova', validation)
+    if (validation === true)validation = validate(service, method, model)
+    if (validation && !validation.valid) return errorFunc('Campi non validi, controlla il form e riprova', validation)
     var resolve = ({body}) => {
       console.log('api call response', body)
       if (body.error) return errorFunc(body.error, body)

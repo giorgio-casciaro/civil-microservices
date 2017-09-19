@@ -4,11 +4,27 @@
   <p>{{strPageDescription}}</p>
   <div v-if="dashId" class="dashboardEditMenu"><a :href="'/#/dashboardEdit/'+dashId">Info</a> <a :href="'/#/dashboardEditMaps/'+dashId">Mappe</a> <a :href="'/#/dashboardEditImages/'+dashId" >Immagini</a></div>
   <form class="Edit" @click="active=true" @submit.prevent="submit()" @input="validation=validate('dashboards','create',form)" :class="{validForm:validation.valid,activeForm:active}">
+    <!-- <div><input class="name" :placeholder="strName" :disabled="waiting" type="text" v-model="form.name" :class="{notValid:validation.errors.name}" /></div>
+    <div><textarea class="description" :placeholder="strDescription" :disabled="waiting" type="text" v-model="form.description" :class="{notValid:validation.errors.description}" /></div>
     <div>
-      centerLat <input v-model="form.maps[0].centerLat" /><br> centerLng <input v-model="form.maps[0].centerLng" /><br> zoom <input v-model="form.maps[0].zoom" />
+      <input id="dashboardsRadioInputPublic" class="public" :disabled="waiting" type="radio" value="1" v-model="form.public" :class="{notValid:validation.errors.public}" />
+      <label for="dashboardsRadioInputPublic">{{strPublic}}</label>
+      <input id="dashboardsRadioInputPrivate" class="public" :disabled="waiting" type="radio" value="0" v-model="form.public" :class="{notValid:validation.errors.public}" />
+      <label for="dashboardsRadioInputPrivate">{{strPrivate}}</label>
+      <input id="dashboardsRadioInputPublicWithApprovation" class="publicWithApprovation" :disabled="waiting" type="radio" value="2" v-model="form.public" :class="{notValid:validation.errors.public}" />
+      <label for="dashboardsRadioInputPublicWithApprovation">{{strPublicWithApprovation}}</label>
     </div>
-    <div id='dashboardEditMap' style='width: 400px; height: 300px;'></div>
-    <input type="reset" class="annulla button" :disabled="waiting" :class="{error,success,waiting}" :value="strReset">
+    #<input class="tag" :placeholder="strTag" :disabled="waiting" type="text" v-model="newtag" />
+    <a class="button" @click="addTag(newtag)">add tag</a>
+    <a v-for="(item, index) in dashboardsMeta.tags" v-if="form.tags.indexOf(item[0])===-1" class="button" @click="addTag(item[0])">{{item[0]}}</a>
+    <ul class="tags">
+      <li v-for="(item, index) in form.tags">
+        {{ item }} <a class="button" @click="removeTag(item)">X</a>
+      </li>
+    </ul> -->
+    <div class="pic"><img  :src="`${$store.state.apiServer}/users/getPic/id/${dashId}/`" /></div>
+    <input class="pic" :placeholder="strName" :disabled="waiting" type="text" v-model="form.pic" :class="{notValid:validation.errors.pic}" />
+    <!-- <input type="reset" class="annulla button" :disabled="waiting" :class="{error,success,waiting}" :value="strReset">
     <input v-if="dashId" type="submit" class="edit button" :disabled="waiting" :class="{error,success,waiting}" :value="strEdit">
     <input v-if="!dashId" type="submit" class="create button" :disabled="waiting" :class="{error,success,waiting}" :value="strCreate">
     <div v-if="success" class="success" v-html="success"></div>
@@ -17,9 +33,16 @@
       <div v-for="(fieldErrors,fieldName) in errors" class="fieldErrors">
         <div v-for="error in fieldErrors" class="error"><strong>{{fieldName}}</strong> {{t(error)}}</div>
       </div>
-    </div>
+    </div> -->
   </form>
+  <!-- </div> -->
+  {{form}}
 </div>
+<!-- <Login v-if="show==='Login'" @success="$emit('loginSuccess')"></Login>
+  <Register v-if="show==='Register'"  @success="$emit('registerSuccess')"></Register>
+  <div class="toLogin" v-if="show==='Register'">{{strHaveAccount}}<a class="button" @click="show='Login'">{{strLogin}}</a></div>
+  <div class="toRegister" v-if="show==='Login'">{{strNotHaveAccount}}<a class="button" @click="show='Register'">{{strRegister}}</a></div>
+</div>-->
 </template>
 <script>
 const mapboxgl = require("mapbox-gl")
@@ -45,18 +68,18 @@ var map
 export default {
   name: 'DashboardsEdit',
   created() {
+    // this.$store.dispatch("dashboards/lastDashboardPosts",{ dashId:this.dashId })
   },
   mounted() {
     if (this.dashboard) {
       this.form = this.dashboard
-      this.mapMount()
     }
   },
   watch: {
     dashboard: function (val) {
-      if(!this.mapMounted){
+      if(!this.formSetted){
         this.form = this.dashboard
-        this.mapMount()
+        this.formSetted=true
       }
     }
   },
@@ -120,6 +143,9 @@ export default {
         call('dashboards', 'create', this.form, this.succ, this.err)
       }
     },
+    addTag() {
+      this.form.tags.push("")
+    },
     updateMapForm() {
       var center = map.getCenter()
       var zoom = map.getZoom()
@@ -142,44 +168,19 @@ export default {
       this.success = t('Bacheca salvata con successo')
       setTimeout(() => this.$emit("success"), 2000)
     },
-    mapMount() {
-      // mapboxgl.accessToken = 'pk.eyJ1Ijoic2ludGJpdCIsImEiOiJjajIzMnk3NDUwMDExMnlvNzc2MXk2dXNuIn0.fmB5CPQudFNP9CqssSHG9g';
-      var mapInfo = {
-        centerLng: 12.73931877340101,
-        centerLat: 42.42996538898933,
-        zoom: 4
-      }
-      // if(this.$route.params.dashId&&!this.dashId)this.dashId=this.$route.params.dashId
-      if (this.form.maps) {
-        // this.form = this.$store.state.dashboards.dashboard
-        mapInfo = this.form.maps[0]
-      }
-      var url = "/styles/osm-bright/style.json"
-      console.log("mapstyle new", style)
-      map = new mapboxgl.Map({
-        container: 'dashboardEditMap',
-        center: [mapInfo.centerLng, mapInfo.centerLat],
-        style: style,
-        zoom: mapInfo.zoom,
-        interactive: true
-      });
-      map.addControl(new mapboxgl.NavigationControl())
-      var $vueComponent = this
-      map.on('load', function() {
-        $vueComponent.updateMapForm()
-      });
-      map.on('move', function() {
-        $vueComponent.updateMapForm()
-      });
-      map.on('zoomstart', function() {
-        $vueComponent.updateMapForm()
-      });
-      this.mapMounted=true
-    }
+    addTag(tag) {
+      this.form.tags.push(tag || "")
+    },
+    removeTag(tag) {
+      var index = this.form.tags.indexOf(tag);
+      if (index > -1) this.form.tags.splice(index, 1);
+    },
   },
   data() {
     return {
       form: {
+        public: 1,
+        tags: [],
         maps: [{
           centerLat: 0,
           centerLng: 0,

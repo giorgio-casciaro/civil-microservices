@@ -4,6 +4,7 @@
   <div v-for="(subscription, index) in $store.state.dashboards.subscriptions">
     <h4>{{subscription.role}}</h4>
     <h3>{{subscription.dashInfo.name}}</h3>
+    <div v-if="subscription.dashInfo.pics" class="image"><img :src="`${$store.state.apiServer}/dashboards/getPic/id/${subscription.dashInfo.pics[0]}`" /></div>
     <div class="tags">{{subscription.dashInfo.tags.join(",")}}</div>
     <a class="button" :href="'/#/dashboard/'+subscription.dashInfo.id">{{strEnter}}</a>
   </div>

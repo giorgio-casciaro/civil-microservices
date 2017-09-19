@@ -112,6 +112,15 @@ var service = async function getMethods (CONSOLE, netClient, CONFIG = require('.
         return view
       } catch (error) { throw new Error('problems during getView ' + error) }
     }
+    const readUser = async function (id, meta) {
+      await auth.userCan('user.' + id + '.read', meta, CONFIG.jwt)
+      var currentState = await getView(id)
+      CONSOLE.hl('readUser', id, currentState)
+      if (!currentState || currentState.tags.indexOf('removed') >= 0 || currentState.tags.indexOf('emailConfirmed') < 0 || currentState.tags.indexOf('passwordAssigned') < 0) {
+        throw new Error('user not active')
+      }
+      return currentState
+    }
     const getUserByMail = async function (email) {
       try {
         var result = await kvDb.query(kvDbClient, CONFIG.aerospike.namespace, CONFIG.aerospike.set, (dbQuery) => {
@@ -170,12 +179,19 @@ var service = async function getMethods (CONSOLE, netClient, CONFIG = require('.
       },
       async read (reqData, meta = {directCall: true}, getStream = null) {
         var id = reqData.id
-        await auth.userCan('user.' + id + '.read', meta, CONFIG.jwt)
-        var currentState = await getView(id)
-        if (!currentState || currentState.tags.indexOf('removed') >= 0 || currentState.tags.indexOf('emailConfirmed') < 0 || currentState.tags.indexOf('passwordAssigned') < 0) {
-          throw new Error('user not active')
+        var user = await readUser(id, meta)
+        return user
+      },
+      async readUsers (reqData, meta = {directCall: true}, getStream = null) {
+        var ids = reqData.ids
+        var results = []
+        var id
+        for (id of ids) {
+          try {
+            results.push(await readUser(id, meta))
+          } catch (error) { }
         }
-        return currentState
+        return results
       },
       async readPrivate (reqData, meta = {directCall: true}, getStream = null) {
         var id = reqData.id

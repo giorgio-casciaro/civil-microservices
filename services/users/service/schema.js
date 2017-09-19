@@ -112,7 +112,7 @@ module.exports = {
       public: true,
       responseType: 'response',
       requestSchema: {
-        properties: { id: jsFields.id, pic: jsFields.pic },
+        properties: { id: {type: 'string'}, pic: jsFields.pic },
         required: [ 'id', 'pic' ]
       },
       responseSchema: false
@@ -120,7 +120,10 @@ module.exports = {
     'getPic': {
       public: true,
       responseType: 'response',
-      requestSchema: jsUserById,
+      requestSchema: {
+        properties: { id: jsFields.id },
+        required: [ 'id' ]
+      },
       responseSchema: false
     },
     'updatePassword': {
@@ -198,7 +201,20 @@ module.exports = {
       requestSchema: { required: ['from'], properties: { from: { type: 'integer' }, to: { type: 'integer' } } },
       responseSchema: jsQueryRes
     },
-
+    'readUsers': {
+      public: true,
+      responseType: 'response',
+      requestSchema: {
+        properties: {
+          ids: {
+            type: 'array',
+            items: { type: 'string' }
+          }
+        },
+        required: [ 'ids' ]
+      },
+      responseSchema: jsQueryRes
+    },
     'test': {
       public: true,
       responseType: 'response',

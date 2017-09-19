@@ -6,8 +6,9 @@ import Account from '@/components/Account'
 import Registration from '@/components/Registration'
 import Dashboards from '@/components/Dashboards'
 import Dashboard from '@/components/Dashboard'
-import DashboardEdit from '@/components/DashboardEdit'
-import DashboardCreate from '@/components/DashboardCreate'
+import DashboardEditInfo from '@/dashboards/EditInfo'
+import DashboardEditMaps from '@/dashboards/EditMaps'
+import DashboardEditImages from '@/dashboards/EditImages'
 import Profile from '@/components/Profile'
 
 Vue.use(Router)
@@ -61,18 +62,36 @@ export default (extraRoutes = []) => {
     },
     {
       path: '/dashboardCreate/',
-      name: 'Modifica Bacheca',
+      name: 'Crea Bacheca',
       components: {
-        default: DashboardCreate,
+        default: DashboardEditInfo,
         menu: Menu,
         account: Account
       }
     },
     {
       path: '/dashboardEdit/:dashId?',
-      name: 'Crea Bacheca',
+      name: 'Modifica Info Bacheca',
       components: {
-        default: DashboardEdit,
+        default: DashboardEditInfo,
+        menu: Menu,
+        account: Account
+      }
+    },
+    {
+      path: '/dashboardEditMaps/:dashId?',
+      name: 'Modifica Mappe Bacheca',
+      components: {
+        default: DashboardEditMaps,
+        menu: Menu,
+        account: Account
+      }
+    },
+    {
+      path: '/dashboardEditImages/:dashId?',
+      name: 'Modifica Immagini Bacheca',
+      components: {
+        default: DashboardEditImages,
         menu: Menu,
         account: Account
       }

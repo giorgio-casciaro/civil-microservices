@@ -50,9 +50,9 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
         var key = new Key(CONFIG.aerospike.namespace, CONFIG.aerospike.set, 'dbInitStatus')
         await kvDb.put(kvDbClient, key, {version: 0, timestamp: Date.now()})
         var dbInitStatus = await kvDb.get(kvDbClient, key)
-        if (!dbInitStatus) await kvDb.put(kvDbClient, key, {version: 0, timestamp: Date.now()})
+        // if (!dbInitStatus) await kvDb.put(kvDbClient, key, {version: 0, timestamp: Date.now()})
         CONSOLE.log('dbInitStatus', dbInitStatus)
-        if (dbInitStatus.version === 1) return true
+        // if (dbInitStatus.version === 1) return true
         if (dbInitStatus.version < 1) {
         //   CONSOLE.log('dbInitStatus v1', dbInitStatus)
           await kvDb.createIndex(kvDbClient, { ns: CONFIG.aerospike.namespace, set: CONFIG.aerospike.set, bin: 'created', index: CONFIG.aerospike.set + '_created', datatype: Aerospike.indexDataType.NUMERIC })
@@ -62,7 +62,7 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
           await kvDb.createIndex(kvDbClient, { ns: CONFIG.aerospike.namespace, set: CONFIG.aerospike.subscriptionsSet, bin: 'dashId', index: CONFIG.aerospike.subscriptionsSet + '_dashId', datatype: Aerospike.indexDataType.STRING })
           await kvDb.createIndex(kvDbClient, { ns: CONFIG.aerospike.namespace, set: CONFIG.aerospike.subscriptionsSet, bin: 'dashIdUserId', index: CONFIG.aerospike.subscriptionsSet + '_dashIdUserId', datatype: Aerospike.indexDataType.STRING })
 
-          await kvDb.createIndex(kvDbClient, { ns: CONFIG.aerospike.namespace, set: CONFIG.aerospike.aerospikeRolesSet, bin: 'dashId', index: CONFIG.aerospike.aerospikeRolesSet + '_dashId', datatype: Aerospike.indexDataType.STRING })
+          await kvDb.createIndex(kvDbClient, { ns: CONFIG.aerospike.namespace, set: CONFIG.aerospike.rolesSet, bin: 'dashId', index: CONFIG.aerospike.rolesSet + '_dashId', datatype: Aerospike.indexDataType.STRING })
         }
         await kvDb.put(kvDbClient, key, {version: 1, timestamp: Date.now()})
         await posts.init(CONSOLE, kvDbClient, subscriptionCan)
@@ -154,7 +154,7 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
     async function getDashboardInfo (id) {
       var currentState = await getView(id)
       if (!currentState || currentState.tags.indexOf('removed') >= 0) return null
-      return {id: currentState.id, name: currentState.name, description: currentState.description, public: currentState.public, tags: currentState.tags}
+      return {id: currentState.id, name: currentState.name, description: currentState.description, public: currentState.public, tags: currentState.tags, pics: currentState.pics || [], maps: currentState.maps || []}
     }
     // SUBSCRIPTIONS
     const mutateSubscription = async function (args) {
@@ -272,6 +272,7 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
     }
     const createSubscription = async function (reqData, meta = {directCall: true}, getStream = null) {
       var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
+      if (!reqData.userId)reqData.userId = userId
       if (reqData.userId !== userId) {
         // ONLY ADMIN OR SUBSCRIPTION OWNER
         await subscriptionCan(reqData.dashId, userId, 'writeSubscriptions')
@@ -349,7 +350,7 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
           updated: Date.now(),
           created: rawView.created || Date.now(),
           id: state.id,
-          dashId: state.dashId,
+          dashId: '' + state.dashId,
           state: JSON.stringify(state),
           tags: state.tags || []
         }
@@ -373,6 +374,22 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
       var mutation = await mutateRole({data: reqData, objId: id, mutation: 'create', meta})
       await updateRoleView(id, [mutation], true)
       return {success: `Role created`, id}
+    }
+    const getRolesByDashId = async function (dashId) {
+      try {
+        CONSOLE.hl('getRolesByDashId', dashId)
+        var rawResults = await kvDb.query(kvDbClient, CONFIG.aerospike.namespace, CONFIG.aerospike.rolesSet, (dbQuery) => {
+          dbQuery.where(Aerospike.filter.equal('dashId', '' + dashId))
+        })
+        var results = await Promise.all(rawResults.map((result) => getRoleView(result.id, result)))
+        results = results.filter((post) => post !== null)
+        var resultsById = {}
+        var result
+        for (result of results) {
+          resultsById[result.id] = result
+        }
+        return resultsById
+      } catch (error) { throw new Error('problems during getRolesByDashId ' + error) }
     }
 
     // const subscribe = async function (dashId, userId, type) {
@@ -469,10 +486,15 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
           await new Promise((resolve, reject) => fs.unlink(reqData.pic.path, (err, data) => err ? resolve(err) : resolve(data)))
           throw error
         }
-        var returnResults = await pic.updatePic(CONFIG.aerospike, kvDbClient, id, reqData.pic.path, CONFIG.uploadPath, [['mini', 100, 100]])
+        var picId = uuid()
+        var returnResults = await pic.updatePic(CONFIG.aerospike, kvDbClient, picId, reqData.pic.path, CONFIG.uploadPath, [['mini', 100, 100], ['medium', 500, 500]])
+        var mutation = await mutate({data: {picId}, objId: id, mutation: 'addPic', meta})
+        await updateView(id, [mutation])
+        // CONSOLE.hl('updatePic', await getView(id))
         return returnResults
       },
       async getPic (reqData, meta = {directCall: true}, getStream = null) {
+        // CONSOLE.hl('getPic', reqData)
         var returnResults = await pic.getPic(CONFIG.aerospike, kvDbClient, reqData.id, reqData.size || 'mini')
         return returnResults
       },
@@ -548,13 +570,29 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
         var id = reqData.id
         var currentState = await getSubscriptionView(id)
         var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
-        // if (reqData.userId !== userId) {.
-        // await subscriptionCan(currentState.dashId, userId, 'readSubscriptions')
-        // }
+        if (reqData.userId !== userId) {
+          await subscriptionCan(currentState.dashId, userId, 'readSubscriptions')
+        }
         if (!currentState || currentState.tags.indexOf('removed') >= 0) {
           throw new Error('Subscription not active')
         }
         return currentState
+      },
+      async readSubscriptions (reqData, meta = {directCall: true}, getStream = null) {
+        var ids = reqData.ids
+        var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
+        var results = []
+        var checked = {}
+        var currentState
+        var id
+        for (id of ids) {
+          currentState = await getSubscriptionView(id)
+          if (!checked[currentState.dashId + userId])checked[currentState.dashId + userId] = await subscriptionCan(currentState.dashId, userId, 'readSubscriptions')
+          if (currentState && currentState.tags.indexOf('removed') < 0) {
+            results.push(currentState)
+          }
+        }
+        return results
       },
       async updateSubscription (reqData, meta = {directCall: true}, getStream = null) {
         CONSOLE.hl('updateSubscription reqData', reqData)
@@ -602,6 +640,8 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
             results[i].dashInfo = await getView(results[i].dashId)
             results[i].dashInfo.subscriptionsMeta = optimizeMeta(await getDashSubscriptionsMeta(results[i].dashId))
             results[i].dashInfo.postsMeta = optimizeMeta(await posts.getDashPostsMeta(results[i].dashId))
+            results[i].dashInfo.roles = await getRolesByDashId(results[i].dashId)
+            // results[i].dashInfo.roles = optimizeMeta(await posts.getDashPostsMeta(results[i].dashId))
           }
           return results
         } catch (error) { throw new Error('problems during getUserSubscriptions ' + error) }

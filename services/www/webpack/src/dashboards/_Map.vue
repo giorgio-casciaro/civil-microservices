@@ -1,7 +1,7 @@
 <template>
 <div class="DashboardEditForm">
-  <!-- <div class="createIntro" v-if="show==='createIntro'"><a class="button" @click="show='createForm'">{{strDashboardsEdit}}</a></div>
-  <div class="createForm" v-if="show==='createForm'"> -->
+  <h2>{{dashId}}</h2>
+    <h2>{{form}}</h2>
   <form class="Edit" @click="active=true" @submit.prevent="submit()" @input="validation=validate('dashboards','create',form)" :class="{validForm:validation.valid,activeForm:active}">
     <div><input class="name" :placeholder="strName" :disabled="waiting" type="text" v-model="form.name" :class="{notValid:validation.errors.name}" /></div>
     <div><textarea class="description" :placeholder="strDescription" :disabled="waiting" type="text" v-model="form.description" :class="{notValid:validation.errors.description}" /></div>
@@ -43,7 +43,7 @@
     </div>
   </form>
   <!-- </div> -->
-{{form}}
+  {{form}}
 </div>
 <!-- <Login v-if="show==='Login'" @success="$emit('loginSuccess')"></Login>
   <Register v-if="show==='Register'"  @success="$emit('registerSuccess')"></Register>
@@ -81,10 +81,11 @@ export default {
   mounted() {
     // mapboxgl.accessToken = 'pk.eyJ1Ijoic2ludGJpdCIsImEiOiJjajIzMnk3NDUwMDExMnlvNzc2MXk2dXNuIn0.fmB5CPQudFNP9CqssSHG9g';
     var mapInfo = {
-      centerLng:12.73931877340101,
-      centerLat:42.42996538898933,
-      zoom:4
+      centerLng: 12.73931877340101,
+      centerLat: 42.42996538898933,
+      zoom: 4
     }
+    if(this.$route.params.dashId&&!this.dashId)this.dashId=this.$route.params.dashId
     if (this.dashId) {
       this.form = this.$store.state.dashboards.dashboardsById[this.dashId]
       mapInfo = this.form.maps[0]
@@ -110,13 +111,22 @@ export default {
       $vueComponent.updateMapForm()
     });
   },
-  props: {
-    "dashId": Number
-  },
+  // props: {
+  //   "dashId": Number
+  // },
   components: {},
   computed: {
-    strDashboardsEdit: function() {
-      return t('Crea una Bacheca')
+    strTitle: function() {
+      return translate('app', 'Bacheca')
+    },
+    strDescription: function() {
+      return translate('app', 'Compila il form per modificare la tua bacheca')
+    },
+    dashId: function() {
+      return parseInt(this.$route.params.dashId)
+    },
+    dashboard: function() {
+      return this.$store.state.dashboards.dashboardsById[this.dashId]
     },
     strEdit: function() {
       return t('Salva')
@@ -158,8 +168,11 @@ export default {
     call,
     submit() {
       this.waiting = true;
-      if (this.dashId){ call('dashboards', 'update', this.form, this.succ, this.err)}
-      else{ call('dashboards', 'create', this.form, this.succ, this.err) }
+      if (this.dashId) {
+        call('dashboards', 'update', this.form, this.succ, this.err)
+      } else {
+        call('dashboards', 'create', this.form, this.succ, this.err)
+      }
     },
     addTag() {
       this.form.tags.push("")
