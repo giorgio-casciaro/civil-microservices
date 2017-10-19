@@ -36,7 +36,6 @@ var storeModule = {
       if (payload.reset)Vue.set(state, 'list', [])
       Vue.set(state, 'list', state.list.concat(payload.list))
       Vue.set(state, 'listCount', state.list.length)
-      console.log('dashboardsById', state.dashboardsById)
     },
     DASHBOARDS_META (state, meta) {
       Vue.set(state, 'dashboardsMeta', meta)
@@ -65,6 +64,10 @@ var storeModule = {
         Vue.set(state.dashboardsById, subscription.dashId, subscription.dashInfo)
       })
       console.log('MY_SUBSCRIPTIONS_LIST', state.subscriptions)
+    },
+    LOAD_DASHBOARD (state, dashboard) {
+      Vue.set(state.dashboardsById, dashboard.id, dashboard)
+      console.log('LOAD_DASHBOARD', dashboard)
     },
     SUBSCRIPTIONS_LOADED (state, list) {
       list.forEach((subscription) => {
@@ -133,6 +136,9 @@ var storeModule = {
     lastDashboards (store, payload) {
       call('dashboards', 'queryLastDashboards', {from: 0, to: pageLength}, (list) => store.commit('DASHBOARDS_LIST', {list, reset: true}))
     },
+    loadDashboard (store, id) {
+      call('dashboards', 'read', {id}, (dashboard) => store.commit('LOAD_DASHBOARD', dashboard))
+    },
     lastDashboardsLoadMore (store, payload) {
       call('dashboards', 'queryLastDashboards', {from: store.state.listCount, to: store.state.listCount + pageLength}, (list) => store.commit('DASHBOARDS_LIST', {list, reset: false}))
     },
@@ -158,7 +164,7 @@ var storeModule = {
       call('dashboards', 'queryLastSubscriptions', {from: store.state.listSubscriptionsCount[payload.dashId], to: store.state.listSubscriptionsCount[payload.dashId] + pageLength, dashId: payload.dashId}, (list) => store.commit('DASHBOARD_SUBSCRIPTIONS_LIST', {list, dashId: payload.dashId}))
     },
     subscribe (store, payload) {
-      call('dashboards', 'createSubscription', {}, (payload) => store.dispatch('getMySubscriptions', {}))
+      call('dashboards', 'createSubscription', payload, (payload) => store.dispatch('getMySubscriptions', {}))
       // call('dashboards', 'queryLastSubscriptions', {from: store.state.listSubscriptionsCount[payload.dashId], to: store.state.listSubscriptionsCount[payload.dashId] + pageLength, dashId: payload.dashId}, (list) => store.commit('DASHBOARD_SUBSCRIPTIONS_LIST', {list, dashId: payload.dashId}))
     },
     afterLogin (store, payload) {

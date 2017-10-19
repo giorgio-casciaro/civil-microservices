@@ -4,15 +4,63 @@
   <p>{{strPageDescription}}</p>
   <div v-if="dashId" class="dashboardEditMenu"><a :href="'/#/dashboardEdit/'+dashId">Info</a> <a :href="'/#/dashboardEditMaps/'+dashId">Mappe</a> <a :href="'/#/dashboardEditImages/'+dashId" >Immagini</a></div>
   <form   class="Edit" @click="active=true" @submit.prevent="submit()" @input="validation=validate('dashboards','create',form)" :class="{validForm:validation.valid,activeForm:active}">
-    <div><input class="name" :placeholder="strName" :disabled="waiting" type="text" v-model="form.name" :class="{notValid:validation.errors.name}" /></div>
-    <div><textarea class="description" :placeholder="strDescription" :disabled="waiting" type="text" v-model="form.description" :class="{notValid:validation.errors.description}" /></div>
-    <div>
-      <input id="dashboardsRadioInputPublic" class="public" :disabled="waiting" type="radio" value="1" v-model="form.public" :class="{notValid:validation.errors.public}" />
-      <label for="dashboardsRadioInputPublic">{{strPublic}}</label>
-      <input id="dashboardsRadioInputPrivate" class="public" :disabled="waiting" type="radio" value="0" v-model="form.public" :class="{notValid:validation.errors.public}" />
-      <label for="dashboardsRadioInputPrivate">{{strPrivate}}</label>
-      <input id="dashboardsRadioInputPublicWithApprovation" class="publicWithApprovation" :disabled="waiting" type="radio" value="2" v-model="form.public" :class="{notValid:validation.errors.public}" />
-      <label for="dashboardsRadioInputPublicWithApprovation">{{strPublicWithApprovation}}</label>
+    <div><h4>Nome</h4><input class="name" :placeholder="strName" :disabled="waiting" type="text" v-model="form.name" :class="{notValid:validation.errors.name}" /></div>
+    <div><h4>Descrizione</h4><textarea class="description" :placeholder="strDescription" :disabled="waiting" type="text" v-model="form.description" :class="{notValid:validation.errors.description}" /></div>
+    <div class="optionsGuestRead">
+      <h4>Ospiti - Lettura</h4>
+      <label>
+        <input  :disabled="waiting" type="radio" value="allow" v-model="form.options.guestRead"  />
+        <strong>Pubblica</strong><i> tutti possono leggere i messaggi</i>
+      </label>
+      <label>
+        <input  :disabled="waiting" type="radio" value="deny" v-model="form.options.guestRead"  />
+        <strong>Privata</strong><i> solo gli iscritti possono leggere i messaggi</i>
+      </label>
+    </div>
+    <div class="optionsGuestSubscribe" >
+      <h4>Ospiti - Iscrizione</h4>
+      <label>
+        <input  :disabled="waiting" type="radio" value="allow" v-model="form.options.guestSubscribe"  />
+        <strong>Aperta</strong><i> tutti possono iscriversi alla bacheca</i>
+      </label>
+      <label>
+        <input :disabled="waiting" type="radio" value="deny" v-model="form.options.guestSubscribe"  />
+        <strong>Chiusa</strong><i> solo gli utenti invitati possono iscriversi</i>
+      </label>
+      <label >
+        <input   :disabled="waiting" type="radio" value="confirm" v-model="form.options.guestSubscribe"  />
+        <strong>Dopo conferma</strong><i> le iscrizioni rimangono in attesa fino alla conferma dell'amministratore</i>
+      </label>
+    </div>
+    <div class="optionsGuestWrite">
+      <h4>Ospiti - Lettura</h4>
+      <label>
+        <input  :disabled="waiting" type="radio" value="allow" v-model="form.options.guestWrite"  />
+        Possono pubblicare messaggi
+      </label>
+      <label>
+        <input :disabled="waiting" type="radio" value="deny" v-model="form.options.guestWrite"  />
+        Non possono pubblicare messaggi
+      </label>
+      <label >
+        <input   :disabled="waiting" type="radio" value="confirm" v-model="form.options.guestWrite"  />
+        I messaggi necessitano di conferma da parte dell'amministratore
+      </label>
+    </div>
+    <div class="optionsSubscriberWrite">
+      <h4>Sottoscrittori - Utenti iscritti alla bacheca</h4>
+      <label>
+        <input  :disabled="waiting" type="radio" value="allow" v-model="form.options.subscriberWrite"  />
+        Possono pubblicare messaggi
+      </label>
+      <label>
+        <input :disabled="waiting" type="radio" value="deny" v-model="form.options.subscriberWrite"  />
+        Non possono pubblicare messaggi
+      </label>
+      <label >
+        <input   :disabled="waiting" type="radio" value="confirm" v-model="form.options.subscriberWrite"  />
+        I messaggi necessitano di conferma da parte dell'amministratore
+      </label>
     </div>
     #<input :placeholder="strTag" :disabled="waiting" type="text" v-model="newtag" :class="{notValid:!newtag||tagValidation.errors['']}" @input="tagValidation=validateRaw({'type':'string','minLength': 3},newtag)" />
     <input type="button" class="button" @click="addTag(newtag)" :disabled="!newtag||tagValidation.errors['']" :value="strAddTag"></input>
@@ -63,7 +111,22 @@ var map
 //   var bounds=map.getBounds()
 //   bounds._ne.lat,bounds._ne.lng,bounds._sw.lat,bounds._sw.lng
 // }
-
+var defaultForm={
+  options:{
+    guestRead:"allow",
+    guestSubscribe:"confirm",
+    guestWrite:"confirm",
+    subscriberWrite:"allow"
+  },
+  tags: [],
+  maps: [
+    {
+      centerLng: 12.73931877340101,
+      centerLat: 42.42996538898933,
+      zoom: 4
+    }
+  ]
+}
 export default {
   name: 'DashboardsEdit',
   created() {
@@ -73,11 +136,17 @@ export default {
     if (this.dashboard) {
       this.form = this.dashboard
     }
+    if(!this.form.options){
+      this.form.options=defaultForm.options
+    }
   },
   watch: {
     dashboard: function (val) {
       if(!this.formSetted){
         this.form = this.dashboard
+        if(!this.form.options){
+          this.form.options=defaultForm.options
+        }
         this.formSetted=true
       }
     }
@@ -190,17 +259,7 @@ export default {
   },
   data() {
     return {
-      form: {
-        public: 1,
-        tags: [],
-        maps: [
-          {
-            centerLng: 12.73931877340101,
-            centerLat: 42.42996538898933,
-            zoom: 4
-          }
-        ]
-      },
+      form: defaultForm,
       tagValidation:false,
       newtag: "",
       active: false,

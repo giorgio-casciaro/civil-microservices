@@ -91,7 +91,7 @@ module.exports = {
       public: true,
       responseType: 'response',
       requestSchema: {
-        properties: { dashId: jsFields.string, from: { type: 'number' }, to: { type: 'number' } },
+        properties: { dashId: dashId, from: { type: 'number' }, to: { type: 'number' } },
         required: [ 'dashId' ]
       },
       responseSchema: jsQueryRes

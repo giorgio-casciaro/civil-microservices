@@ -10,6 +10,14 @@ var subscriptionId = {
   description: 'dash number + _ + subscription number ',
   pattern: '^[0-9]*_[0-9]*$'
 }
+var dashOptions = {
+  type: 'object'
+}
+var roleId = {
+  type: 'string',
+  description: 'Role slug as id',
+  'minLength': 3
+}
 var jsItemBySubscriptionId = { properties: { id: subscriptionId }, required: ['id'] }
 
 var jsRes = {
@@ -26,15 +34,15 @@ var jsRes = {
 var subtestRes = { properties: { count: { type: 'integer' }, success: { type: 'string' }, error: { type: 'string' } } }
 var testRes = { additionalProperties: true, properties: { success: { type: 'string' }, error: { type: 'string' }, subtests: { type: 'array', items: subtestRes } } }
 
-var jsInfo = { properties: { id: dashId, name: jsFields.name, description: jsFields.description, public: jsFields.public, tags: jsFields.tags, maps: jsFields.maps, pics: {type: 'array'} } }
-var jsRead = { properties: { id: dashId, name: jsFields.name, description: jsFields.description, public: jsFields.public, tags: jsFields.tags, maps: jsFields.maps, pics: {type: 'array'}, roles: {type: 'object'} } }
+var jsInfo = { properties: { id: dashId, name: jsFields.name, description: jsFields.description, options: dashOptions, tags: jsFields.tags, maps: jsFields.maps, pics: {type: 'array'} } }
+var jsRead = { properties: { id: dashId, name: jsFields.name, description: jsFields.description, options: dashOptions, tags: jsFields.tags, maps: jsFields.maps, pics: {type: 'array'}, roles: {type: 'object'} } }
 var jsQueryRes = { type: 'array', items: jsInfo }
 
-var jsRoleProp = { id: jsFields.id, dashId: dashId, slug: jsFields.slug, name: jsFields.name, public: jsFields.public, description: jsFields.description, tags: jsFields.tags, permissions: jsFields.rolePermissions }
-var jsRoleUpdateProp = { id: jsFields.id, slug: jsFields.slug, name: jsFields.name, public: jsFields.public, description: jsFields.description, tags: jsFields.tags, permissions: jsFields.rolePermissions }
+var jsRoleProp = { id: jsFields.id, dashId: dashId, name: jsFields.name, public: jsFields.public, description: jsFields.description, tags: jsFields.tags, permissions: jsFields.rolePermissions }
+var jsRoleUpdateProp = { id: jsFields.id, name: jsFields.name, public: jsFields.public, description: jsFields.description, tags: jsFields.tags, permissions: jsFields.rolePermissions }
 
-var jsSubscriptionProp = { id: subscriptionId, dashId: dashId, roleId: jsFields.id, role: jsFields.slug, tags: jsFields.tags, userId: jsFields.id }
-var jsSubscriptionUpdateProp = { id: subscriptionId, roleId: jsFields.id, role: jsFields.slug, tags: jsFields.tags }
+var jsSubscriptionProp = { id: subscriptionId, dashId: dashId, roleId, tags: jsFields.tags, userId: jsFields.id }
+var jsSubscriptionUpdateProp = { id: subscriptionId, roleId, tags: jsFields.tags }
 
 var toBool = (string, defaultVal = false) => {
   if (typeof string === 'undefined') return defaultVal
@@ -63,11 +71,16 @@ module.exports = {
     }
   },
   eventsOut: {
-    // 'getPermissions': {
-    //   multipleResponse: true,
-    //   requestSchema: jsCanReq,
-    //   responseSchema: jsCanRes
-    // }
+    'testRemoteEvent': {
+      multipleResponse: true,
+      requestSchema: false,
+      responseSchema: false
+    },
+    'createPost': {
+      multipleResponse: false,
+      requestSchema: false,
+      responseSchema: false
+    }
   },
   methods: {
     'getPermissions': {
@@ -158,7 +171,7 @@ module.exports = {
       responseType: 'response',
       requestSchema: {
         properties: jsSubscriptionProp,
-        required: [ 'dashId', 'role', 'roleId', 'userId' ]
+        required: [ 'dashId' ]
       },
       responseSchema: jsRes
     },

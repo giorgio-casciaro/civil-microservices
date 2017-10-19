@@ -32,7 +32,15 @@ export default {
   components: {  SinglePostEdit },
   computed: {
     subscription: function () { return this.$store.state.dashboards.extendedSubscriptionsById[this.post.subscriptionId]},
-    role: function () { if(this.subscription&&this.subscription.dashInfo&&this.subscription.dashInfo.roles)return this.subscription.dashInfo.roles[this.subscription.roleId]},
+    role: function () {
+      if(this.subscription&&this.subscription.dashInfo&&this.subscription.dashInfo.roles&&this.subscription.dashInfo.roles[this.subscription.roleId])return this.subscription.dashInfo.roles[this.subscription.roleId]
+      else return { id: 'norole',
+        name: 'No Role',
+        public: 0,
+        description: 'No role',
+        permissions: []
+      }
+    },
     user: function () { return this.$store.state.users.usersById[this.post.userId]},
     strCreatedBy: function() { return t('Creato da') },
     strCreatedDate: function() { return t('Creato') },

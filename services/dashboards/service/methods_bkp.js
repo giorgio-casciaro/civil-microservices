@@ -65,7 +65,7 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
           // await kvDb.createIndex(kvDbClient, { ns: CONFIG.aerospike.namespace, set: CONFIG.aerospike.rolesSet, bin: 'dashId', index: CONFIG.aerospike.rolesSet + '_dashId', datatype: Aerospike.indexDataType.STRING })
         }
         await kvDb.put(kvDbClient, key, {version: 1, timestamp: Date.now()})
-        await posts.init(netClient, CONSOLE, kvDbClient, subscriptionCan, readDashboard)
+        await posts.init(CONSOLE, kvDbClient, subscriptionCan)
       } catch (error) {
         CONSOLE.log('problems during init', error)
         throw new Error('problems during init')
@@ -154,31 +154,7 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
     async function getDashboardInfo (id) {
       var currentState = await getView(id)
       if (!currentState || currentState.tags.indexOf('removed') >= 0) return null
-      return {id: currentState.id, name: currentState.name, description: currentState.description, options: currentState.options, tags: currentState.tags, pics: currentState.pics || [], maps: currentState.maps || []}
-    }
-
-    const getDashRole = async function (roleId, dashId) {
-      try {
-        var currentState = await getView(dashId)
-        CONSOLE.hl('getDashRole dashId, currentState', dashId, currentState)
-        if (currentState && currentState.roles && currentState.roles[roleId]) return currentState.roles[roleId]
-        else {
-          return { id: 'norole',
-            name: 'No Role',
-            public: 0,
-            description: 'No role',
-            permissions: []
-          }
-        }
-        // else throw new Error(`role not founded: dash id ${dashId}, role id ${roleId}`)
-      } catch (error) { throw new Error('problems during getDashRole ' + error) }
-    }
-    const getDashRoles = async function (dashId) {
-      try {
-        var currentState = await getView(dashId)
-        if (currentState && currentState.roles) return currentState.roles
-        return []
-      } catch (error) { throw new Error('problems during getDashRoles ' + error) }
+      return {id: currentState.id, name: currentState.name, description: currentState.description, public: currentState.public, tags: currentState.tags, pics: currentState.pics || [], maps: currentState.maps || []}
     }
     // SUBSCRIPTIONS
     const mutateSubscription = async function (args) {
@@ -255,7 +231,7 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
           dashIdUserId: `${state.dashId}${state.userId}`,
           userId: state.userId,
           tags: state.tags || [],
-          roleId: state.roleId,
+          role: state.role,
           state: JSON.stringify(state)
         }
         CONSOLE.hl('updateSubscriptionView view', view)
@@ -301,26 +277,16 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
         // ONLY ADMIN OR SUBSCRIPTION OWNER
         await subscriptionCan(reqData.dashId, userId, 'writeSubscriptions')
       }
-      if (!reqData.roleId)reqData.roleId = 'subscriber'
-      var role = await getDashRole(reqData.roleId, reqData.dashId)
-      if (!role) {
-        throw new Error('Role not exists or is not active')
+      if (reqData.roleId) {
+        // NOT PUBLIC ROLES CAN BE ASSIGNED ONLY WITH WRITE PERMISSIONS
+        var role = await getRoleView(reqData.roleId)
+        if (!role || role.tags.indexOf('removed') >= 0) {
+          throw new Error('Role not exists or is not active')
+        }
+        if (parseInt(role.public) !== 1) await subscriptionCan(reqData.dashId, userId, 'writeSubscriptions', role)
       }
-      CONSOLE.hl('role', role)
-      // NOT PUBLIC ROLES CAN BE ASSIGNED ONLY WITH WRITE PERMISSIONS
-      if (parseInt(role.public) !== 1) await subscriptionCan(reqData.dashId, userId, 'writeSubscriptions', role)
-
-      var dashData = readDashboard(reqData.dashId)
-      CONSOLE.hl('dashData', dashData)
       var returnResults = await createRawSubscription(reqData, meta)
       return returnResults
-    }
-    const readDashboard = async function (id, userId, subscription) {
-      var currentState = await getView(id)
-      if (!currentState || currentState.tags.indexOf('removed') >= 0) {
-        throw new Error('dashboard not active')
-      }
-      return currentState
     }
     const readSubscription = async function (id, userId, subscription) {
       CONSOLE.hl('readSubscription', id, userId, subscription)
@@ -343,23 +309,107 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
       try {
         var subscription = await getSubscriptionByDashIdAndUserId(dashId, userId)
         CONSOLE.hl('subscriptionCan subscription', subscription, dashId, userId, can, role)
-        // if (!subscription) throw new Error('subscription not founded - ' + dashId + ' - ' + userId)
-        if (!subscription) subscription = {id: '0_0', role: 'norole', dashId, userId}
+        if (!subscription) throw new Error('subscription not founded - ' + dashId + ' - ' + userId)
         var subscriptionRoleId = subscription.roleId
-        if (!role)role = await getDashRole(subscriptionRoleId, dashId)
+        if (!role)role = await getRoleView(subscriptionRoleId)
       // CONSOLE.hl('subscriptionCan role', role)
         var rolePermissions = role.permissions
-        if (!rolePermissions || rolePermissions.indexOf(can) === -1) {
-          var dashState = await readDashboard(dashId)
-          if (dashState.options.guestRead === 'allow') {
-            rolePermissions.push('readPosts')
-            rolePermissions.push('readDashboard')
-          }
-        }
-        if (!rolePermissions || rolePermissions.indexOf(can) === -1) throw new Error('Dashboard Role ' + role.name + ' have no permissions to ' + can)
+        if (!rolePermissions || rolePermissions.indexOf(can) === -1) throw new Error('Dashboard Role ' + role.slug + ' have no permissions to ' + can)
         return subscription
       } catch (error) { throw new Error('problems during subscriptionCan ' + error) }
     }
+
+    // ROLES
+    const mutateRole = async function (args) {
+      try {
+        var mutation = mutationsPack.mutate(args)
+        CONSOLE.debug('mutate', mutation)
+        var key = new Key(CONFIG.aerospike.namespace, CONFIG.aerospike.rolesMutationsSet, mutation.id)
+        await kvDb.put(kvDbClient, key, mutation)
+        return mutation
+      } catch (error) {
+        throw new Error('problems during mutate a ' + error)
+      }
+    }
+    const getRoleView = async function (id, view = null, stateOnly = true) {
+      try {
+        var key = new Key(CONFIG.aerospike.namespace, CONFIG.aerospike.rolesSet, id)
+        if (!view) view = await kvDb.get(kvDbClient, key)
+        if (!view) return null
+        if (view.state)view.state = JSON.parse(view.state)
+        if (stateOnly) return view.state
+        return view
+      } catch (error) { throw new Error('problems during getRoleView ' + error) }
+    }
+    const updateRoleView = async function (id, mutations, isNew) {
+      try {
+        var key = new Key(CONFIG.aerospike.namespace, CONFIG.aerospike.rolesSet, id)
+        var rawView = await getRoleView(id, null, false) || {state: {}}
+        var state = mutationsPack.applyMutations(rawView.state, mutations)
+        var view = {
+          updated: Date.now(),
+          created: rawView.created || Date.now(),
+          id: state.id,
+          dashId: '' + state.dashId,
+          state: JSON.stringify(state),
+          tags: state.tags || []
+        }
+        await kvDb.put(kvDbClient, key, view)
+        return view
+      } catch (error) { throw new Error('problems during updateRoleView ' + error) }
+    }
+    const addRoleTag = async function (id, tag, meta) {
+      var mutation = await mutateRole({data: tag, objId: id, mutation: 'addTag', meta})
+      await updateRoleView(id, [mutation])
+    }
+    const removeRoleTag = async function (id, tag, meta) {
+      var mutation = await mutateRole({data: tag, objId: id, mutation: 'removeTag', meta})
+      await updateRoleView(id, [mutation])
+    }
+    const createRawRole = async function (reqData, meta = {directCall: true}, getStream = null) {
+      var id = uuid()
+      reqData.id = id
+      CONSOLE.hl('createRole', reqData)
+      if (reqData.tags)reqData.tags = reqData.tags.map((item) => item.replace('#', ''))
+      var mutation = await mutateRole({data: reqData, objId: id, mutation: 'create', meta})
+      await updateRoleView(id, [mutation], true)
+      return {success: `Role created`, id}
+    }
+    const getRolesByDashId = async function (dashId) {
+      try {
+        CONSOLE.hl('getRolesByDashId', dashId)
+        var rawResults = await kvDb.query(kvDbClient, CONFIG.aerospike.namespace, CONFIG.aerospike.rolesSet, (dbQuery) => {
+          dbQuery.where(Aerospike.filter.equal('dashId', '' + dashId))
+        })
+        var results = await Promise.all(rawResults.map((result) => getRoleView(result.id, result)))
+        results = results.filter((post) => post !== null)
+        var resultsById = {}
+        var result
+        for (result of results) {
+          resultsById[result.id] = result
+        }
+        return resultsById
+      } catch (error) { throw new Error('problems during getRolesByDashId ' + error) }
+    }
+
+    // const subscribe = async function (dashId, userId, type) {
+    //   var id = dashId + userId
+    //   var DashUser = {id, dashId, userId, type, created: Date.now()}
+    //   // var token = await auth.createToken(id, permissions, meta, CONFIG.jwt)
+    //   var key = new Key(CONFIG.aerospike.namespace, CONFIG.aerospike.DashUsersSet, id)
+    //   await kvDb.put(kvDbClient, key, DashUser)
+    //   return {success: `subscribed`}
+    // }
+    // const checkDashUser = async function (dashId, userId, type) {
+    //   var id = dashId + userId
+    //   var DashUser = {id, dashId, userId, type, created: Date.now()}
+    //   var key = new Key(CONFIG.aerospike.namespace, CONFIG.aerospike.DashUsersSet, id)
+    //   var DashUser = await kvDb.get(kvDbClient, key)
+    //   if (DashUser && DashUser.type === type) return true
+    //   return false
+    // }
+
+    // await init()
 
     return {
       init,
@@ -374,19 +424,18 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
         await auth.userCan('dashboard.create', meta, CONFIG.jwt)
         if (reqData.tags)reqData.tags = reqData.tags.map((item) => item.replace('#', ''))
         var mutation = await mutate({data: reqData, objId: id, mutation: 'create', meta})
-        var roleAdmin = { id: 'admin', name: 'Admin', public: 0, description: 'Main dashboard administrators', permissions: [ 'writeDashboard', 'readDashboard', 'writeSubscriptions', 'readSubscriptions', 'writeRoles', 'readRoles', 'writePosts', 'readPosts', 'writeOtherUsersPosts' ] }
-        var mutationRoleAdmin = await mutate({data: roleAdmin, objId: id, mutation: 'addRole', meta})
-        var rolePostAdmin = { id: 'postsAdmin', name: 'Posts Admin', public: 0, description: 'Dashboard posts admin', permissions: ['readDashboard', 'writePosts', 'readPosts', 'readSubscriptions', 'readRoles', 'writeOtherUsersPosts'] }
-        var mutationRolePostsAdmin = await mutate({data: rolePostAdmin, objId: id, mutation: 'addRole', meta})
-        var roleSubscriber = { id: 'subscriber', name: 'Subscriber', public: 1, description: 'Dashboard subscribers', permissions: ['readDashboard', 'writePosts', 'readPosts', 'readSubscriptions', 'readRoles'] }
-        var mutationRoleSubscriber = await mutate({data: roleSubscriber, objId: id, mutation: 'addRole', meta})
-        await updateView(id, [mutation, mutationRoleAdmin, mutationRolePostsAdmin, mutationRoleSubscriber], true)
+        await updateView(id, [mutation], true)
 
         var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
 
-        var subscription = { dashId: id, roleId: 'admin', userId, tags: ['admin'] }
+        var roleAdmin = { dashId: id, slug: 'admin', name: 'Admin', public: 0, description: 'Main dashboard administrators', permissions: [ 'writeDashboard', 'readDashboard', 'writeSubscriptions', 'readSubscriptions', 'writeRoles', 'readRoles', 'writePosts', 'readPosts', 'writeOtherUsersPosts' ] }
+        var createRoleAdmin = await createRawRole(roleAdmin, meta)
+        var roleSubscriber = { dashId: id, slug: 'subscriber', name: 'Subscriber', public: 1, description: 'Dashboard subscribers', permissions: ['readDashboard', 'writePosts', 'readPosts', 'readSubscriptions', 'readRoles'] }
+        var createRoleSubscriber = await createRawRole(roleSubscriber, meta)
+
+        var subscription = { dashId: id, roleId: createRoleAdmin.id, role: 'admin', userId, tags: ['admin'] }
         var createAdminSubscription = await createRawSubscription(subscription, meta)
-        CONSOLE.hl('createDashboard createAdminSubscription', {createAdminSubscription})
+        CONSOLE.hl('createDashboard', {createRoleAdmin, createRoleSubscriber, createAdminSubscription})
         // var subscription = await createSubscription({userId, dashId: id}, meta)
         return {success: `Dashboard created`, id}
       },
@@ -411,16 +460,12 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
         var id = reqData.id
         // CONSOLE.hl('dashboardsread2', id, await getView(id))
 
-        // if (currentState.options.guestRead !== 'allow') {
         var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
         await subscriptionCan(id, userId, 'readDashboard')
-        // }
-        // var currentState = await getView(id)
-        // if (!currentState || currentState.tags.indexOf('removed') >= 0) {
-        //   throw new Error('dashboard not active')
-        // }
-        // var currentState = await readDashboard(id)
-        var currentState = await readDashboard(id)
+        var currentState = await getView(id)
+        if (!currentState || currentState.tags.indexOf('removed') >= 0) {
+          throw new Error('dashboard not active')
+        }
         return currentState
       },
       async remove (reqData, meta = {directCall: true}, getStream = null) {
@@ -444,8 +489,8 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
         var picId = uuid()
         var returnResults = await pic.updatePic(CONFIG.aerospike, kvDbClient, picId, reqData.pic.path, CONFIG.uploadPath, [['mini', 100, 100], ['medium', 500, 500]])
         var mutation = await mutate({data: {picId}, objId: id, mutation: 'addPic', meta})
-        var view = await updateView(id, [mutation])
-        // CONSOLE.hl('updatePic', view)
+        await updateView(id, [mutation])
+        // CONSOLE.hl('updatePic', await getView(id))
         return returnResults
       },
       async getPic (reqData, meta = {directCall: true}, getStream = null) {
@@ -484,7 +529,41 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
       },
       async listActive (query = {}, meta = {directCall: true}, getStream = null) {
       },
-
+      // ROLES
+      async createRole (reqData, meta = {directCall: true}, getStream = null) {
+        var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
+        await subscriptionCan(reqData.dashId, userId, 'writeRoles')
+        var results = await createRawRole(reqData, meta)
+        return results
+      },
+      async readRole (reqData, meta = {directCall: true}, getStream = null) {
+        var id = reqData.id
+        var currentState = await getRoleView(id)
+        var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
+        await subscriptionCan(currentState.dashId, userId, 'readRoles')
+        if (!currentState || currentState.tags.indexOf('removed') >= 0) {
+          throw new Error('Role not active')
+        }
+        return currentState
+      },
+      async updateRole (reqData, meta = {directCall: true}, getStream = null) {
+        var id = reqData.id
+        var currentState = await getRoleView(id)
+        var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
+        await subscriptionCan(currentState.dashId, userId, 'writeRoles')
+        var mutation = await mutate({data: reqData, objId: id, mutation: 'update', meta})
+        await updateRoleView(id, [mutation])
+        return {success: `Role updated`}
+      },
+      async removeRole (reqData, meta = {directCall: true}, getStream = null) {
+        var id = reqData.id
+        var currentState = await getRoleView(id)
+        var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
+        CONSOLE.hl('removeRole', reqData, userId, currentState)
+        await subscriptionCan(currentState.dashId, userId, 'writeRoles')
+        await addRoleTag(id, 'removed', meta)
+        return {success: `Role removed`}
+      },
       // SUBSCRIPTIONS
       createSubscription,
       async readSubscription (reqData, meta = {directCall: true}, getStream = null) {
@@ -526,8 +605,8 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
         }
         if (reqData.roleId) {
           // NOT PUBLIC ROLES CAN BE ASSIGNED ONLY WITH WRITE PERMISSIONS
-          var role = await getDashRole(reqData.roleId, currentState.dashId)
-          if (!role) {
+          var role = await getRoleView(reqData.roleId)
+          if (!role || role.tags.indexOf('removed') >= 0) {
             throw new Error('Role not exists or is not active')
           }
           if (parseInt(role.public) !== 1) await subscriptionCan(currentState.dashId, userId, 'writeSubscriptions', role)
@@ -561,7 +640,7 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
             results[i].dashInfo = await getView(results[i].dashId)
             results[i].dashInfo.subscriptionsMeta = optimizeMeta(await getDashSubscriptionsMeta(results[i].dashId))
             results[i].dashInfo.postsMeta = optimizeMeta(await posts.getDashPostsMeta(results[i].dashId))
-            results[i].dashInfo.roles = await getDashRoles(results[i].dashId)
+            results[i].dashInfo.roles = await getRolesByDashId(results[i].dashId)
             // results[i].dashInfo.roles = optimizeMeta(await posts.getDashPostsMeta(results[i].dashId))
           }
           return results

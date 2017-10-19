@@ -20,6 +20,11 @@ var startTest = async function (netClient) {
   fs.createReadStream(path.join(__dirname, '/test.png')).pipe(fs.createWriteStream(path.join(__dirname, '/test_send2.png')))
 
   const TYPE_OF = (actual, expected) => {
+    if (typeof (expected) !== 'object') {
+      var type = typeof (actual)
+      if (Array.isArray(actual))type = 'array'
+      return type
+    }
     var filtered = {}
     Object.keys(expected).forEach((key) => { filtered[key] = typeof actual[key] })
     return filtered
@@ -105,10 +110,10 @@ var startTest = async function (netClient) {
   microTest(read2, {description: fields.description2}, 'Dashboard Read Updated description', FILTER_BY_KEYS)
 
   var updatePic = await netClient.testLocalMethod('updatePic', {id: create.id, pic: pic}, {token: user1.token})
-  microTest(updatePic, { success: 'string' }, 'updatePic', TYPE_OF)
+  microTest(updatePic, { success: 'string' }, 'updatePic', TYPE_OF, 0)
 
-  var getPic = await netClient.testLocalMethod('getPic', {id: create.id}, {token: user1.token})
-  microTest(typeof getPic, 'string', 'getPic')
+  var getPic = await netClient.testLocalMethod('getPic', {id: updatePic.id}, {token: user1.token})
+  microTest(getPic, 'string', 'getPic', TYPE_OF, 0, {id: updatePic.id})
 
   // DASHS QUERY
   var rpcCreateDashN = (n) => netClient.testLocalMethod('create', {
@@ -133,57 +138,54 @@ var startTest = async function (netClient) {
   microTest(queryLastDashboards.length, 10, 'queryLastDashboards Number')
 
   // ROLES
-  var role = {
-    dashId: create.id,
-    slug: `role${microRandom}`,
-    public: 1,
-    name: `role 2${microRandom}Tt$t e1st_com`,
-    description: `role $@es${microRandom}Tt$te1st_com`,
-    description2: `role 2 $@es${microRandom}Tt$te1st_com`,
-    permissions: ['readDashboard', 'readPosts', 'writePosts']
-  }
-
-  var createRole = await netClient.testLocalMethod('createRole', role, {token: user1.token})
-  microTest(createRole, { success: 'Role created' }, 'createRole', FILTER_BY_KEYS, 0, role)
-
-  var readRole = await netClient.testLocalMethod('readRole', { id: createRole.id }, {token: user1.token})
-  microTest(readRole, {name: role.name}, 'readRole', FILTER_BY_KEYS)
-
-  var updateRole = await netClient.testLocalMethod('updateRole', { id: createRole.id, description: role.description2 }, {token: user1.token})
-  microTest(updateRole, { success: 'Role updated' }, 'updateRole', FILTER_BY_KEYS)
-
-  var readRole2 = await netClient.testLocalMethod('readRole', { id: createRole.id }, {token: user1.token})
-  microTest(readRole2, {description: role.description2}, 'readRole2', FILTER_BY_KEYS)
-
-  var roleNotPublic = {
-    dashId: create.id,
-    slug: `roleNotPublic${microRandom}`,
-    public: 0,
-    name: `roleNotPublic 2${microRandom}Tt$t e1st_com`,
-    description: `roleNotPublic $@es${microRandom}Tt$te1st_com`,
-    description2: `roleNotPublic 2 $@es${microRandom}Tt$te1st_com`,
-    permissions: ['readDashboard', 'write', 'writePost', 'writeSubscriptions']
-  }
-
-  var createNotPublicRole = await netClient.testLocalMethod('createRole', roleNotPublic, {token: user1.token})
-  microTest(createNotPublicRole, { success: 'Role created' }, 'createNotPublicRole', FILTER_BY_KEYS)
-
-  var readNotPublicRole = await netClient.testLocalMethod('readRole', { id: createNotPublicRole.id }, {token: user1.token})
-  microTest(readNotPublicRole, {name: roleNotPublic.name}, 'readRole', FILTER_BY_KEYS, 0)
+  // var role = {
+  //   dashId: create.id,
+  //   slug: `role${microRandom}`,
+  //   public: 1,
+  //   name: `role 2${microRandom}Tt$t e1st_com`,
+  //   description: `role $@es${microRandom}Tt$te1st_com`,
+  //   description2: `role 2 $@es${microRandom}Tt$te1st_com`,
+  //   permissions: ['readDashboard', 'readPosts', 'writePosts']
+  // }
+  //
+  // var createRole = await netClient.testLocalMethod('createRole', role, {token: user1.token})
+  // microTest(createRole, { success: 'Role created' }, 'createRole', FILTER_BY_KEYS, 0, role)
+  //
+  // var readRole = await netClient.testLocalMethod('readRole', { id: createRole.id }, {token: user1.token})
+  // microTest(readRole, {name: role.name}, 'readRole', FILTER_BY_KEYS)
+  //
+  // var updateRole = await netClient.testLocalMethod('updateRole', { id: createRole.id, description: role.description2 }, {token: user1.token})
+  // microTest(updateRole, { success: 'Role updated' }, 'updateRole', FILTER_BY_KEYS)
+  //
+  // var readRole2 = await netClient.testLocalMethod('readRole', { id: createRole.id }, {token: user1.token})
+  // microTest(readRole2, {description: role.description2}, 'readRole2', FILTER_BY_KEYS)
+  //
+  // var roleNotPublic = {
+  //   dashId: create.id,
+  //   slug: `roleNotPublic${microRandom}`,
+  //   public: 0,
+  //   name: `roleNotPublic 2${microRandom}Tt$t e1st_com`,
+  //   description: `roleNotPublic $@es${microRandom}Tt$te1st_com`,
+  //   description2: `roleNotPublic 2 $@es${microRandom}Tt$te1st_com`,
+  //   permissions: ['readDashboard', 'write', 'writePost', 'writeSubscriptions']
+  // }
+  //
+  // var createNotPublicRole = await netClient.testLocalMethod('createRole', roleNotPublic, {token: user1.token})
+  // microTest(createNotPublicRole, { success: 'Role created' }, 'createNotPublicRole', FILTER_BY_KEYS)
+  //
+  // var readNotPublicRole = await netClient.testLocalMethod('readRole', { id: createNotPublicRole.id }, {token: user1.token})
+  // microTest(readNotPublicRole, {name: roleNotPublic.name}, 'readRole', FILTER_BY_KEYS, 0)
 
   // SUBSCRIPTIONS
   var wrongSubscription = {
     dashId: create.id,
-    role: roleNotPublic.slug,
-    roleId: createNotPublicRole.id,
+    roleId: 'admin',
     userId: user2.id
   }
 
   var subscription = {
     dashId: create.id,
-    role: readRole2.slug,
-    role2: 'test',
-    roleId: readRole2.id,
+    roleId: 'subscriber',
     userId: user2.id
   }
 
@@ -197,11 +199,11 @@ var startTest = async function (netClient) {
   var readSubscription = await netClient.testLocalMethod('readSubscription', { id: createSubscription.id }, {token: user2.token})
   microTest(readSubscription, {name: subscription.name}, 'readSubscription', FILTER_BY_KEYS)
 
-  var updateSubscription = await netClient.testLocalMethod('updateSubscription', { id: createSubscription.id, role: subscription.role2 }, {token: user2.token})
-  microTest(updateSubscription, { success: 'Subscription updated' }, 'updateSubscription', FILTER_BY_KEYS, 0, { id: createSubscription.id, role: subscription.role2 })
+  var updateSubscription = await netClient.testLocalMethod('updateSubscription', { id: createSubscription.id, roleId: 'admin'}, {token: user1.token})
+  microTest(updateSubscription, { success: 'Subscription updated' }, 'updateSubscription', FILTER_BY_KEYS, 0, { id: createSubscription.id, roleId: 'admin'})
 
   var readSubscription2 = await netClient.testLocalMethod('readSubscription', { id: createSubscription.id }, {token: user2.token})
-  microTest(readSubscription2, {role: subscription.role2}, 'readSubscription2', FILTER_BY_KEYS)
+  microTest(readSubscription2, {roleId: 'admin'}, 'readSubscription2', FILTER_BY_KEYS)
 
   var removeSubscription = await netClient.testLocalMethod('removeSubscription', { id: createSubscription.id }, {token: user2.token})
   microTest(removeSubscription, { success: 'Subscription removed' }, 'Subscription remove', FILTER_BY_KEYS)
@@ -214,8 +216,7 @@ var startTest = async function (netClient) {
 
   var rpcCreateSubscriptionN = (n) => netClient.testLocalMethod('createSubscription', {
     dashId: create.id,
-    role: roleNotPublic.slug,
-    roleId: createNotPublicRole.id,
+    roleId: 'subscriber',
     userId: uuid()
   }, {token: user1.token})
 
@@ -227,6 +228,9 @@ var startTest = async function (netClient) {
   var queryLastSubscriptions = await netClient.testLocalMethod('queryLastSubscriptions', { dashId: create.id, from: 0, to: 10 }, {token: user1.token})
   microTest(queryLastSubscriptions[0] || [], {dashId: create.id}, 'queryLastSubscriptions', FILTER_BY_KEYS)
   microTest(queryLastSubscriptions.length, 10, 'queryLastSubscriptions Number')
+
+  var getUserSubscriptions = await netClient.testLocalMethod('getUserSubscriptions', { }, {token: user2.token})
+  microTest(getUserSubscriptions, 'array', 'getUserSubscriptions', TYPE_OF, 0)
 
   // POSTS
   var post = {
@@ -288,7 +292,8 @@ var startTest = async function (netClient) {
     microTest(createPostN, { success: 'Dashboard Posts - created' }, 'createPostN' + i, FILTER_BY_KEYS)
   }
 
-  var queryLastPosts = await netClient.testLocalMethod('queryLastPosts', { dashId: post.dashId, from: 10, to: 20 }, {token: user2.token})
+  var queryLastPosts = await netClient.testLocalMethod('queryLastPosts', { dashId: create.id, from: 10, to: 20 }, {token: user2.token})
+  // microTest(queryLastPosts, 'object', 'queryLastPosts', TYPE_OF, 0, { dashId: create.id, from: 10, to: 20 })
   microTest(queryLastPosts[0], {userId: user2.id}, 'queryLastPosts', FILTER_BY_KEYS)
   microTest(queryLastPosts.length, 10, 'queryLastPosts Number')
 
@@ -298,12 +303,12 @@ var startTest = async function (netClient) {
   var queryLastPostsAfterRemove = await netClient.testLocalMethod('queryLastPosts', { dashId: post.dashId, from: 10, to: 20 }, {token: user2.token})
   microTest(queryLastPostsAfterRemove.length, 9, 'queryLastPosts Number')
 
-  // REMOVE ROLES
-  var removeRole = await netClient.testLocalMethod('removeRole', { id: createRole.id }, {token: user1.token})
-  microTest(removeRole, { success: 'Role removed' }, 'Role remove', FILTER_BY_KEYS, 0, { id: createRole.id })
-
-  var wrongReadRole = await netClient.testLocalMethod('readRole', { id: createRole.id }, {token: user1.token})
-  microTest(wrongReadRole, { error: 'string' }, 'Wrong readRole (role removed)', TYPE_OF)
+  // // REMOVE ROLES
+  // var removeRole = await netClient.testLocalMethod('removeRole', { id: createRole.id }, {token: user1.token})
+  // microTest(removeRole, { success: 'Role removed' }, 'Role remove', FILTER_BY_KEYS, 0, { id: createRole.id })
+  //
+  // var wrongReadRole = await netClient.testLocalMethod('readRole', { id: createRole.id }, {token: user1.token})
+  // microTest(wrongReadRole, { error: 'string' }, 'Wrong readRole (role removed)', TYPE_OF)
 
   var removeResp = await netClient.testLocalMethod('remove', { id: create.id }, {token: user1.token})
   microTest(removeResp, { success: 'Dashboard removed' }, 'Dashboard remove', FILTER_BY_KEYS)

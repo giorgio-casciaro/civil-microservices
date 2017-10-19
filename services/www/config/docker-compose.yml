@@ -44,6 +44,10 @@ services:
                 location ~ /api/([-_a-zA-z0-9]*)/(.*) {
                   proxy_pass http://$$1:10080/$$2 ;
                 }
+                location ~ /api/liveevents/(.*) {
+                  gzip off;
+                  proxy_pass http://liveevents:10080/$$1 ;
+                }
                 location ~ /api_static/([-_a-zA-z0-9]*)/(.*) {
                   proxy_pass http://$$1:10070/$$2 ;
                 }

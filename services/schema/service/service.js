@@ -1,3 +1,4 @@
+
 module.exports = async function service () {
   // BASE
   const CONFIG = require('./config')
@@ -18,32 +19,66 @@ module.exports = async function service () {
   const bodyParser = require('body-parser')
   app.use(bodyParser.json())
   app.use(bodyParser.urlencoded({ extended: true }))
-
   // DB
   console.log('INIT SCHEMA')
   const kvDb = require('sint-bit-utils/utils/kvDb')
   var kvDbClient = await kvDb.getClient(CONFIG.aerospike)
   const loadSchema = async () => JSON.parse((await kvDb.get(kvDbClient, 'schema') || {}).schema || '{}')
-  const saveSchema = async () => await kvDb.put(kvDbClient, 'schema', {schema: JSON.stringify(SCHEMA)})
+  const saveSchema = async (specificSchema) => await kvDb.put(kvDbClient, 'schema', {schema: JSON.stringify(specificSchema || SCHEMA)})
   var SCHEMA = {}
   try { SCHEMA = await loadSchema() } catch (error) { await saveSchema() }
   console.log('SCHEMA', SCHEMA)
 
+  // LIVE SIGNAL
+  var liveSignals = {}
+  var liveSignalTime = 1000 * 10
+  async function checkLiveServices () {
+    CONSOLE.log('checkLiveServices')
+    var currentTime = Date.now()
+    SCHEMA = await loadSchema()
+    var serviceName
+    for (serviceName in SCHEMA) {
+      if (!liveSignals[serviceName]) {
+        delete SCHEMA[serviceName]
+        CONSOLE.log('service removed', serviceName)
+        if (SCHEMA[serviceName])CONSOLE.log('error service not removed', SCHEMA[serviceName])
+      }
+    }
+    for (serviceName in liveSignals) {
+      if (liveSignals[serviceName] < currentTime - liveSignalTime) {
+        delete SCHEMA[serviceName]
+        CONSOLE.log('service removed', serviceName)
+        if (SCHEMA[serviceName])CONSOLE.log('error service not removed', SCHEMA[serviceName])
+      }
+    }
+    await saveSchema(SCHEMA)
+  }
+  setInterval(checkLiveServices, 1000)
+  function liveSignal (service) {
+    CONSOLE.log('liveSignal', service, Date.now())
+    if (service) {
+      liveSignals[service] = Date.now()
+      if (!SCHEMA[service]) return {status: 2, msg: 'service not registered'}
+      return {status: 1, msg: 'liveSignal updated'}
+    }
+    return {status: 0, msg: 'service not defined'}
+  }
   // DOMAIN
-  var lastControl = 0
   app.get('/getSchema', async function (req, res) {
     CONSOLE.log('getSchema', SCHEMA)
     res.setHeader('Content-Type', 'application/json')
-  // if (lastControl > Date.now() - 60000) return res.send(JSON.stringify(SCHEMA))
     SCHEMA = await loadSchema()
-    lastControl = Date.now()
-  // fs.writeFileSync('/microservice/schema_json.log', JSON.stringify(SCHEMA))
     res.send(JSON.stringify(SCHEMA))
   })
+  app.get('/liveSignal', (req, res) => {
+    var service = req.query.service
+    res.send(liveSignal(service))
+  })
   app.post('/setServiceSchema', async function (req, res) {
-    CONSOLE.log('setServiceSchema', req.body)
+    CONSOLE.hl('setServiceSchema', req.body)
     SCHEMA = await loadSchema()
     SCHEMA[req.body.service] = JSON.parse(req.body.schema)
+    liveSignal(req.body.service)
     await saveSchema()
     res.setHeader('Content-Type', 'application/json')
     res.send({success: 'schema received'})

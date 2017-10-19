@@ -6,9 +6,13 @@
     <div class="tags">{{dashboard.tags.join(",")}}</div>
     <p>{{dashboard.description}}</p>
     <div v-if="dashboard.pics&&dashboard.pics[0]" class="image"><img :src="`${$store.state.apiServer}/dashboards/getPic/id/${dashboard.pics[0]}`" /></div>
-    <a v-if="getSubscription(dashboard.id)" class="button" :href="'/#/dashboard/'+dashboard.id">{{strEnter}}</a>
-    <a v-if="!getSubscription(dashboard.id)&&parseInt(dashboard.public)===1" @click="subscribe(dashboard.id)" class="button" >{{strRegister}}</a>
-    <a v-if="!getSubscription(dashboard.id)&&parseInt(dashboard.public)===0" @click="subscriptionRequest(dashboard.id)" class="button" >{{strRegisterRequest}}</a>
+    <!-- <a v-if="getSubscription(dashboard.id)" class="button" :href="'/#/dashboard/'+dashboard.id">{{strEnter}}</a> -->
+    <a v-if="getSubscription(dashboard.id)||dashboard.options.guestRead==='allow'"  :href="'/#/dashboard/'+dashboard.id" class="button" >Leggi</a>
+    <a v-if="!getSubscription(dashboard.id)&&dashboard.options.guestSubscribe==='allow'" @click="subscribe(dashboard.id)" class="button" >Iscriviti</a>
+    <a v-if="!getSubscription(dashboard.id)&&dashboard.options.guestSubscribe==='confirm'" @click="subscribe(dashboard.id)" class="button" >Richiedi Iscrizione</a>
+    <a v-if="!getSubscription(dashboard.id)&&(dashboard.options.guestWrite==='allow'||dashboard.options.guestWrite==='confirm')" @click="subscribe(dashboard.id)" class="button" >Invia Messaggio</a>
+    <!-- <a v-if="!getSubscription(dashboard.id)&&(dashboard.public)===1" @click="subscribe(dashboard.id)" class="button" >{{strRegister}}</a>
+    <a v-if="!getSubscription(dashboard.id)&&(dashboard.public)===0" @click="subscriptionRequest(dashboard.id)" class="button" >{{strRegisterRequest}}</a> -->
   </div>
   <div><a class="button" @click="loadMore">{{strLoadMore}}</a></div>
 </div>

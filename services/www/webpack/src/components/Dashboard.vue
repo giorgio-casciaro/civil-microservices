@@ -11,7 +11,7 @@
     </div>
     <div id='dashboardMap' style='width: 400px; height: 300px;'></div>
     <DashboardPostsList :dashId="dashId"></DashboardPostsList>
-    <DashboardSubscriptionsList :dashId="dashId"></DashboardSubscriptionsList>
+    <DashboardSubscriptionsList v-if="subscription" :dashId="dashId"></DashboardSubscriptionsList>
   </div>
 </section>
 </template>
@@ -55,7 +55,11 @@ export default {
     dashId: function() {
       return parseInt(this.$route.params.dashId)
     },
+    subscription: function() {
+      return this.$store.state.dashboards.subscriptionsByDashboardId[this.dashId]
+    },
     dashboard: function() {
+      if(!this.$store.state.dashboards.dashboardsById[this.dashId])this.$store.dispatch('dashboards/loadDashboard', this.dashId)
       return this.$store.state.dashboards.dashboardsById[this.dashId]
     },
     strNewPost: function () { return translate('dashboards', 'Nuovo Post') },

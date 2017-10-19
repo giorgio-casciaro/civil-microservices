@@ -26,7 +26,7 @@
       </li>
     </ul>
     <a class="button" @click="addLocation()">add location</a>
-    <div id='postCreateMap' style='width: 400px; height: 300px;'></div>
+    <div :id="'postEditMap_'+(form.id||'new')" style='width: 400px; height: 300px;'></div>
     {{form.location}}
     <input type="reset" class="annulla button" :disabled="waiting" :class="{error,success,waiting}" :value="strReset" @click="show='createIntro'">
     <input type="submit" class="create button" :disabled="waiting" :class="{error,success,waiting}" :value="strSubmit">
@@ -70,29 +70,37 @@ export default {
   name: 'DashboardPostCreate',
   mounted() {
     if(this.post)this.form=JSON.parse(JSON.stringify(this.post));
+    if(!this.form.location)this.form.location=[]
     var url = "/styles/osm-bright/style.json"
     var mapInfo = this.dashboard.maps[0]
-
-    map = new mapboxgl.Map({
-      container: 'postCreateMap',
-      center: [mapInfo.centerLng, mapInfo.centerLat],
-      style: style,
-      zoom: mapInfo.zoom,
-      interactive: true
-    });
-    map.addControl(new mapboxgl.NavigationControl())
-    map.on('mousedown', function(e) {
-      mapMousePosition = e.lngLat
-    });
-    map.on('mousemove', function(e) {
-      mapMouseLngLat = e.lngLat
-      if (activeMarker) {
-        activeMarker.setLngLat(mapMouseLngLat)
-        activeMarker.input.lat = e.lngLat.lat
-        activeMarker.input.lng = e.lngLat.lng
+    this.$nextTick(function () {
+      map = new mapboxgl.Map({
+        container: 'postEditMap_'+(this.form.id||'new'),
+        center: [mapInfo.centerLng, mapInfo.centerLat],
+        style: style,
+        zoom: mapInfo.zoom,
+        interactive: true
+      });
+      map.addControl(new mapboxgl.NavigationControl())
+      map.on('mousedown', function(e) {
+        mapMousePosition = e.lngLat
+      });
+      map.on('mousemove', function(e) {
+        mapMouseLngLat = e.lngLat
+        if (activeMarker) {
+          activeMarker.setLngLat(mapMouseLngLat)
+          activeMarker.input.lat = e.lngLat.lat
+          activeMarker.input.lng = e.lngLat.lng
+        }
+        // console.log("mousemove", mapMouseLngLat, mapMousePosition)
+      });
+      var i
+      var points=this.form.location
+      for (i in points) {
+        var marker=this.addLocation(i,true)
       }
-      // console.log("mousemove", mapMouseLngLat, mapMousePosition)
-    });
+
+    })
 
   },
   props: {
@@ -142,20 +150,25 @@ export default {
     validate,
     validateRaw,
     call,
-    addLocation() {
-      var el = document.createElement('div');
-      el.className = 'marker';
+    addLocation(locationIndex,notAddFormLocation) {
+
       var center = map.getCenter()
-      this.form.location.push({
+      var location=this.form.location[locationIndex]||{
         lat: center.lat,
         lng: center.lng
-      })
-      var marker = new mapboxgl.Marker(el, {
-          //  offset: [-50 / 2, -50 / 2]
-        })
-        .setLngLat(center)
+      }
+      console.log("addLocation(locationIndex,notAddFormLocation)",locationIndex,notAddFormLocation,this.form.location,location)
+      var ll = new mapboxgl.LngLat(location.lng,location.lat)
+      if(!notAddFormLocation)this.form.location.push(location)
+
+      var el = document.createElement('div');
+      el.className = 'marker';
+
+      var marker = new mapboxgl.Marker(el, { })
+        .setLngLat(ll)
         .addTo(map);
-      marker.input = this.form.location[this.form.location.length - 1]
+      // marker.input = this.form.location[this.form.location.length - 1]
+      marker.input = location
       el.onmousedown = function() {
         activeMarker = marker
         map.dragPan.disable();
