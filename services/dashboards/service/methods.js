@@ -12,6 +12,7 @@ const Aerospike = require('aerospike')
 const Key = Aerospike.Key
 const kvDb = require('sint-bit-utils/utils/kvDb')
 const pic = require('sint-bit-utils/utils/pic')
+const metaUtils = require('sint-bit-utils/utils/meta')
 
 const nodemailer = require('nodemailer')
 const vm = require('vm')
@@ -21,6 +22,7 @@ const auth = require('sint-bit-utils/utils/auth')
 var kvDbClient
 
 const posts = require('./posts')
+const subscriptions = require('./subscriptions')
 
 var service = function getMethods (CONSOLE, netClient, CONFIG = require('./config')) {
   try {
@@ -58,16 +60,13 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
           await kvDb.createIndex(kvDbClient, { ns: CONFIG.aerospike.namespace, set: CONFIG.aerospike.set, bin: 'created', index: CONFIG.aerospike.set + '_created', datatype: Aerospike.indexDataType.NUMERIC })
           await kvDb.createIndex(kvDbClient, { ns: CONFIG.aerospike.namespace, set: CONFIG.aerospike.set, bin: 'updated', index: CONFIG.aerospike.set + '_updated', datatype: Aerospike.indexDataType.NUMERIC })
 
-          await kvDb.createIndex(kvDbClient, { ns: CONFIG.aerospike.namespace, set: CONFIG.aerospike.subscriptionsSet, bin: 'userId', index: CONFIG.aerospike.subscriptionsSet + '_userId', datatype: Aerospike.indexDataType.STRING })
-          await kvDb.createIndex(kvDbClient, { ns: CONFIG.aerospike.namespace, set: CONFIG.aerospike.subscriptionsSet, bin: 'dashId', index: CONFIG.aerospike.subscriptionsSet + '_dashId', datatype: Aerospike.indexDataType.STRING })
-          await kvDb.createIndex(kvDbClient, { ns: CONFIG.aerospike.namespace, set: CONFIG.aerospike.subscriptionsSet, bin: 'dashIdUserId', index: CONFIG.aerospike.subscriptionsSet + '_dashIdUserId', datatype: Aerospike.indexDataType.STRING })
-
           // await kvDb.createIndex(kvDbClient, { ns: CONFIG.aerospike.namespace, set: CONFIG.aerospike.rolesSet, bin: 'dashId', index: CONFIG.aerospike.rolesSet + '_dashId', datatype: Aerospike.indexDataType.STRING })
         }
         await kvDb.put(kvDbClient, key, {version: 1, timestamp: Date.now()})
-        await posts.init(netClient, CONSOLE, kvDbClient, subscriptionCan, readDashboard)
+        await subscriptions.init(netClient, CONSOLE, kvDbClient, readDashboard, getDashRole)
+        await posts.init(netClient, CONSOLE, kvDbClient, subscriptions.can, readDashboard)
       } catch (error) {
-        CONSOLE.log('problems during init', error)
+        CONSOLE.hl('problems during init', error)
         throw new Error('problems during init')
       }
     }
@@ -153,7 +152,7 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
     }
     async function getDashboardInfo (id) {
       var currentState = await getView(id)
-      if (!currentState || currentState.tags.indexOf('removed') >= 0) return null
+      if (!currentState || currentState._deleted) return null
       return {id: currentState.id, name: currentState.name, description: currentState.description, options: currentState.options, tags: currentState.tags, pics: currentState.pics || [], maps: currentState.maps || []}
     }
 
@@ -162,15 +161,7 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
         var currentState = await getView(dashId)
         CONSOLE.hl('getDashRole dashId, currentState', dashId, currentState)
         if (currentState && currentState.roles && currentState.roles[roleId]) return currentState.roles[roleId]
-        else {
-          return { id: 'norole',
-            name: 'No Role',
-            public: 0,
-            description: 'No role',
-            permissions: []
-          }
-        }
-        // else throw new Error(`role not founded: dash id ${dashId}, role id ${roleId}`)
+        else throw new Error(`role not founded: dash id ${dashId}, role id ${roleId}`)
       } catch (error) { throw new Error('problems during getDashRole ' + error) }
     }
     const getDashRoles = async function (dashId) {
@@ -180,185 +171,13 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
         return []
       } catch (error) { throw new Error('problems during getDashRoles ' + error) }
     }
-    // SUBSCRIPTIONS
-    const mutateSubscription = async function (args) {
-      try {
-        var mutation = mutationsPack.mutate(args)
-        CONSOLE.debug('mutate', mutation)
-        var key = new Key(CONFIG.aerospike.namespace, CONFIG.aerospike.subscriptionsMutationsSet, mutation.id)
-        await kvDb.put(kvDbClient, key, mutation)
-        return mutation
-      } catch (error) {
-        throw new Error('problems during mutate a ' + error)
-      }
-    }
-    async function diffSubscriptionUpdatedView (oldState, newState) {
-      var oldTags = oldState.tags ? oldState.tags : []
-      var newTags = newState.tags ? newState.tags : []
-      var dashId = newState.dashId
-      var op = Aerospike.operator
-      var ops = []
 
-      // REMOVED TAGS
-      var removedTags = oldTags.filter(x => newTags.indexOf(x) < 0)
-      ops = ops.concat(removedTags.map((tag) => op.incr('#' + tag, -1)))
-      // ADDED TAGS
-      var addedTags = newTags.filter(x => oldTags.indexOf(x) < 0)
-      ops = ops.concat(addedTags.map((tag) => op.incr('#' + tag, 1)))
-      // NEW SUBSCRIPTION
-      // if (!oldState)ops.push(op.incr('count', 1))
-      // DELETED SUBSCRIPTION
-      // if (addedTags.indexOf('removed') >= 0)ops.push(op.incr('count', -1))
-      // DELETED SUBSCRIPTION
-      CONSOLE.hl('diffSubscriptionUpdatedView', oldTags, newTags, removedTags, addedTags, ops)
-      await kvDb.operate(kvDbClient, new Key(CONFIG.aerospike.namespace, CONFIG.aerospike.subscriptionsMetaSet, dashId + '_meta'), ops)
-    }
-    async function getDashSubscriptionsMeta (dashId) {
-      var meta = await kvDb.get(kvDbClient, new Key(CONFIG.aerospike.namespace, CONFIG.aerospike.subscriptionsMetaSet, dashId + '_meta'))
-      return meta
-    }
-    function optimizeMeta (rawMeta) {
-      if (!rawMeta)rawMeta = {}
-      var optimizedMeta = {}
-      optimizedMeta.count = rawMeta.count || 0
-      var sortable = []
-      for (var i in rawMeta) {
-        if (i[0] === '#')sortable.push([i, rawMeta[i]])
-      }
-      sortable.sort(function (a, b) {
-        return a[1] - b[1]
-      })
-      optimizedMeta.tags = sortable.slice(0, 30)
-      return optimizedMeta
-    }
-    async function incrementDashSubscriptionsMetaCount (dashId) {
-      var op = Aerospike.operator
-      var ops = [
-        op.incr('count', 1),
-        op.read('count')
-      ]
-      var count = await kvDb.operate(kvDbClient, new Key(CONFIG.aerospike.namespace, CONFIG.aerospike.subscriptionsMetaSet, dashId + '_meta'), ops)
-      CONSOLE.hl('incrementDashSubscriptionsMetaCount', count)
-      return count
-    }
-    const updateSubscriptionView = async function (id, mutations, isNew) {
-      try {
-        var key = new Key(CONFIG.aerospike.namespace, CONFIG.aerospike.subscriptionsSet, id)
-        var rawView = await getSubscriptionView(id, null, false) || {state: {}}
-        var state = mutationsPack.applyMutations(rawView.state, mutations)
-        // CONSOLE.hl('updateSubscriptionView state', state)
-        var view = {
-          updated: Date.now(),
-          created: rawView.created || Date.now(),
-          id: state.id,
-          dashId: state.dashId,
-          dashIdUserId: `${state.dashId}${state.userId}`,
-          userId: state.userId,
-          tags: state.tags || [],
-          roleId: state.roleId,
-          state: JSON.stringify(state)
-        }
-        CONSOLE.hl('updateSubscriptionView view', view)
-        await kvDb.put(kvDbClient, key, view)
-        await diffSubscriptionUpdatedView(rawView.state, state)
-        return view
-      } catch (error) { throw new Error('problems during updateSubscriptionView ' + error) }
-    }
-    const getSubscriptionView = async function (id, view = null, stateOnly = true) {
-      try {
-        var key = new Key(CONFIG.aerospike.namespace, CONFIG.aerospike.subscriptionsSet, id)
-        if (!view) view = await kvDb.get(kvDbClient, key)
-        if (!view) return null
-        if (view.state)view.state = JSON.parse(view.state)
-        if (stateOnly) return view.state
-        return view
-      } catch (error) { throw new Error('problems during getSubscriptionView ' + error) }
-    }
-    const addSubscriptionTag = async function (id, tag, meta) {
-      var mutation = await mutateSubscription({data: tag, objId: id, mutation: 'addTag', meta})
-      await updateSubscriptionView(id, [mutation])
-    }
-    const removeSubscriptionTag = async function (id, tag, meta) {
-      var mutation = await mutateSubscription({data: tag, objId: id, mutation: 'removeTag', meta})
-      await updateSubscriptionView(id, [mutation])
-    }
-    const createRawSubscription = async function (reqData, meta = {directCall: true}, getStream = null) {
-      var subscriptionsMeta = await incrementDashSubscriptionsMetaCount(reqData.dashId)
-      if (!subscriptionsMeta)subscriptionsMeta = {count: 0}
-      if (!subscriptionsMeta.count)subscriptionsMeta.count = 0
-      var id = reqData.dashId + '_' + (subscriptionsMeta.count)
-      CONSOLE.hl('createRawSubscription', id, reqData, subscriptionsMeta)
-      reqData.id = id
-      if (reqData.tags)reqData.tags = reqData.tags.map((item) => item.replace('#', ''))
-      var mutation = await mutateSubscription({data: reqData, objId: id, mutation: 'create', meta})
-      await updateSubscriptionView(id, [mutation], true)
-      return {success: `Subscription created`, id}
-    }
-    const createSubscription = async function (reqData, meta = {directCall: true}, getStream = null) {
-      var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
-      if (!reqData.userId)reqData.userId = userId
-      if (reqData.userId !== userId) {
-        // ONLY ADMIN OR SUBSCRIPTION OWNER
-        await subscriptionCan(reqData.dashId, userId, 'writeSubscriptions')
-      }
-      if (!reqData.roleId)reqData.roleId = 'subscriber'
-      var role = await getDashRole(reqData.roleId, reqData.dashId)
-      if (!role) {
-        throw new Error('Role not exists or is not active')
-      }
-      CONSOLE.hl('role', role)
-      // NOT PUBLIC ROLES CAN BE ASSIGNED ONLY WITH WRITE PERMISSIONS
-      if (parseInt(role.public) !== 1) await subscriptionCan(reqData.dashId, userId, 'writeSubscriptions', role)
-
-      var dashData = readDashboard(reqData.dashId)
-      CONSOLE.hl('dashData', dashData)
-      var returnResults = await createRawSubscription(reqData, meta)
-      return returnResults
-    }
     const readDashboard = async function (id, userId, subscription) {
       var currentState = await getView(id)
-      if (!currentState || currentState.tags.indexOf('removed') >= 0) {
+      if (!currentState || currentState._deleted) {
         throw new Error('dashboard not active')
       }
       return currentState
-    }
-    const readSubscription = async function (id, userId, subscription) {
-      CONSOLE.hl('readSubscription', id, userId, subscription)
-      var currentState = await getSubscriptionView(id)
-      CONSOLE.hl('readSubscription', id, userId, subscription)
-      if (!currentState || currentState.tags.indexOf('removed') >= 0) return null
-      return currentState
-    }
-    const getSubscriptionByDashIdAndUserId = async function (dashId, userId) {
-      try {
-        CONSOLE.hl('getSubscriptionByDashIdAndUserId', `${dashId}${userId}`)
-        var result = await kvDb.query(kvDbClient, CONFIG.aerospike.namespace, CONFIG.aerospike.subscriptionsSet, (dbQuery) => {
-          dbQuery.where(Aerospike.filter.equal('dashIdUserId', `${dashId}${userId}`))
-        })
-        if (!result[0]) return null
-        return await getSubscriptionView(result[0].id, result[0])
-      } catch (error) { throw new Error('problems during getSubscriptionByDashIdAndUserId ' + error) }
-    }
-    const subscriptionCan = async function (dashId, userId, can, role) {
-      try {
-        var subscription = await getSubscriptionByDashIdAndUserId(dashId, userId)
-        CONSOLE.hl('subscriptionCan subscription', subscription, dashId, userId, can, role)
-        // if (!subscription) throw new Error('subscription not founded - ' + dashId + ' - ' + userId)
-        if (!subscription) subscription = {id: '0_0', role: 'norole', dashId, userId}
-        var subscriptionRoleId = subscription.roleId
-        if (!role)role = await getDashRole(subscriptionRoleId, dashId)
-      // CONSOLE.hl('subscriptionCan role', role)
-        var rolePermissions = role.permissions
-        if (!rolePermissions || rolePermissions.indexOf(can) === -1) {
-          var dashState = await readDashboard(dashId)
-          if (dashState.options.guestRead === 'allow') {
-            rolePermissions.push('readPosts')
-            rolePermissions.push('readDashboard')
-          }
-        }
-        if (!rolePermissions || rolePermissions.indexOf(can) === -1) throw new Error('Dashboard Role ' + role.name + ' have no permissions to ' + can)
-        return subscription
-      } catch (error) { throw new Error('problems during subscriptionCan ' + error) }
     }
 
     return {
@@ -380,12 +199,14 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
         var mutationRolePostsAdmin = await mutate({data: rolePostAdmin, objId: id, mutation: 'addRole', meta})
         var roleSubscriber = { id: 'subscriber', name: 'Subscriber', public: 1, description: 'Dashboard subscribers', permissions: ['readDashboard', 'writePosts', 'readPosts', 'readSubscriptions', 'readRoles'] }
         var mutationRoleSubscriber = await mutate({data: roleSubscriber, objId: id, mutation: 'addRole', meta})
-        await updateView(id, [mutation, mutationRoleAdmin, mutationRolePostsAdmin, mutationRoleSubscriber], true)
+        var roleGuest = { id: 'guest', name: 'Guest', public: 0, description: 'Dashboard guests, No Role', permissions: [] }
+        var mutationRoleGuest = await mutate({data: roleGuest, objId: id, mutation: 'addRole', meta})
+        await updateView(id, [mutation, mutationRoleAdmin, mutationRolePostsAdmin, mutationRoleSubscriber, mutationRoleGuest], true)
 
         var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
 
         var subscription = { dashId: id, roleId: 'admin', userId, tags: ['admin'] }
-        var createAdminSubscription = await createRawSubscription(subscription, meta)
+        var createAdminSubscription = await subscriptions.createRaw(subscription, meta)
         CONSOLE.hl('createDashboard createAdminSubscription', {createAdminSubscription})
         // var subscription = await createSubscription({userId, dashId: id}, meta)
         return {success: `Dashboard created`, id}
@@ -399,44 +220,32 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
       async update (reqData, meta = {directCall: true}, getStream = null) {
         var id = reqData.id
         var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
-        await subscriptionCan(id, userId, 'writeDashboard')
+        await subscriptions.can(id, userId, 'writeDashboard')
         if (reqData.tags)reqData.tags = reqData.tags.map((item) => item.replace('#', ''))
         var mutation = await mutate({data: reqData, objId: id, mutation: 'update', meta})
         await updateView(id, [mutation])
         return {success: `Dashboard updated`}
       },
       async read (reqData, meta = {directCall: true}, getStream = null) {
-        CONSOLE.hl('dashboardsread', reqData)
-
         var id = reqData.id
-        // CONSOLE.hl('dashboardsread2', id, await getView(id))
-
-        // if (currentState.options.guestRead !== 'allow') {
         var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
-        await subscriptionCan(id, userId, 'readDashboard')
-        // }
-        // var currentState = await getView(id)
-        // if (!currentState || currentState.tags.indexOf('removed') >= 0) {
-        //   throw new Error('dashboard not active')
-        // }
-        // var currentState = await readDashboard(id)
+        await subscriptions.can(id, userId, 'readDashboard')
         var currentState = await readDashboard(id)
         return currentState
       },
       async remove (reqData, meta = {directCall: true}, getStream = null) {
         var id = reqData.id
         var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
-        await subscriptionCan(id, userId, 'writeDashboard')
-        // checkDashUser(id, userId, 'admin')
-        // await auth.userCan('dashboard.' + id + '.write.' + id, meta, CONFIG.jwt)
-        await addTag(id, 'removed', meta)
+        await subscriptions.can(id, userId, 'writeDashboard')
+        var mutation = await mutate({data: {}, objId: id, mutation: 'delete', meta})
+        await updateView(id, [mutation])
         return {success: `Dashboard removed`}
       },
       async updatePic (reqData, meta = {directCall: true}, getStream = null) {
         var id = reqData.id
         try {
           var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
-          await subscriptionCan(id, userId, 'writeDashboard')
+          await subscriptions.can(id, userId, 'writeDashboard')
         } catch (error) {
           await new Promise((resolve, reject) => fs.unlink(reqData.pic.path, (err, data) => err ? resolve(err) : resolve(data)))
           throw error
@@ -470,13 +279,11 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
           rawIds.push(dashboardsMeta.count - i)
         }
         CONSOLE.hl('queryLastDashboards', dashboardsMeta, rawIds)
-        // return {}
-        // await subscriptionCan(reqData.dashId, userId, 'readPosts')
         var results = await Promise.all(rawIds.map((id) => getDashboardInfo(id)))
         return results.filter((post) => post !== null)
       },
       async getDashboardsMeta (reqData = {}, meta = {directCall: true}, getStream = null) {
-        var dashboardsMeta = optimizeMeta(await getDashboardsMeta())
+        var dashboardsMeta = metaUtils.optimize(await getDashboardsMeta())
         CONSOLE.hl('getDashboardsMeta', dashboardsMeta)
         return dashboardsMeta
       },
@@ -486,122 +293,17 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
       },
 
       // SUBSCRIPTIONS
-      createSubscription,
-      async readSubscription (reqData, meta = {directCall: true}, getStream = null) {
-        var id = reqData.id
-        var currentState = await getSubscriptionView(id)
-        var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
-        if (reqData.userId !== userId) {
-          await subscriptionCan(currentState.dashId, userId, 'readSubscriptions')
-        }
-        if (!currentState || currentState.tags.indexOf('removed') >= 0) {
-          throw new Error('Subscription not active')
-        }
-        return currentState
-      },
-      async readSubscriptions (reqData, meta = {directCall: true}, getStream = null) {
-        var ids = reqData.ids
-        var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
-        var results = []
-        var checked = {}
-        var currentState
-        var id
-        for (id of ids) {
-          currentState = await getSubscriptionView(id)
-          if (!checked[currentState.dashId + userId])checked[currentState.dashId + userId] = await subscriptionCan(currentState.dashId, userId, 'readSubscriptions')
-          if (currentState && currentState.tags.indexOf('removed') < 0) {
-            results.push(currentState)
-          }
-        }
-        return results
-      },
-      async updateSubscription (reqData, meta = {directCall: true}, getStream = null) {
-        CONSOLE.hl('updateSubscription reqData', reqData)
-        var id = reqData.id
-        var currentState = await getSubscriptionView(id)
-        var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
-        if (currentState.userId !== userId) {
-          // ONLY ADMIN OR SUBSCRIPTION OWNER
-          await subscriptionCan(currentState.dashId, userId, 'writeSubscriptions')
-        }
-        if (reqData.roleId) {
-          // NOT PUBLIC ROLES CAN BE ASSIGNED ONLY WITH WRITE PERMISSIONS
-          var role = await getDashRole(reqData.roleId, currentState.dashId)
-          if (!role) {
-            throw new Error('Role not exists or is not active')
-          }
-          if (parseInt(role.public) !== 1) await subscriptionCan(currentState.dashId, userId, 'writeSubscriptions', role)
-        }
-        if (reqData.tags)reqData.tags = reqData.tags.map((item) => item.replace('#', ''))
-        var mutation = await mutate({data: reqData, objId: id, mutation: 'update', meta})
-        await updateSubscriptionView(id, [mutation])
-        return {success: `Subscription updated`}
-      },
-      async removeSubscription (reqData, meta = {directCall: true}, getStream = null) {
-        var id = reqData.id
-        var currentState = await getSubscriptionView(id)
-        var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
-        if (currentState.userId !== userId) {
-          // ONLY ADMIN OR SUBSCRIPTION OWNER
-          await subscriptionCan(currentState.dashId, userId, 'writeSubscription')
-        }
-        await addSubscriptionTag(id, 'removed', meta)
-        return {success: `Subscription removed`}
-      },
-      async getUserSubscriptions (reqData, meta = {directCall: true}, getStream = null) {
-        try {
-          var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
-          var rawResults = await kvDb.query(kvDbClient, CONFIG.aerospike.namespace, CONFIG.aerospike.subscriptionsSet, (dbQuery) => {
-            dbQuery.where(Aerospike.filter.equal('userId', userId))
-          })
-          CONSOLE.hl('getUserSubscriptions rawResults', rawResults)
-          var results = []
-          for (var i = 0; i < rawResults.length; i++) {
-            results[i] = JSON.parse(rawResults[i].state)
-            results[i].dashInfo = await getView(results[i].dashId)
-            results[i].dashInfo.subscriptionsMeta = optimizeMeta(await getDashSubscriptionsMeta(results[i].dashId))
-            results[i].dashInfo.postsMeta = optimizeMeta(await posts.getDashPostsMeta(results[i].dashId))
-            results[i].dashInfo.roles = await getDashRoles(results[i].dashId)
-            // results[i].dashInfo.roles = optimizeMeta(await posts.getDashPostsMeta(results[i].dashId))
-          }
-          return results
-        } catch (error) { throw new Error('problems during getUserSubscriptions ' + error) }
-      },
-      async queryLastSubscriptions (reqData = {}, meta = {directCall: true}, getStream = null) {
-        var dashId = reqData.dashId
-        var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
-        var subscription = await subscriptionCan(dashId, userId, 'readSubscriptions')
+      getSubscriptionByDashIdAndUserId: subscriptions.getByDashIdAndUserId,
+      subscriptionsCan: subscriptions.can,
+      createSubscription: subscriptions.create,
+      createRawSubscription: subscriptions.createRaw,
+      readSubscription: subscriptions.read,
+      readMultipleSubscriptions: subscriptions.readMultiple,
+      updateSubscription: subscriptions.update,
+      removeSubscription: subscriptions.remove,
+      getExtendedSubscriptionsByUserId: subscriptions.getExtendedByUserId,
+      queryLastSubscriptions: subscriptions.queryLast,
 
-        var dashSubscriptionsMeta = await getDashSubscriptionsMeta(dashId)
-        var dashSubscriptionsNumber = (dashSubscriptionsMeta.count || 0)
-        reqData = Object.assign({from: 0, to: 20}, reqData)
-        var rawIds = []
-        for (var i = reqData.from; i < reqData.to; i++) {
-          if (dashSubscriptionsNumber - i >= 0)rawIds.push(dashId + '_' + (dashSubscriptionsNumber - i))
-        }
-        CONSOLE.hl('queryLastSubscriptions', dashId, dashSubscriptionsNumber, userId, rawIds)
-        // return {}
-        // await subscriptionCan(reqData.dashId, userId, 'readPosts')
-        var results = await Promise.all(rawIds.map((id) => readSubscription(id, userId, subscription)))
-        CONSOLE.hl('queryLastSubscriptions results', results)
-        results = results.filter((subscription) => subscription !== null)
-        return results
-      },
-      // async queryLastDashboards (reqData = {}, meta = {directCall: true}, getStream = null) {
-      //   var dashboardsMeta = await getDashboardsMeta()
-      //   CONSOLE.hl('queryLastDashboards', dashboardsMeta)
-      //   if (!dashboardsMeta || !dashboardsMeta.count) return []
-      //   reqData = Object.assign({from: 0, to: 20}, reqData)
-      //   var rawIds = []
-      //   for (var i = reqData.from; i < reqData.to; i++) {
-      //     rawIds.push(dashboardsMeta.count - i)
-      //   }
-      //   CONSOLE.hl('queryLastDashboards', dashboardsMeta, rawIds)
-      //   // return {}
-      //   // await subscriptionCan(reqData.dashId, userId, 'readPosts')
-      //   var results = await Promise.all(rawIds.map((id) => getDashboardInfo(id)))
-      //   return results.filter((post) => post !== null)
-      // },
       // POSTS
       createPost: posts.create,
       readPost: posts.read,
@@ -618,6 +320,7 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
       }
     }
   } catch (error) {
+    CONSOLE.hl('ERROR', error)
     CONSOLE.error('getMethods', error)
     return { error: 'getMethods error' }
   }

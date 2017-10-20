@@ -48,7 +48,7 @@ export function call (service, method, model, successFunc, errorFunc, validation
     if (validation === true)validation = validate(service, method, model)
     if (validation && !validation.valid) return errorFunc('Campi non validi, controlla il form e riprova', validation)
     var resolve = ({body}) => {
-      console.log('api call response', body)
+      console.log('api call response', service, method, model, body)
       if (body.error) return errorFunc(body.error, body)
       successFunc(body)
     }

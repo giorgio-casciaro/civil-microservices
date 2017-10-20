@@ -6,8 +6,8 @@
   "scripts": {
     "start": "node ./service/start.js",
     "test": "node ./service/tests/base.launcher.js",
-    "watch_test": "node ./node_modules/sint-bit-utils/utils/watch.js ./service/methods.js,./service/config.js,./service/service.js,./service/tests/base.test.js ./service/tests/base.launcher.js",
-    "watch_start": "node ./node_modules/sint-bit-utils/utils/watch.js ./service/methods.js,./service/config.js,./service/service.js,./service/tests/base.test.js ./service/start.js"
+    "watch_test": "node ./node_modules/sint-bit-utils/utils/watch.js ./service/methods.js,./service/posts.js,./service/subscriptions.js,./service/subscriptionsSchema.js,./service/postsSchema.js,./service/schema.js,./service/config.js,./service/service.js,./service/tests/base.test.js ./service/tests/base.launcher.js",
+    "watch_start": "node ./node_modules/sint-bit-utils/utils/watch.js ./service/methods.js,./service/posts.js,./service/subscriptions.js,./service/subscriptionsSchema.js,./service/postsSchema.js,./service/schema.js,./service/config.js,./service/service.js,./service/tests/base.test.js ./service/start.js"
   },
   "author": "",
   "license": "ISC",

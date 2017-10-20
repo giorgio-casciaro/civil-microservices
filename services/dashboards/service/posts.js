@@ -138,31 +138,15 @@ function checkToTags (to, tags, userId) {
 }
 
 async function read (reqData, meta = {directCall: true}, getStream = null) {
-  // CONSOLE.hl('READPOST', reqData)
   var id = reqData.id
-  // var currentState = {id: 'test', test: 'test'}
-  // var currentState = await getView(id)
-  // if (!currentState || currentState.tags.indexOf('removed') >= 0) {
-  //   throw new Error(MODULE_NAME + ' not active')
-  // }
   var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
-  // var subscription = await subscriptionCan(currentState.dashId, userId, 'readPosts')
-  // if (!currentState.public) {
-  //   if (!currentState.to) {
-  //     throw new Error(MODULE_NAME + ' no receivers is empty')
-  //   }
-  //   if (!checkToTags(currentState.to, subscription.tags, userId)) { // currentState.to.indexOf('@' + userId) < 0 ||
-  //     throw new Error(MODULE_NAME + ' not readable by userId ' + userId)
-  //   }
-  // }
-  // currentState.subscriptionId = subscription.id
   var currentState = await readPost(id, userId)
   return currentState
 }
-async function readPost (id, userId, subscription) {
+async function readPost (id, userId) {
   var currentState = await getView(id)
-  if (!subscription)subscription = await subscriptionCan(currentState.dashId, userId, 'readPosts')
-  if (!currentState || currentState.tags.indexOf('removed') >= 0) return null
+  await subscriptionCan(currentState.dashId, userId, 'readPosts')
+  if (!currentState || currentState._deleted) return null
   if (!currentState.public) {
     if (!currentState.to) {
       throw new Error(MODULE_NAME + ' no receivers is empty')
@@ -171,7 +155,7 @@ async function readPost (id, userId, subscription) {
       throw new Error(MODULE_NAME + ' not readable by userId ' + userId)
     }
   }
-  currentState.subscriptionId = subscription.id
+  // currentState.subscriptionId = subscription.id
   return currentState
 }
 
@@ -192,7 +176,8 @@ async function remove (reqData, meta = {directCall: true}, getStream = null) {
   var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
   if (userId !== currentState.userId) await subscriptionCan(currentState.dashId, userId, 'writeOtherUsersPosts')
   else await subscriptionCan(currentState.dashId, userId, 'writePosts')
-  await addTag(id, 'removed', meta)
+  var mutation = await mutate({data: {}, objId: id, mutation: 'delete', meta})
+  await updateView(id, [mutation])
   return {success: MODULE_NAME + `removed`}
 }
 async function updatePic (reqData, meta = {directCall: true}, getStream = null) {

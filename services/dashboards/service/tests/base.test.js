@@ -229,8 +229,8 @@ var startTest = async function (netClient) {
   microTest(queryLastSubscriptions[0] || [], {dashId: create.id}, 'queryLastSubscriptions', FILTER_BY_KEYS)
   microTest(queryLastSubscriptions.length, 10, 'queryLastSubscriptions Number')
 
-  var getUserSubscriptions = await netClient.testLocalMethod('getUserSubscriptions', { }, {token: user2.token})
-  microTest(getUserSubscriptions, 'array', 'getUserSubscriptions', TYPE_OF, 0)
+  var getExtendedSubscriptionsByUserId = await netClient.testLocalMethod('getExtendedSubscriptionsByUserId', { }, {token: user2.token})
+  microTest(getExtendedSubscriptionsByUserId, 'array', 'getExtendedSubscriptionsByUserId', TYPE_OF, 0)
 
   // POSTS
   var post = {

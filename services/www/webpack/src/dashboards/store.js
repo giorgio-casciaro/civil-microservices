@@ -109,7 +109,7 @@ var storeModule = {
       })
     },
     getMySubscriptions (store, payload) {
-      call('dashboards', 'getUserSubscriptions', {}, (payload) => {
+      call('dashboards', 'getExtendedSubscriptionsByUserId', {}, (payload) => {
         store.commit('MY_SUBSCRIPTIONS_LIST', payload)
         store.rootState.mainVue.$emit('MY_SUBSCRIPTIONS_LIST')
       })

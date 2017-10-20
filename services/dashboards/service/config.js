@@ -27,11 +27,6 @@ module.exports = {
     set: process.env.aerospikeSet || 'dashboards',
     metaSet: process.env.aerospikeMetaSet || 'dashboardsMeta',
     mutationsSet: process.env.aerospikeMutationsSet || 'dashboardsMutations',
-    subscriptionsSet: process.env.aerospikeSubscriptionsSet || 'subscriptions',
-    subscriptionsMetaSet: process.env.aerospikeSubscriptionsMetaSet || 'subscriptionsMeta',
-    subscriptionsMutationsSet: process.env.aerospikeSubscriptionsMutationsSet || 'subscriptionsMutations',
-    rolesSet: process.env.aerospikeRolesSet || 'roles',
-    rolesMutationsSet: process.env.aerospikeRolesMutationsSet || 'rolesMutations',
     filesSet: process.env.aerospikeFilesSet || 'files',
     filesChunksSet: process.env.aerospikeFilesChunksSet || 'filesChunks',
     viewsSet: process.env.aerospikeViewsSet || 'dashboardsViews',
@@ -47,6 +42,16 @@ module.exports = {
     filesSet: process.env.aerospikePostsFilesSet || 'postsFiles',
     filesChunksSet: process.env.aerospikePostsFilesChunksSet || 'postsFilesChunks',
     viewsSet: process.env.aerospikePostsViewsSet || 'postsViews',
+    namespace: process.env.aerospikeNamespace || 'cc_dashboards',
+    policies: { timeout: parseInt(process.env.aerospikeTimeout) || 600000 }
+  },
+  aerospikeSubscriptions: {
+    hosts: process.env.aerospikeHosts || '127.0.0.1:3000',
+    // log: {level: process.env.aerospikeLogLevel || 4},
+    set: process.env.aerospikePostsSet || 'subscriptions',
+    metaSet: process.env.aerospikePostsMetaSet || 'subscriptionsMeta',
+    mutationsSet: process.env.aerospikePostsMutationsSet || 'subscriptionsMutations',
+    viewsSet: process.env.aerospikePostsViewsSet || 'subscriptionsViews',
     namespace: process.env.aerospikeNamespace || 'cc_dashboards',
     policies: { timeout: parseInt(process.env.aerospikeTimeout) || 600000 }
   },

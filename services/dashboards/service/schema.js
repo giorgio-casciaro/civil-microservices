@@ -1,24 +1,15 @@
 var jsFields = require('sint-bit-utils/utils/JSchemaFields')
 var postsSchema = require('./postsSchema')
+var subscriptionsSchema = require('./subscriptionsSchema')
 var jsItemById = { properties: { id: jsFields.id }, required: ['id'] }
 var dashId = {
   type: 'number',
   description: 'dash number'
 }
-var subscriptionId = {
-  type: 'string',
-  description: 'dash number + _ + subscription number ',
-  pattern: '^[0-9]*_[0-9]*$'
-}
+
 var dashOptions = {
   type: 'object'
 }
-var roleId = {
-  type: 'string',
-  description: 'Role slug as id',
-  'minLength': 3
-}
-var jsItemBySubscriptionId = { properties: { id: subscriptionId }, required: ['id'] }
 
 var jsRes = {
   properties: {
@@ -40,9 +31,6 @@ var jsQueryRes = { type: 'array', items: jsInfo }
 
 var jsRoleProp = { id: jsFields.id, dashId: dashId, name: jsFields.name, public: jsFields.public, description: jsFields.description, tags: jsFields.tags, permissions: jsFields.rolePermissions }
 var jsRoleUpdateProp = { id: jsFields.id, name: jsFields.name, public: jsFields.public, description: jsFields.description, tags: jsFields.tags, permissions: jsFields.rolePermissions }
-
-var jsSubscriptionProp = { id: subscriptionId, dashId: dashId, roleId, tags: jsFields.tags, userId: jsFields.id }
-var jsSubscriptionUpdateProp = { id: subscriptionId, roleId, tags: jsFields.tags }
 
 var toBool = (string, defaultVal = false) => {
   if (typeof string === 'undefined') return defaultVal
@@ -166,66 +154,6 @@ module.exports = {
       requestSchema: jsItemById,
       responseSchema: jsRes
     },
-    'createSubscription': {
-      public: true,
-      responseType: 'response',
-      requestSchema: {
-        properties: jsSubscriptionProp,
-        required: [ 'dashId' ]
-      },
-      responseSchema: jsRes
-    },
-    'readSubscription': {
-      public: true,
-      responseType: 'response',
-      requestSchema: jsItemBySubscriptionId,
-      responseSchema: {
-        properties: jsSubscriptionProp
-      }
-    },
-    'readSubscriptions': {
-      public: true,
-      responseType: 'response',
-      requestSchema: {
-        properties: {
-          ids: {
-            type: 'array',
-            items: { type: 'string' }
-          }
-        },
-        required: [ 'ids' ]
-      },
-      responseSchema: {
-        type: 'array',
-        items: {
-          properties: jsSubscriptionProp
-        }
-      }
-    },
-    'updateSubscription': {
-      public: true,
-      responseType: 'response',
-      requestSchema: { properties: jsSubscriptionUpdateProp, required: [ 'id' ] },
-      responseSchema: jsRes
-    },
-    'removeSubscription': {
-      public: true,
-      responseType: 'response',
-      requestSchema: jsItemBySubscriptionId,
-      responseSchema: jsRes
-    },
-    'getUserSubscriptions': {
-      public: true,
-      responseType: 'response',
-      requestSchema: { properties: {} },
-      responseSchema: { type: 'array' }
-    },
-    'queryLastSubscriptions': {
-      public: true,
-      responseType: 'response',
-      requestSchema: { required: ['from', 'dashId'], properties: { dashId, from: { type: 'integer' }, to: { type: 'integer' } } },
-      responseSchema: { type: 'array', items: { properties: jsSubscriptionProp } }
-    },
     'queryByTimestamp': {
       public: true,
       responseType: 'response',
@@ -250,6 +178,18 @@ module.exports = {
       requestSchema: {},
       responseSchema: testRes
     },
+    // SUBSCRIPTIONS
+    getSubscriptionByDashIdAndUserId: subscriptionsSchema.methods.getByDashIdAndUserId,
+    subscriptionCan: subscriptionsSchema.methods.can,
+    createSubscription: subscriptionsSchema.methods.create,
+    createRawSubscription: subscriptionsSchema.methods.createRaw,
+    readSubscription: subscriptionsSchema.methods.read,
+    readMultipleSubscriptions: subscriptionsSchema.methods.readMultiple,
+    updateSubscription: subscriptionsSchema.methods.update,
+    removeSubscription: subscriptionsSchema.methods.remove,
+    getExtendedSubscriptionsByUserId: subscriptionsSchema.methods.getExtendedByUserId,
+    queryLastSubscriptions: subscriptionsSchema.methods.queryLast,
+    // POSTS
     createPost: postsSchema.methods.create,
     readPost: postsSchema.methods.read,
     updatePost: postsSchema.methods.update,
