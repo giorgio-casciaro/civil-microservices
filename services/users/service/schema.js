@@ -17,12 +17,13 @@ var loginRes = { properties: {
   method: { type: 'string' },
   type: { type: 'string' },
   token: { type: 'string' },
-  currentState: { type: 'object' }
+  currentState: { type: 'object' },
+  id: jsFields.id
 }}
 var testRes = { additionalProperties: true, properties: { success: { type: 'string' }, error: { type: 'string' }, subtests: { type: 'array', items: subtestRes } } }
 var subtestRes = { properties: { count: { type: 'integer' }, success: { type: 'string' }, error: { type: 'string' } } }
 
-var jsRead = { properties: { id: jsFields.id, publicName: jsFields.name, hasPic: jsFields.hasPic, tags: jsFields.tags } }
+var jsRead = { properties: { id: jsFields.id, publicName: jsFields.name, hasPic: jsFields.hasPic, guest: { type: 'number' }, tags: jsFields.tags } }
 var jsReadPrivate = { properties: { id: jsFields.id, email: jsFields.email, emailStatus: jsFields.emailStatus, publicName: jsFields.name, hasPic: jsFields.hasPic, tags: jsFields.tags } }
 var jsQueryRes = { type: 'array', items: jsRead }
 
@@ -73,7 +74,7 @@ module.exports = {
       responseSchema: { properties: { permissions: jsFields.permissions } }
     },
     'readEmailConfirmationCode': {
-      public: (process.env.NODE_ENV === 'development'),
+      public: false,
       responseType: 'response',
       requestSchema: jsUserById,
       responseSchema: { properties: { emailConfirmationCode: jsFields.emailConfirmationCode } }
@@ -149,6 +150,15 @@ module.exports = {
       responseType: 'response',
       requestSchema: {
         properties: { email: jsFields.email, password: jsFields.password },
+        required: [ 'email', 'password' ]
+      },
+      responseSchema: loginRes
+    },
+    'createGuest': {
+      public: true,
+      responseType: 'response',
+      requestSchema: {
+        properties: { publicName: jsFields.name, email: jsFields.email, password: jsFields.password, info: {type: 'object'} },
         required: [ 'email', 'password' ]
       },
       responseSchema: loginRes

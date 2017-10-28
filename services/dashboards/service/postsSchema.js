@@ -8,13 +8,14 @@ var dashId = {
   type: 'number',
   description: 'dash number'
 }
-var jsItemByUUID = { properties: { id: jsFields.id }, required: ['id'] }
-var jsItemByPostId = { properties: { id: postId }, required: ['id'] }
 var subscriptionId = {
   type: 'string',
   description: 'dash number + _ + subscription number ',
   pattern: '^[0-9]*_[0-9]*$'
 }
+var jsItemByUUID = { properties: { id: jsFields.id }, required: ['id'] }
+var jsItemByPostId = { properties: { id: postId }, required: ['id'] }
+
 var jsRes = {
   properties: {
     success: { type: 'string' },
@@ -29,8 +30,8 @@ var jsRes = {
 var goelocation = { type: 'array', items: { type: 'object', properties: { lat: {type: 'number'}, lng: {type: 'number'} }, required: ['lat', 'lng'] } }
 var pics = { type: 'array', items: jsFields.id }
 var to = { type: 'array', items: { type: 'string' } }
-var jsProp = { id: postId, name: jsFields.name, userId: jsFields.id, subscriptionId, dashId: dashId, public: jsFields.public, body: { type: 'string' }, location: goelocation, tags: jsFields.tags, to, pics, updated: { type: 'string' }, created: { type: 'string' } }
-var jsUpdate = { id: postId, name: jsFields.name, public: jsFields.public, body: { type: 'string' }, location: goelocation, tags: jsFields.tags, to, pics }
+var jsProp = { id: postId, name: jsFields.name, userId: jsFields.id, subscription: { type: 'object' }, dashId: dashId, public: jsFields.public, body: { type: 'string' }, location: goelocation, tags: jsFields.tags, to, pics, _confirmed: { type: 'number' }, _deleted: { type: 'number' }, updated: { type: 'string' }, created: { type: 'string' } }
+var jsUpdate = { id: postId, name: jsFields.name, public: jsFields.public, body: { type: 'string' }, location: goelocation, tags: jsFields.tags, to, pics, _confirmed: { type: 'number' }, _deleted: { type: 'number' } }
 var jsQueryRes = { type: 'array', items: {properties: jsProp} }
 
 module.exports = {
@@ -42,7 +43,7 @@ module.exports = {
     'create': {
       public: true,
       responseType: 'response',
-      requestSchema: { properties: jsProp, required: [ 'userId', 'dashId', 'body' ] },
+      requestSchema: { properties: jsProp, required: [ 'dashId', 'body' ] },
       responseSchema: jsRes
     },
     'read': {

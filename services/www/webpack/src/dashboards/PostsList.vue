@@ -57,7 +57,7 @@ export default {
       return t('Refresh')
     },
     posts: function() {
-      return this.$store.state.dashboards.listPosts[this.dashId]
+      return this.$store.state.dashboards.dashboardsPostsList[this.dashId]
     }
   },
   methods: {

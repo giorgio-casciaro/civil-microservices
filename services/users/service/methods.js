@@ -94,6 +94,7 @@ var service = async function getMethods (CONSOLE, netClient, CONFIG = require('.
           updated: Date.now(),
           created: rawView.created || Date.now(),
           email: state.email || '',
+          guest: state.guest || 0,
           id: state.id,
           tags: state.tags || [],
           state: JSON.stringify(state)
@@ -112,20 +113,25 @@ var service = async function getMethods (CONSOLE, netClient, CONFIG = require('.
         return view
       } catch (error) { throw new Error('problems during getView ' + error) }
     }
-    const readUser = async function (id, meta) {
-      await auth.userCan('user.' + id + '.read', meta, CONFIG.jwt)
+    const readUser = async function (id, meta, checkValidity = false) {
       var currentState = await getView(id)
       CONSOLE.hl('readUser', id, currentState)
-      if (!currentState || currentState.tags.indexOf('removed') >= 0 || currentState.tags.indexOf('emailConfirmed') < 0 || currentState.tags.indexOf('passwordAssigned') < 0) {
-        throw new Error('user not active')
+      if (checkValidity) {
+        if (!currentState || currentState.tags.indexOf('removed') >= 0 || currentState.tags.indexOf('emailConfirmed') < 0 || currentState.tags.indexOf('passwordAssigned') < 0) {
+          throw new Error('user not active')
+        }
       }
       return currentState
     }
-    const getUserByMail = async function (email) {
+    const getUserByMail = async function (email, filterGuest = true) {
       try {
         var result = await kvDb.query(kvDbClient, CONFIG.aerospike.namespace, CONFIG.aerospike.set, (dbQuery) => {
           dbQuery.where(Aerospike.filter.equal('email', email))
         })
+        if (filterGuest) {
+          result = result.filter(value => !value.guest)
+        }
+        CONSOLE.hl('getUserByMail rawResult', result)
         if (!result[0]) return null
         return await getView(result[0].id, result[0])
       } catch (error) { throw new Error('problems during getUserByMail ' + error) }
@@ -179,7 +185,8 @@ var service = async function getMethods (CONSOLE, netClient, CONFIG = require('.
       },
       async read (reqData, meta = {directCall: true}, getStream = null) {
         var id = reqData.id
-        var user = await readUser(id, meta)
+        await auth.userCan('user.' + id + '.read', meta, CONFIG.jwt)
+        var user = await readUser(id)
         return user
       },
       async readUsers (reqData, meta = {directCall: true}, getStream = null) {
@@ -188,7 +195,8 @@ var service = async function getMethods (CONSOLE, netClient, CONFIG = require('.
         var id
         for (id of ids) {
           try {
-            results.push(await readUser(id, meta))
+            await auth.userCan('user.' + id + '.read', meta, CONFIG.jwt)
+            results.push(await readUser(id))
           } catch (error) { }
         }
         return results
@@ -221,96 +229,6 @@ var service = async function getMethods (CONSOLE, netClient, CONFIG = require('.
       async getPic (reqData, meta = {directCall: true}, getStream = null) {
         return await pic.getPic(CONFIG.aerospike, kvDbClient, reqData.id, reqData.size || 'mini')
       },
-      // async updatePic (reqData, meta = {directCall: true}, getStream = null) {
-      //   var sharp = require('sharp')
-      //   var unlink = (file) => new Promise((resolve, reject) => fs.unlink(file, (err, data) => err ? resolve(err) : resolve(data)))
-      //   var id = reqData.id
-      //   try {
-      //     await auth.userCan('user.' + id + '.write', meta, CONFIG.jwt)
-      //   } catch (error) {
-      //     await unlink(reqData.pic.path)
-      //     throw error
-      //   }
-      //   // RESIZE
-      //   var picNewPathFullSize = getPicPath(reqData.id, 'full')
-      //   var picNewPathMini = getPicPath(reqData.id, 'mini')
-      //   var baseImg = sharp(reqData.pic.path).resize(1000, 1000).max()
-      //   await new Promise((resolve, reject) => baseImg.toFile(picNewPathFullSize, (err, data) => err ? reject(err) : resolve(data)))
-      //   await new Promise((resolve, reject) => baseImg.resize(100, 100).crop().toFile(picNewPathMini, (err, data) => err ? reject(err) : resolve(data)))
-      //
-      //   // SAVE FILE IN DB
-      //   const saveFileInDb = (file, id = uuid()) => new Promise((resolve, reject) => {
-      //     const XXHash = require('xxhash')
-      //     var chunkSize = 1024 * 128
-      //     var chunkIt = fs.statSync(file).size > chunkSize
-      //     CONSOLE.log('saveFileInDb', chunkIt, chunkSize)
-      //     var stream = fs.createReadStream(file)
-      //     var chunks = []
-      //     stream.on('data', async function (chunk) {
-      //       try {
-      //         var chunkId = XXHash.hash(chunk, 0xCAFEBABE)
-      //
-      //         var key = new Key(CONFIG.aerospike.namespace, CONFIG.aerospike.filesChunksSet, chunkId)
-      //         CONSOLE.log('chunk', chunkId, {chunk})
-      //         if (chunkIt) {
-      //           chunks.push(chunkId)
-      //           await kvDb.put(kvDbClient, key, {chunk})
-      //         } else {
-      //           chunks = chunk
-      //         }
-      //       } catch (error) {
-      //         reject(error)
-      //       }
-      //     })
-      //     stream.on('end', async function () {
-      //       try {
-      //         CONSOLE.log('end')
-      //         var key = new Key(CONFIG.aerospike.namespace, CONFIG.aerospike.filesSet, id)
-      //         var dbFile = {id, chunks}
-      //         CONSOLE.log('end', id, dbFile)
-      //         await kvDb.put(kvDbClient, key, dbFile)
-      //       } catch (error) {
-      //         reject(error)
-      //       }
-      //       resolve({id, chunks})
-      //     })
-      //   })
-      //
-      //   var fullSize = await saveFileInDb(picNewPathFullSize, reqData.id + '_profile_full')
-      //   var mini = await saveFileInDb(picNewPathMini, reqData.id + '_profile_mini')
-      //
-      //   // CLEAR TEMP FILES
-      //   unlink(reqData.pic.path)
-      //   unlink(picNewPathFullSize)
-      //   unlink(picNewPathMini)
-      //
-      //   // UPDATE DB
-      //   // var mutation = await mutate({data: reqData, objId: id, mutation: 'updatePic', meta})
-      //   // await updateView(id, [mutation])
-      //   return {success: `Pic updated`}
-      // },
-      // async getPic (reqData, meta = {directCall: true}, getStream = null) {
-      //   const readFileInDb = async (id) => {
-      //     var key = new Key(CONFIG.aerospike.namespace, CONFIG.aerospike.filesSet, id)
-      //     var dbFile = await kvDb.get(kvDbClient, key)
-      //
-      //     if (dbFile && dbFile.chunks) {
-      //       CONSOLE.log('dbFile', dbFile)
-      //       if (dbFile.chunks instanceof Buffer) return dbFile.chunks // SINGLE CHUNK
-      //       var chunksPromises = dbFile.chunks.map((chunkId) => kvDb.get(kvDbClient, new Key(CONFIG.aerospike.namespace, CONFIG.aerospike.filesChunksSet, chunkId)))
-      //       var allChunks = await Promise.all(chunksPromises)
-      //       var complete = allChunks.reduce((a, b) => Buffer.concat([a, b.chunk]), Buffer.alloc(0))
-      //       CONSOLE.log('complete', complete)
-      //       return complete
-      //     }
-      //     return null
-      //   }
-      //   try {
-      //     return await readFileInDb(reqData.id + '_profile_mini')
-      //   } catch (error) {
-      //     return null
-      //   }
-      // },
       async updatePassword (reqData, meta = {directCall: true}, getStream = null) {
         var id = reqData.id
         await auth.userCan('user.' + id + '.private.write', meta, CONFIG.jwt)
@@ -339,29 +257,7 @@ var service = async function getMethods (CONSOLE, netClient, CONFIG = require('.
         await addTag(id, 'passwordAssigned', meta)
         return {success: `Password assigned`}
       },
-      // async tokenReload (reqData, meta = {directCall: true}, getStream = null) {
-      //   var id = currentState.id
-      //   var newToken = await getToken(id, meta, CONFIG.jwt)
-      //   var mutation = await mutate({data: {token}, objId: id, mutation: 'login', meta})
-      //   updateView(id, [mutation])
-      //   delete currentState.password
-      //   return { success: `Login`, token, currentState }
-      // },
-      // async login (reqData, meta = {directCall: true}, getStream = null) {
-      //   var bcrypt = require('bcrypt')
-      //   var currentState = await getUserByMail(reqData.email)
-      //   if (!currentState || currentState.tags.indexOf('removed') >= 0 || currentState.tags.indexOf('passwordAssigned') < 0 || currentState.tags.indexOf('emailConfirmed') < 0) {
-      //     throw new Error('Wrong username or password')
-      //   }
-      //   if (!bcrypt.compareSync(reqData.password, currentState.password)) throw new Error('Wrong username or password')
-      //   delete reqData.password
-      //   var id = currentState.id
-      //   var token = await getToken(id, meta, CONFIG.jwt)
-      //   var mutation = await mutate({data: {token}, objId: id, mutation: 'login', meta})
-      //   updateView(id, [mutation])
-      //   delete currentState.password
-      //   return { success: `Login`, token, currentState }
-      // },
+
       async login (reqData, meta = {directCall: true}, getStream = null) {
         var bcrypt = require('bcrypt')
         var currentState = await getUserByMail(reqData.email)
@@ -377,14 +273,28 @@ var service = async function getMethods (CONSOLE, netClient, CONFIG = require('.
         delete currentState.password
         return { success: `Login`, token, currentState }
       },
+      async createGuest (reqData, meta = {directCall: true}, getStream = null) {
+        var id = uuid()
+        var mailExists = await getUserByMail(reqData.email)
+        if (mailExists) throw new Error('User mail exists')
+        reqData.id = id
+        reqData.password = require('bcrypt').hashSync(reqData.password, 10)
+        var mutation = await mutate({data: reqData, objId: id, mutation: 'createGuest', meta})
+        await updateView(id, [mutation], true)
+        delete reqData.password
+        var token = await getToken(id, meta, CONFIG.jwt)
+        CONSOLE.hl(`Guest User created`, token, reqData)
+        return { success: `Guest User created`, token, id, currentState: reqData }
+      },
       async logout (reqData, meta = {directCall: true}, getStream = null) {
-        var id = reqData.id
-        var currentState = await getView(id)
-        if (!currentState || currentState.tags.indexOf('removed') >= 0 || currentState.tags.indexOf('passwordAssigned') < 0 || currentState.tags.indexOf('emailConfirmed') < 0) {
-          throw new Error('user not active')
-        }
-        if (currentState.email !== reqData.email) throw new Error('Problems durig logout')
-        return {success: `Logout`, id, email: reqData.email}
+        // var id = reqData.id
+        // var currentState = await getView(id)
+        // if (!currentState || currentState.tags.indexOf('removed') >= 0 || currentState.tags.indexOf('passwordAssigned') < 0 || currentState.tags.indexOf('emailConfirmed') < 0) {
+        //   throw new Error('user not active')
+        // }
+        // if (currentState.email !== reqData.email) throw new Error('Problems durig logout')
+        // return {success: `Logout`, id, email: reqData.email}
+        return {success: `Logout`, id: reqData.id}
       },
       async refreshToken (reqData, meta = {directCall: true}, getStream = null) {
         var token = await auth.refreshToken(meta.token, CONFIG.jwt)

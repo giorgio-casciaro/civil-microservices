@@ -6,6 +6,7 @@ import Account from '@/components/Account'
 import Registration from '@/components/Registration'
 import Dashboards from '@/components/Dashboards'
 import Dashboard from '@/components/Dashboard'
+import DashboardSubscriptions from '@/components/DashboardSubscriptions'
 import DashboardEditInfo from '@/dashboards/EditInfo'
 import DashboardEditMaps from '@/dashboards/EditMaps'
 import DashboardEditImages from '@/dashboards/EditImages'
@@ -53,9 +54,18 @@ export default (extraRoutes = []) => {
     },
     {
       path: '/dashboard/:dashId?',
-      name: 'Bacheca',
+      name: 'Posts',
       components: {
         default: Dashboard,
+        menu: Menu,
+        account: Account
+      }
+    },
+    {
+      path: '/DashboardSubscriptions/:dashId?',
+      name: 'Subscriptions',
+      components: {
+        default: DashboardSubscriptions,
         menu: Menu,
         account: Account
       }

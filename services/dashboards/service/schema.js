@@ -26,7 +26,7 @@ var subtestRes = { properties: { count: { type: 'integer' }, success: { type: 's
 var testRes = { additionalProperties: true, properties: { success: { type: 'string' }, error: { type: 'string' }, subtests: { type: 'array', items: subtestRes } } }
 
 var jsInfo = { properties: { id: dashId, name: jsFields.name, description: jsFields.description, options: dashOptions, tags: jsFields.tags, maps: jsFields.maps, pics: {type: 'array'} } }
-var jsRead = { properties: { id: dashId, name: jsFields.name, description: jsFields.description, options: dashOptions, tags: jsFields.tags, maps: jsFields.maps, pics: {type: 'array'}, roles: {type: 'object'} } }
+var jsRead = { properties: { id: dashId, name: jsFields.name, description: jsFields.description, options: dashOptions, tags: jsFields.tags, maps: jsFields.maps, pics: {type: 'array'}, roles: {type: 'object'}, subscriptionsMeta: {type: 'object'}, postsMeta: {type: 'object'} } }
 var jsQueryRes = { type: 'array', items: jsInfo }
 
 var jsRoleProp = { id: jsFields.id, dashId: dashId, name: jsFields.name, public: jsFields.public, description: jsFields.description, tags: jsFields.tags, permissions: jsFields.rolePermissions }
@@ -52,7 +52,14 @@ module.exports = {
     }
   },
   exportToPublicApi: toBool(process.env.exportToPublicApi, true),
-  rpcOut: { },
+  rpcOut: {
+    'readUser': {
+      to: 'users',
+      method: 'read',
+      requestSchema: {'type': 'object'},
+      responseSchema: {'type': 'object'}
+    }
+  },
   eventsIn: {
     'getPermissions': {
       method: 'getPermissions'

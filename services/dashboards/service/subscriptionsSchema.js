@@ -26,9 +26,9 @@ var jsRes = {
 }
 
 var jsItemBySubscriptionId = { properties: { id: subscriptionId }, required: ['id'] }
-var jsProp = { id: subscriptionId, dashId: dashId, roleId, tags: jsFields.tags, userId: jsFields.id }
-var jsUpdateProp = { id: subscriptionId, roleId, tags: jsFields.tags }
-var jsQueryRes = { type: 'array', items: {properties: jsProp} }
+var jsProp = { id: subscriptionId, dashId: dashId, roleId, tags: jsFields.tags, userId: jsFields.id, _confirmed: { type: 'number' }, _deleted: { type: 'number' }, updated: { type: 'string' }, created: { type: 'string' } }
+var jsUpdateProp = { id: subscriptionId, roleId, tags: jsFields.tags, _confirmed: { type: 'number' }, _deleted: { type: 'number' } }
+var jsQueryRes = { type: 'array', items: { properties: jsProp } }
 
 module.exports = {
   eventsIn: {

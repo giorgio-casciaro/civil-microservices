@@ -1,13 +1,13 @@
 module.exports = function (state, data) {
   state = Object.assign(state, data)
   if (!state.tags)state.tags = []
-  if (!state.options)state.options = {}
-  Object.assign(state.options, {
-    guestRead: 'allow',
-    guestSubscribe: 'confirm',
-    guestWrite: 'confirm',
-    subscriberWrite: 'confirm'
-  })
-  state.status = 0
+  if (!state.options) {
+    state.options = {
+      guestRead: 'allow',
+      guestSubscribe: 'allow',
+      guestWrite: 'confirm',
+      subscriberWrite: 'allow'
+    }
+  }
   return state
 }

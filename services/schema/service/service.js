@@ -70,6 +70,22 @@ module.exports = async function service () {
     SCHEMA = await loadSchema()
     res.send(JSON.stringify(SCHEMA))
   })
+  app.get('/getPublicMethodsSchema', async function (req, res) {
+    SCHEMA = await loadSchema()
+    var publicSchema = {}
+    for (var serviceName in SCHEMA) {
+      if (SCHEMA[serviceName].exportToPublicApi) {
+        publicSchema[serviceName] = {}
+        for (var methodName in SCHEMA[serviceName].methods) {
+          if (SCHEMA[serviceName].methods[methodName].public) {
+            publicSchema[serviceName][methodName] = SCHEMA[serviceName].methods[methodName].requestSchema
+          }
+        }
+      }
+    }
+    res.setHeader('Content-Type', 'application/json')
+    res.send(JSON.stringify(publicSchema))
+  })
   app.get('/liveSignal', (req, res) => {
     var service = req.query.service
     res.send(liveSignal(service))

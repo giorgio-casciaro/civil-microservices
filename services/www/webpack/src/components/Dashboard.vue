@@ -1,8 +1,9 @@
 <template>
 <section class="viewportViewBody Dashboard">
-  <!-- <pre>{{dashboard}}</pre> -->
+  <!-- <pre>{{userSubscription}}</pre>
+  <pre>{{userRole}}</pre> -->
   <div v-if="dashId&&dashboard">
-    <h3>{{strTitle}} {{dashboard.name}} <a class="button" :href="'/#/dashboardEdit/'+dashId">edit</a></h3>
+    <h3>{{dashboard.name}} - {{strTitle}} <a v-if="can('writeDashboard')" class="button" :href="'/#/dashboardEdit/'+dashId">Opzioni Bacheca</a> <a v-if="can('readSubscriptions')" class="button" :href="'/#/dashboardSubscriptions/'+dashId">Iscrizioni</a></h3>
     <!-- <p v-html="strDescription"></p> -->
     <a @click="showNewPost=!showNewPost">{{strNewPost}}</a>
     <div v-if="showNewPost">
@@ -10,8 +11,7 @@
       <DashboardPostCreate :dashId="dashId"></DashboardPostCreate>
     </div>
     <div id='dashboardMap' style='width: 400px; height: 300px;'></div>
-    <DashboardPostsList :dashId="dashId"></DashboardPostsList>
-    <DashboardSubscriptionsList v-if="subscription" :dashId="dashId"></DashboardSubscriptionsList>
+    <PostsList :dashId="dashId"></PostsList>
   </div>
 </section>
 </template>
@@ -19,8 +19,7 @@
 <script>
 import {translate } from '@/i18n'
 import DashboardPostCreate from '@/dashboards/PostCreate'
-import DashboardPostsList from '@/dashboards/PostsList'
-import DashboardSubscriptionsList from '@/dashboards/SubscriptionsList'
+import PostsList from '@/dashboards/PostsList'
 import Vue from 'vue'
 
 const mapboxgl = require("mapbox-gl")
@@ -45,18 +44,20 @@ export default {
   },
   components: {
     DashboardPostCreate,
-    DashboardPostsList,
-    DashboardSubscriptionsList
+    PostsList
   },
   computed: {
     strTitle: function() {
-      return translate('dashboards', 'Bacheca')
+      return translate('dashboards', 'Messaggi')
     },
     dashId: function() {
       return parseInt(this.$route.params.dashId)
     },
-    subscription: function() {
-      return this.$store.state.dashboards.subscriptionsByDashboardId[this.dashId]
+    userSubscription: function() {
+      return this.$store.state.dashboards.userSubscriptionsByDashboardId[this.dashId]||{roleId:"guest"}
+    },
+    userRole: function() {
+      if(this.userSubscription&&this.dashboard)return this.dashboard.roles[this.userSubscription.roleId]
     },
     dashboard: function() {
       if(!this.$store.state.dashboards.dashboardsById[this.dashId])this.$store.dispatch('dashboards/loadDashboard', this.dashId)
@@ -66,6 +67,10 @@ export default {
     strNewPostClose: function () { return translate('dashboards', 'Close') }
   },
   methods: {
+    can(permission){
+      if(this.userRole&&this.userRole.permissions)return this.userRole.permissions.indexOf(permission)+1
+      return false
+    },
     mapMount() {
       // mapboxgl.accessToken = 'pk.eyJ1Ijoic2ludGJpdCIsImEiOiJjajIzMnk3NDUwMDExMnlvNzc2MXk2dXNuIn0.fmB5CPQudFNP9CqssSHG9g';
       var mapInfo = {

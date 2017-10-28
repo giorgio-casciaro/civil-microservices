@@ -1,12 +1,13 @@
 <template>
-<div v-if="$store.state.dashboards.subscriptions" class="SubscriptionsList">
+<div v-if="$store.state.dashboards.userSubscriptions" class="UserSubscriptionsList">
   <h3>{{strSubscriptionsList}}</h3>
-  <div v-for="(subscription, index) in $store.state.dashboards.subscriptions">
+  <div v-for="(subscription, index) in $store.state.dashboards.userSubscriptions">
     <h4>{{subscription.role}}</h4>
     <h3>{{subscription.dashInfo.name}}</h3>
-    <div v-if="subscription.dashInfo.pics" class="image"><img :src="`${$store.state.apiServer}/dashboards/getPic/id/${subscription.dashInfo.pics[0]}`" /></div>
+    <div v-if="subscription.dashInfo.pics&&subscription.dashInfo.pics[0]" class="image"><img :src="`${$store.state.apiServer}/dashboards/getPic/id/${subscription.dashInfo.pics[0]}`" /></div>
     <div class="tags">{{subscription.dashInfo.tags.join(",")}}</div>
     <a class="button" :href="'/#/dashboard/'+subscription.dashInfo.id">{{strEnter}}</a>
+    <pre>{{subscription}}</pre>
   </div>
   <!-- <pre>{{$store.state.dashboards.subscriptions}}</pre> -->
 </div>
@@ -15,13 +16,13 @@
 import {translate} from '@/i18n'
 var t= function(string) { return translate( 'dashboards', string) }
 export default {
-  name: 'SubscriptionsList',
+  name: 'UserSubscriptionsList',
   props:{
     // setShow: { type: String },
   },
   components: {  },
   computed: {
-    strSubscriptionsList: function () { return t('Lista Sottoscrizioni') },
+    strSubscriptionsList: function () { return t('Lista Iscrizioni') },
     strEnter: function () { return t('Entra') }
   },
   methods: {

@@ -131,6 +131,19 @@ var startTest = async function (netClient) {
   var queryResponse2 = await netClient.testLocalMethod('queryByTimestamp', {from: testTimestamp2}, basicMeta)
   microTest(queryResponse2, 3, 'queryResponse insert and query 3 items  from testTimestamp2', COUNT)
 
+  var guest = {
+    email: `test${microRandom}@test${microRandom}.com`,
+    password: `t$@es${microRandom}Tt$te1st_com`,
+    name: `name ${microRandom} Tt$te1st_com`,
+    info: {ip: '123.213.123.213'}
+  }
+  var createGuest = await netClient.testLocalMethod('createGuest', {name: guest.name, email: guest.email, password: guest.password, info: guest.info}, {})
+  microTest(createGuest, { success: 'string', token: 'string' }, 'createGuest', TYPE_OF)
+
+  var readGuestPrivate = await netClient.testLocalMethod('readPrivate', {id: createGuest.id}, createGuest)
+  microTest(readGuestPrivate, {email: guest.email}, 'readPrivate', FILTER_BY_KEYS)
+  microTest(readGuestPrivate, {emailConfirmationCode: 'undefined'}, 'readPrivate', TYPE_OF)
+
   // finishTest()
   // SERVICE.netServer.stop()
   await new Promise((resolve) => setTimeout(resolve, 1000))

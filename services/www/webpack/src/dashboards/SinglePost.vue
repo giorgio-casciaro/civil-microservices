@@ -1,7 +1,7 @@
 <template>
 <div class="SinglePost">
-<div class="user" >{{strCreatedBy}} <a v-if="user" class="username">{{user.publicName}}</a> <span class="role" :title="role.description">{{role.name}}</span></div>
-<div class="created">{{strCreatedDate}} {{toDate(post.created)}}</div>
+<div class="user" >{{strCreatedBy}} <a class="username">{{post.user.publicName}}</a> <span class="role" :title="role.description">{{role.name}}</span></div>
+ <div class="created">{{strCreatedDate}} {{toDate(post.created)}}</div>
 <div class="updated" v-if="post.updated!==post.created">{{strUpdatedDate}} {{toDate(post.updated)}}</div>
 <div class="tags">
   <span v-for="(item, index) in post.tags"> #{{ item }} </span>
@@ -13,7 +13,7 @@
 <div v-if="edit_mode">
   <SinglePostEdit :post="post" :dashId="post.dashId"></SinglePostEdit>
 </div>
-<pre>{{post}}</pre>
+<!-- <pre>{{post}}</pre> -->
 <!--<pre>{{role}}</pre>
 <pre>{{subscription}}</pre>
 <pre>{{user}}</pre> -->
@@ -31,17 +31,12 @@ export default {
   props: {"post":Object,"show":String},
   components: {  SinglePostEdit },
   computed: {
-    subscription: function () { return this.$store.state.dashboards.extendedSubscriptionsById[this.post.subscriptionId]},
+    // subscription: function () { return this.$store.state.dashboards.extendedSubscriptionsById[this.post.subscriptionId]},
     role: function () {
-      if(this.subscription&&this.subscription.dashInfo&&this.subscription.dashInfo.roles&&this.subscription.dashInfo.roles[this.subscription.roleId])return this.subscription.dashInfo.roles[this.subscription.roleId]
-      else return { id: 'norole',
-        name: 'No Role',
-        public: 0,
-        description: 'No role',
-        permissions: []
-      }
+      if(this.$store.state.dashboards.dashboardsById[this.post.dashId])return this.$store.state.dashboards.dashboardsById[this.post.dashId].roles[this.post.subscription.roleId]
+      else this.$store.dispatch("dashboards/loadDashboard",this.post.dashId)
     },
-    user: function () { return this.$store.state.users.usersById[this.post.userId]},
+    // user: function () { return this.$store.state.users.usersById[this.post.userId]},
     strCreatedBy: function() { return t('Creato da') },
     strCreatedDate: function() { return t('Creato') },
     strUpdatedDate: function() { return t('Aggiornato') },

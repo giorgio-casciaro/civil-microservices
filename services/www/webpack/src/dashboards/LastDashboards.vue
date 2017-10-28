@@ -1,16 +1,20 @@
 <template>
-<div class="DashboardsList">
-  <h3>{{strDashboardsList}}</h3>
+<div class="LastDashboards">
+  <h3>{{strLastDashboards}}</h3>
   <div v-for="(dashboard, index) in dashboards">
     <h4>{{dashboard.name}}</h4>
     <div class="tags">{{dashboard.tags.join(",")}}</div>
     <p>{{dashboard.description}}</p>
     <div v-if="dashboard.pics&&dashboard.pics[0]" class="image"><img :src="`${$store.state.apiServer}/dashboards/getPic/id/${dashboard.pics[0]}`" /></div>
     <!-- <a v-if="getSubscription(dashboard.id)" class="button" :href="'/#/dashboard/'+dashboard.id">{{strEnter}}</a> -->
-    <a v-if="getSubscription(dashboard.id)||dashboard.options.guestRead==='allow'"  :href="'/#/dashboard/'+dashboard.id" class="button" >Leggi</a>
+    <!-- <a v-if="getSubscription(dashboard.id)||dashboard.options.guestRead==='allow'"  :href="'/#/dashboard/'+dashboard.id" class="button" >Leggi</a>
     <a v-if="!getSubscription(dashboard.id)&&dashboard.options.guestSubscribe==='allow'" @click="subscribe(dashboard.id)" class="button" >Iscriviti</a>
     <a v-if="!getSubscription(dashboard.id)&&dashboard.options.guestSubscribe==='confirm'" @click="subscribe(dashboard.id)" class="button" >Richiedi Iscrizione</a>
-    <a v-if="!getSubscription(dashboard.id)&&(dashboard.options.guestWrite==='allow'||dashboard.options.guestWrite==='confirm')" @click="subscribe(dashboard.id)" class="button" >Invia Messaggio</a>
+    <a v-if="!getSubscription(dashboard.id)&&(dashboard.options.guestWrite==='allow'||dashboard.options.guestWrite==='confirm')" @click="subscribe(dashboard.id)" class="button" >Invia Messaggio</a> -->
+    <a :href="'/#/dashboard/'+dashboard.id" class="button" >Leggi</a>
+    <a @click="subscribe(dashboard.id)" class="button" >Iscriviti</a>
+    <a @click="subscribe(dashboard.id)" class="button" >Richiedi Iscrizione</a>
+    <a @click="subscribe(dashboard.id)" class="button" >Invia Messaggio</a>
     <!-- <a v-if="!getSubscription(dashboard.id)&&(dashboard.public)===1" @click="subscribe(dashboard.id)" class="button" >{{strRegister}}</a>
     <a v-if="!getSubscription(dashboard.id)&&(dashboard.public)===0" @click="subscriptionRequest(dashboard.id)" class="button" >{{strRegisterRequest}}</a> -->
   </div>
@@ -21,7 +25,7 @@
 import {translate} from '@/i18n'
 var t= function(string) { return translate( 'dashboards', string) }
 export default {
-  name: 'DashboardsList',
+  name: 'LastDashboards',
   props:{
     // setShow: { type: String },
   },
@@ -31,21 +35,21 @@ export default {
   },
   components: {  },
   computed: {
-    strDashboardsList: function () { return t('Lista Bacheche') },
+    strLastDashboards: function () { return t('Ultime Bacheche') },
     strLoadMore: function () { return t('Load More') },
     strEnter: function () { return t('Entra') },
     strRegister: function () { return t('Iscriviti') },
     strRegisterRequest: function () { return t('Richiedi Iscrizione') },
-    dashboards: function(){ return this.$store.state.dashboards.list }
+    dashboards: function(){ return this.$store.state.dashboards.lastDashboards }
   },
   methods: {
     t,
     loadMore(){
       this.$store.dispatch("dashboards/lastDashboardsLoadMore")
     },
-    getSubscription(dashId){
-      return this.$store.state.dashboards.subscriptionsByDashboardId[dashId]
-    },
+    // getSubscription(dashId){
+    //   return this.$store.state.dashboards.subscriptionsByDashboardId[dashId]
+    // },
     subscribe(dashId){
       this.$store.dispatch("dashboards/subscribe",{dashId})
     }

@@ -6,64 +6,63 @@ import * as Cookies from 'js-cookie'
 var initState = {
   listPopular: false,
   listActive: false,
-  subscriptions: false,
+  userSubscriptions: false,
+  userSubscriptionsByDashboardId: {},
   dashboardsMeta: {},
-  listCount: 0,
   dashboardsById: {},
-  listPostsCount: {},
-  postsById: {},
-  listPosts: {},
-  listSubscriptionsCount: {},
   dashboardsMaps: {},
   dashboardsMapsPoints: {},
-  subscriptionsById: {},
-  extendedSubscriptionsById: {},
-  subscriptionsByDashboardId: {},
-  listSubscriptions: {},
-  list: []
+  // dashboardsPostsListCount: {},
+  // postsById: {},
+  dashboardsPostsList: {},
+  // dashboardsSubscriptionsListCount: {},
+
+  // subscriptionsById: {},
+  // extendedSubscriptionsById: {},
+  // subscriptionsByDashboardId: {},
+  dashboardsSubscriptionsList: {},
+  lastDashboards: []
 }
+var lsState
 // PREPOPULATE WITH LOCAL DATA
-if (localStorage && localStorage.getItem('dashboardsState')) {
-  var lsState = JSON.parse(localStorage.getItem('dashboardsState'))
-}
+// if (localStorage && localStorage.getItem('dashboardsState')) {
+//   lsState = JSON.parse(localStorage.getItem('dashboardsState'))
+// }
 var pageLength = 20
 // var token = Cookies.getJSON('civil-connect-token')
 var storeModule = {
   namespaced: true,
   state: Object.assign({}, lsState || initState),
   mutations: {
-    DASHBOARDS_LIST (state, payload) {
+    LAST_DASHBOARDS (state, payload) {
       if (payload.reset)Vue.set(state, 'list', [])
-      Vue.set(state, 'list', state.list.concat(payload.list))
-      Vue.set(state, 'listCount', state.list.length)
+      Vue.set(state, 'lastDashboards', state.list.concat(payload.list))
     },
     DASHBOARDS_META (state, meta) {
       Vue.set(state, 'dashboardsMeta', meta)
       console.log('DASHBOARDS_META', meta)
     },
     DASHBOARD_POSTS_LIST (state, payload) {
-      if (payload.reset)Vue.set(state.listPosts, payload.dashId, [])
-      Vue.set(state.listPosts, payload.dashId, (state.listPosts[payload.dashId] || []).concat(payload.list))
-      Vue.set(state.listPostsCount, payload.dashId, state.listPosts[payload.dashId].length)
-      payload.list.forEach((post) => { Vue.set(state.postsById, post.id, post) })
-      console.log('DASHBOARD_POSTS_LIST', payload, state.listPosts, state.postsById)
+      if (payload.reset)Vue.set(state.dashboardsPostsList, payload.dashId, [])
+      Vue.set(state.dashboardsPostsList, payload.dashId, (state.dashboardsPostsList[payload.dashId] || []).concat(payload.list))
+      // Vue.set(state.dashboardsPostsListCount, payload.dashId, state.dashboardsPostsList[payload.dashId].length)
+      // payload.list.forEach((post) => { Vue.set(state.postsById, post.id, post) })
+      console.log('DASHBOARD_POSTS_LIST', payload, state.dashboardsPostsList, state.postsById)
     },
     DASHBOARD_SUBSCRIPTIONS_LIST (state, payload) {
-      if (payload.reset)Vue.set(state.listSubscriptions, payload.dashId, [])
-      Vue.set(state.listSubscriptions, payload.dashId, (state.listSubscriptions[payload.dashId] || []).concat(payload.list))
-      Vue.set(state.listSubscriptionsCount, payload.dashId, state.listSubscriptions[payload.dashId].length)
-      payload.list.forEach((subscription) => { Vue.set(state.subscriptionsById, subscription.id, subscription) })
-      console.log('DASHBOARD_SUBSCRIPTIONS_LIST', payload, state.listSubscriptions, state.subscriptionsById)
+      if (payload.reset)Vue.set(state.dashboardsSubscriptionsList, payload.dashId, [])
+      Vue.set(state.dashboardsSubscriptionsList, payload.dashId, (state.dashboardsSubscriptionsList[payload.dashId] || []).concat(payload.list))
+      // Vue.set(state.dashboardsSubscriptionsListCount, payload.dashId, state.dashboardsSubscriptionsList[payload.dashId].length)
+      // payload.list.forEach((subscription) => { Vue.set(state.subscriptionsById, subscription.id, subscription) })
+      console.log('DASHBOARD_SUBSCRIPTIONS_LIST', payload, state.dashboardsSubscriptionsList, state.subscriptionsById)
     },
-    MY_SUBSCRIPTIONS_LIST (state, list) {
-      Vue.set(state, 'subscriptions', list)
-      list.forEach((subscription) => {
-        Vue.set(state.extendedSubscriptionsById, subscription.id, subscription)
-        Vue.set(state.subscriptionsById, subscription.id, subscription)
-        Vue.set(state.subscriptionsByDashboardId, subscription.dashId, subscription)
-        Vue.set(state.dashboardsById, subscription.dashId, subscription.dashInfo)
-      })
-      console.log('MY_SUBSCRIPTIONS_LIST', state.subscriptions)
+    USER_SUBSCRIPTIONS (state, list) {
+      Vue.set(state, 'userSubscriptions', list)
+      list.forEach((subscription) => { Vue.set(state.userSubscriptionsByDashboardId, subscription.dashId, subscription) })
+    },
+    USER_SUBSCRIPTIONS_RESET (state, list) {
+      Vue.set(state, 'userSubscriptions', [])
+      console.log('USER_SUBSCRIPTIONS_RESET', state.subscriptions)
     },
     LOAD_DASHBOARD (state, dashboard) {
       Vue.set(state.dashboardsById, dashboard.id, dashboard)
@@ -75,16 +74,16 @@ var storeModule = {
       })
       console.log('SUBSCRIPTIONS_LOADED', list)
     },
-    MY_SUBSCRIPTIONS_RESET (state, list) {
-      Vue.set(state, 'subscriptions', [])
-      console.log('MY_SUBSCRIPTIONS_RESET', state.subscriptions)
-    },
     CHANGE_DASHBOARD_RANDOM (state, {dashId, random}) {
       state.dashboardsById[dashId].random = random
     },
     SET_DASHBOARD_ACTIVE_MAP (state, {map, dashId}) {
       state.dashboardsMaps[dashId] = map
       console.log('SET_DASHBOARD_ACTIVE_MAP', {map, dashId})
+    },
+    CREATE_POST (state, payload) {
+      state.dashboardsPostsList[payload.dashId].unshift(payload)
+      Vue.set(state.dashboardsPostsList, payload.dashId, state.dashboardsPostsList[payload.dashId])
     },
     ADD_DASHBOARD_MAP_POINT (state, point) {
       if (!state.dashboardsMapsPoints[point.dashId])state.dashboardsMapsPoints[point.dashId] = {}
@@ -101,71 +100,94 @@ var storeModule = {
       call('dashboards', 'getDashboardsMeta', {}, (payload) => store.commit('DASHBOARDS_META', payload))
       store.rootState.mainVue.$on('login', clickCount => {
         console.log('dashboards store on login event')
-        store.dispatch('getMySubscriptions')
+        store.dispatch('getUserSubscriptions')
       })
       store.rootState.mainVue.$on('logout', clickCount => {
         console.log('dashboards store on logout event')
-        store.commit('MY_SUBSCRIPTIONS_RESET')
+        store.commit('USER_SUBSCRIPTIONS_RESET')
       })
     },
-    getMySubscriptions (store, payload) {
+    getUserSubscriptions (store, payload) {
       call('dashboards', 'getExtendedSubscriptionsByUserId', {}, (payload) => {
-        store.commit('MY_SUBSCRIPTIONS_LIST', payload)
-        store.rootState.mainVue.$emit('MY_SUBSCRIPTIONS_LIST')
+        store.commit('USER_SUBSCRIPTIONS', payload)
+        // store.rootState.mainVue.$emit('USER_SUBSCRIPTIONS')
       })
     },
-    readSubscriptions (store, payload) {
-      var ids = []
-      var id
-      if (!payload.refresh) {
-        for (var i = 0; i < payload.ids.length; i++) {
-          id = payload.ids[i]
-          if (!store.state.subscriptionsById[id])ids.push(id)
+    createPost (store, payload) {
+      store.dispatch('users/createGuest', {
+        guest: payload.guest,
+        onError: payload.onError,
+        onSuccess: function (guestUserId) {
+          payload.post.userId = guestUserId
+          call('dashboards', 'createPost', payload.post, (response) => {
+            store.commit('CREATE_POST', response.data)
+            payload.onSuccess()
+          }, payload.onError)
         }
-      } else {
-        ids = payload.ids
-      }
-      console.log('readSubscriptions', {ids})
-      if (ids.length) {
-        call('dashboards', 'readSubscriptions', {ids}, (response) => {
-          console.log('readSubscriptions response', response)
-          store.commit('SUBSCRIPTIONS_LOADED', response)
-        })
-      }
+      }, {root: true})
+      // if (!store.state.users.logged) {
+      //   call('users', 'createGuest', payload.guest, function () {
+      //     call('dashboards', 'createPost', payload.post, (payload) => {
+      //       store.commit('CREATE_POST', payload)
+      //       payload.succ()
+      //     }, payload.err)
+      //   }, payload.err)
+      // } else {
+      //   call('dashboards', 'createPost', payload.post, (payload) => {
+      //     store.commit('CREATE_POST', payload)
+      //     payload.succ()
+      //   }, payload.err)
+      // }
     },
+    // readMultipleSubscriptions (store, payload) {
+    //   var ids = []
+    //   var id
+    //   if (!payload.refresh) {
+    //     for (var i = 0; i < payload.ids.length; i++) {
+    //       id = payload.ids[i]
+    //       if (!store.state.subscriptionsById[id])ids.push(id)
+    //     }
+    //   } else {
+    //     ids = payload.ids
+    //   }
+    //   console.log('readMultipleSubscriptions', {ids})
+    //   if (ids.length) {
+    //     call('dashboards', 'readMultipleSubscriptions', {ids}, (response) => {
+    //       console.log('readMultipleSubscriptions response', response)
+    //       store.commit('SUBSCRIPTIONS_LOADED', response)
+    //     })
+    //   }
+    // },
     lastDashboards (store, payload) {
-      call('dashboards', 'queryLastDashboards', {from: 0, to: pageLength}, (list) => store.commit('DASHBOARDS_LIST', {list, reset: true}))
+      call('dashboards', 'queryLastDashboards', {from: 0, to: pageLength}, (list) => store.commit('LAST_DASHBOARDS', {list, reset: true}))
     },
     loadDashboard (store, id) {
       call('dashboards', 'read', {id}, (dashboard) => store.commit('LOAD_DASHBOARD', dashboard))
     },
     lastDashboardsLoadMore (store, payload) {
-      call('dashboards', 'queryLastDashboards', {from: store.state.listCount, to: store.state.listCount + pageLength}, (list) => store.commit('DASHBOARDS_LIST', {list, reset: false}))
+      call('dashboards', 'queryLastDashboards', {from: store.state.lastDashboards.length, to: store.state.lastDashboards.length + pageLength}, (list) => store.commit('LAST_DASHBOARDS', {list, reset: false}))
     },
     lastDashboardPosts (store, payload) {
       call('dashboards', 'queryLastPosts', {from: 0, to: pageLength, dashId: payload.dashId}, (list) => {
         store.commit('DASHBOARD_POSTS_LIST', {list, dashId: payload.dashId, reset: true})
-        store.dispatch('readSubscriptions', { ids: list.map((post) => post.subscriptionId) })
-        store.dispatch('users/readUsers', {ids: list.map((post) => post.userId)}, {root: true})
       })
     },
     lastDashboardPostsLoadMore (store, payload) {
-      call('dashboards', 'queryLastPosts', {from: store.state.listPostsCount[payload.dashId], to: store.state.listPostsCount[payload.dashId] + pageLength, dashId: payload.dashId}, (list) => {
+      call('dashboards', 'queryLastPosts', {from: store.state.dashboardsPostsListCount[payload.dashId], to: store.state.dashboardsPostsListCount[payload.dashId] + pageLength, dashId: payload.dashId}, (list) => {
         store.commit('DASHBOARD_POSTS_LIST', {list, dashId: payload.dashId})
-        store.dispatch('readSubscriptions', { ids: list.map((post) => post.subscriptionId) })
-        store.dispatch('users/readUsers', {ids: list.map((post) => post.userId)}, {root: true})
+        // store.dispatch('readMultipleSubscriptions', { ids: list.map((post) => post.subscriptionId) })
+        // store.dispatch('users/readUsers', {ids: list.map((post) => post.userId)}, {root: true})
       })
     },
     lastDashboardSubscriptions (store, payload) {
-      console.log('lastDashboardSubscriptions', payload)
       call('dashboards', 'queryLastSubscriptions', {from: 0, to: pageLength, dashId: payload.dashId}, (list) => store.commit('DASHBOARD_SUBSCRIPTIONS_LIST', {list, dashId: payload.dashId, reset: true}))
     },
     lastDashboardSubscriptionsLoadMore (store, payload) {
-      call('dashboards', 'queryLastSubscriptions', {from: store.state.listSubscriptionsCount[payload.dashId], to: store.state.listSubscriptionsCount[payload.dashId] + pageLength, dashId: payload.dashId}, (list) => store.commit('DASHBOARD_SUBSCRIPTIONS_LIST', {list, dashId: payload.dashId}))
+      call('dashboards', 'queryLastSubscriptions', {from: store.state.dashboardsSubscriptionsListCount[payload.dashId], to: store.state.dashboardsSubscriptionsListCount[payload.dashId] + pageLength, dashId: payload.dashId}, (list) => store.commit('DASHBOARD_SUBSCRIPTIONS_LIST', {list, dashId: payload.dashId}))
     },
     subscribe (store, payload) {
-      call('dashboards', 'createSubscription', payload, (payload) => store.dispatch('getMySubscriptions', {}))
-      // call('dashboards', 'queryLastSubscriptions', {from: store.state.listSubscriptionsCount[payload.dashId], to: store.state.listSubscriptionsCount[payload.dashId] + pageLength, dashId: payload.dashId}, (list) => store.commit('DASHBOARD_SUBSCRIPTIONS_LIST', {list, dashId: payload.dashId}))
+      call('dashboards', 'createSubscription', payload, (payload) => store.dispatch('getUserSubscriptions', {}))
+      // call('dashboards', 'queryLastSubscriptions', {from: store.state.dashboardsSubscriptionsListCount[payload.dashId], to: store.state.dashboardsSubscriptionsListCount[payload.dashId] + pageLength, dashId: payload.dashId}, (list) => store.commit('DASHBOARD_SUBSCRIPTIONS_LIST', {list, dashId: payload.dashId}))
     },
     afterLogin (store, payload) {
     },

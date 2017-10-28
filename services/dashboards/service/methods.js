@@ -23,7 +23,7 @@ var kvDbClient
 
 const posts = require('./posts')
 const subscriptions = require('./subscriptions')
-
+var methods
 var service = function getMethods (CONSOLE, netClient, CONFIG = require('./config')) {
   try {
     CONSOLE.debug('CONFIG', CONFIG)
@@ -63,8 +63,8 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
           // await kvDb.createIndex(kvDbClient, { ns: CONFIG.aerospike.namespace, set: CONFIG.aerospike.rolesSet, bin: 'dashId', index: CONFIG.aerospike.rolesSet + '_dashId', datatype: Aerospike.indexDataType.STRING })
         }
         await kvDb.put(kvDbClient, key, {version: 1, timestamp: Date.now()})
-        await subscriptions.init(netClient, CONSOLE, kvDbClient, readDashboard, getDashRole)
-        await posts.init(netClient, CONSOLE, kvDbClient, subscriptions.can, readDashboard)
+        await subscriptions.init(netClient, CONSOLE, kvDbClient, methods)
+        await posts.init(netClient, CONSOLE, kvDbClient, methods)
       } catch (error) {
         CONSOLE.hl('problems during init', error)
         throw new Error('problems during init')
@@ -153,34 +153,62 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
     async function getDashboardInfo (id) {
       var currentState = await getView(id)
       if (!currentState || currentState._deleted) return null
-      return {id: currentState.id, name: currentState.name, description: currentState.description, options: currentState.options, tags: currentState.tags, pics: currentState.pics || [], maps: currentState.maps || []}
+      return {id: currentState.id, name: currentState.name, description: currentState.description, options: currentState.options, tags: currentState.tags, pics: currentState.pics || []}
     }
-
-    const getDashRole = async function (roleId, dashId) {
+    const extendDashRoles = async function (currentState) {
+      for (var roleId in currentState.roles) {
+        var role = currentState.roles[roleId]
+        var rolePermissions = role.permissions
+        if (role.id === 'guest' && currentState.options.guestRead === 'allow') {
+          rolePermissions.push('readPosts')
+          rolePermissions.push('readDashboard')
+        }
+        if (role.id === 'guest' && currentState.options.guestSubscribe === 'allow') {
+          rolePermissions.push('subscribe')
+        }
+        if (role.id === 'guest' && currentState.options.guestSubscribe === 'confirm') {
+          rolePermissions.push('confirmSubscribe')
+        }
+        if (role.id === 'guest' && currentState.options.guestWrite === 'allow') {
+          rolePermissions.push('writePosts')
+        }
+        if (role.id === 'guest' && currentState.options.guestWrite === 'confirm') {
+          rolePermissions.push('confirmWritePosts')
+        }
+        if (role.id === 'subscriber' && currentState.options.subscriberWrite === 'allow') {
+          rolePermissions.push('writePosts')
+        }
+        if (role.id === 'subscriber' && currentState.options.subscriberWrite === 'confirm') {
+          rolePermissions.push('confirmWritePosts')
+        }
+      }
+    }
+    const getDashRole = async function (roleId, dashId, currentState) {
       try {
-        var currentState = await getView(dashId)
+        if (!currentState) currentState = await readDashboard(dashId)
         CONSOLE.hl('getDashRole dashId, currentState', dashId, currentState)
-        if (currentState && currentState.roles && currentState.roles[roleId]) return currentState.roles[roleId]
-        else throw new Error(`role not founded: dash id ${dashId}, role id ${roleId}`)
+        if (!currentState || !currentState.roles || !currentState.roles[roleId]) throw new Error(`role not founded: dash id ${dashId}, role id ${roleId}`)
+        return currentState.roles[roleId]
       } catch (error) { throw new Error('problems during getDashRole ' + error) }
     }
-    const getDashRoles = async function (dashId) {
-      try {
-        var currentState = await getView(dashId)
-        if (currentState && currentState.roles) return currentState.roles
-        return []
-      } catch (error) { throw new Error('problems during getDashRoles ' + error) }
-    }
+    // const getDashRoles = async function (dashId) {
+    //   try {
+    //     var currentState = await getView(dashId)
+    //     if (currentState && currentState.roles) return currentState.roles.map((role) => getDashRole(role.id, dashId, currentState))
+    //     return []
+    //   } catch (error) { throw new Error('problems during getDashRoles ' + error) }
+    // }
 
-    const readDashboard = async function (id, userId, subscription) {
+    const readDashboard = async function (id) {
       var currentState = await getView(id)
       if (!currentState || currentState._deleted) {
         throw new Error('dashboard not active')
       }
+      extendDashRoles(currentState)
       return currentState
     }
 
-    return {
+    methods = {
       init,
       async getPermissions (reqData, meta = {directCall: true}, getStream = null) {
         // recuperare iscrizioni
@@ -193,11 +221,11 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
         await auth.userCan('dashboard.create', meta, CONFIG.jwt)
         if (reqData.tags)reqData.tags = reqData.tags.map((item) => item.replace('#', ''))
         var mutation = await mutate({data: reqData, objId: id, mutation: 'create', meta})
-        var roleAdmin = { id: 'admin', name: 'Admin', public: 0, description: 'Main dashboard administrators', permissions: [ 'writeDashboard', 'readDashboard', 'writeSubscriptions', 'readSubscriptions', 'writeRoles', 'readRoles', 'writePosts', 'readPosts', 'writeOtherUsersPosts' ] }
+        var roleAdmin = { id: 'admin', name: 'Admin', public: 0, description: 'Main dashboard administrators', permissions: [ 'writeDashboard', 'readDashboard', 'writeSubscriptions', 'readSubscriptions', 'writeRoles', 'readRoles', 'writePosts', 'readPosts', 'readHiddenPosts', 'writeOtherUsersPosts' ] }
         var mutationRoleAdmin = await mutate({data: roleAdmin, objId: id, mutation: 'addRole', meta})
-        var rolePostAdmin = { id: 'postsAdmin', name: 'Posts Admin', public: 0, description: 'Dashboard posts admin', permissions: ['readDashboard', 'writePosts', 'readPosts', 'readSubscriptions', 'readRoles', 'writeOtherUsersPosts'] }
+        var rolePostAdmin = { id: 'postsAdmin', name: 'Posts Admin', public: 0, description: 'Dashboard posts admin', permissions: ['readDashboard', 'writePosts', 'readPosts', 'readHiddenPosts', 'readSubscriptions', 'readRoles', 'writeOtherUsersPosts'] }
         var mutationRolePostsAdmin = await mutate({data: rolePostAdmin, objId: id, mutation: 'addRole', meta})
-        var roleSubscriber = { id: 'subscriber', name: 'Subscriber', public: 1, description: 'Dashboard subscribers', permissions: ['readDashboard', 'writePosts', 'readPosts', 'readSubscriptions', 'readRoles'] }
+        var roleSubscriber = { id: 'subscriber', name: 'Subscriber', public: 1, description: 'Dashboard subscribers', permissions: ['readDashboard', 'readPosts', 'readSubscriptions', 'readRoles'] }
         var mutationRoleSubscriber = await mutate({data: roleSubscriber, objId: id, mutation: 'addRole', meta})
         var roleGuest = { id: 'guest', name: 'Guest', public: 0, description: 'Dashboard guests, No Role', permissions: [] }
         var mutationRoleGuest = await mutate({data: roleGuest, objId: id, mutation: 'addRole', meta})
@@ -205,7 +233,7 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
 
         var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
 
-        var subscription = { dashId: id, roleId: 'admin', userId, tags: ['admin'] }
+        var subscription = { dashId: id, roleId: 'admin', userId, tags: ['admin'], _confirmed: 1 }
         var createAdminSubscription = await subscriptions.createRaw(subscription, meta)
         CONSOLE.hl('createDashboard createAdminSubscription', {createAdminSubscription})
         // var subscription = await createSubscription({userId, dashId: id}, meta)
@@ -231,6 +259,8 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
         var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
         await subscriptions.can(id, userId, 'readDashboard')
         var currentState = await readDashboard(id)
+        currentState.subscriptionsMeta = metaUtils.optimize(await subscriptions.getDashMeta(id))
+        currentState.postsMeta = metaUtils.optimize(await posts.getDashPostsMeta(id))
         return currentState
       },
       async remove (reqData, meta = {directCall: true}, getStream = null) {
@@ -291,6 +321,9 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
       },
       async listActive (query = {}, meta = {directCall: true}, getStream = null) {
       },
+      readDashboard,
+      getDashRole,
+      getDashboardInfo,
 
       // SUBSCRIPTIONS
       getSubscriptionByDashIdAndUserId: subscriptions.getByDashIdAndUserId,
@@ -319,6 +352,7 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
         return results
       }
     }
+    return methods
   } catch (error) {
     CONSOLE.hl('ERROR', error)
     CONSOLE.error('getMethods', error)
