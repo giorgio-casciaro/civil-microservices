@@ -1,5 +1,6 @@
 <template>
 <div class="DashboardEditForm">
+  <DashboardMenu :dashboard="dashboard"></DashboardMenu>
   <h2>{{strPageTitle}}</h2>
   <p>{{strPageDescription}}</p>
   <div v-if="dashId" class="dashboardEditMenu"><a :href="'/#/dashboardEdit/'+dashId">Info</a> <a :href="'/#/dashboardEditMaps/'+dashId">Mappe</a> <a :href="'/#/dashboardEditImages/'+dashId">Immagini</a></div>
@@ -24,6 +25,8 @@
 </template>
 
 <script>
+import DashboardMenu from '@/dashboards/Menu'
+
 import {
   translate
 } from '@/i18n'
@@ -39,19 +42,20 @@ import InputFile from './InputFile'
 export default {
   name: 'Pic',
   components: {
-    InputFile
+    InputFile,
+    DashboardMenu
   },
   mounted() {
     if (this.dashboard) {
       this.form.id = this.dashboard.id
-      this.dashboardSetted=true
+      this.dashboardSetted = true
     }
   },
   watch: {
-    dashboard: function (val) {
-      if(!this.dashboardSetted){
+    dashboard: function(val) {
+      if (!this.dashboardSetted) {
         this.form.id = this.dashboard.id
-        this.dashboardSetted=true
+        this.dashboardSetted = true
       }
     }
   },
@@ -66,7 +70,12 @@ export default {
       return parseInt(this.$route.params.dashId)
     },
     dashboard: function() {
-      return this.$store.state.dashboards.dashboardsById[this.dashId]
+      if (this.dashId) {
+        this.$store.dispatch('dashboards/loadDashboard', {
+          dashId: this.dashId
+        })
+        return this.$store.getters["dashboards/getDashboard"](this.dashId)
+      }
     }
   },
   data() {
@@ -96,10 +105,6 @@ export default {
     validate,
     t,
     call,
-    test() {
-      return this.$store.state.dashboards.token.split('.')[0]
-      return parseJwt(this.$store.state.dashboards.token)
-    },
     err(msg, extra = false) {
       this.error = this.errors = this.waiting = false
       setTimeout(() => this.error = t(msg), 1)
@@ -112,7 +117,10 @@ export default {
       //   mutation: 'PIC_UPDATED',
       //   payload: this.form
       // })
-      this.$store.commit('dashboards/CHANGE_DASHBOARD_RANDOM', { dashId:this.dashId, random: Math.random() })
+      this.$store.commit('dashboards/CHANGE_DASHBOARD_RANDOM', {
+        dashId: this.dashId,
+        random: Math.random()
+      })
       this.success = t('Immagine Aggiornata')
       setTimeout(() => this.$emit("success"), 2000)
     }

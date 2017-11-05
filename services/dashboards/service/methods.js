@@ -221,11 +221,11 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
         await auth.userCan('dashboard.create', meta, CONFIG.jwt)
         if (reqData.tags)reqData.tags = reqData.tags.map((item) => item.replace('#', ''))
         var mutation = await mutate({data: reqData, objId: id, mutation: 'create', meta})
-        var roleAdmin = { id: 'admin', name: 'Admin', public: 0, description: 'Main dashboard administrators', permissions: [ 'writeDashboard', 'readDashboard', 'writeSubscriptions', 'readSubscriptions', 'writeRoles', 'readRoles', 'writePosts', 'readPosts', 'readHiddenPosts', 'writeOtherUsersPosts' ] }
+        var roleAdmin = { id: 'admin', name: 'Admin', public: 0, description: 'Main dashboard administrators', permissions: [ 'writeDashboard', 'readDashboard', 'writeSubscriptions', 'readSubscription', 'readSubscriptions', 'writeRoles', 'readRoles', 'writePosts', 'readPosts', 'confirmPosts', 'readHiddenPosts', 'writeOtherUsersPosts' ] }
         var mutationRoleAdmin = await mutate({data: roleAdmin, objId: id, mutation: 'addRole', meta})
-        var rolePostAdmin = { id: 'postsAdmin', name: 'Posts Admin', public: 0, description: 'Dashboard posts admin', permissions: ['readDashboard', 'writePosts', 'readPosts', 'readHiddenPosts', 'readSubscriptions', 'readRoles', 'writeOtherUsersPosts'] }
+        var rolePostAdmin = { id: 'postsAdmin', name: 'Posts Admin', public: 0, description: 'Dashboard posts admin', permissions: ['readDashboard', 'writePosts', 'readPosts', 'confirmPosts', 'readHiddenPosts', 'readSubscription', 'readRoles', 'writeOtherUsersPosts'] }
         var mutationRolePostsAdmin = await mutate({data: rolePostAdmin, objId: id, mutation: 'addRole', meta})
-        var roleSubscriber = { id: 'subscriber', name: 'Subscriber', public: 1, description: 'Dashboard subscribers', permissions: ['readDashboard', 'readPosts', 'readSubscriptions', 'readRoles'] }
+        var roleSubscriber = { id: 'subscriber', name: 'Subscriber', public: 1, description: 'Dashboard subscribers', permissions: ['readDashboard', 'readPosts', 'readSubscription', 'readRoles'] }
         var mutationRoleSubscriber = await mutate({data: roleSubscriber, objId: id, mutation: 'addRole', meta})
         var roleGuest = { id: 'guest', name: 'Guest', public: 0, description: 'Dashboard guests, No Role', permissions: [] }
         var mutationRoleGuest = await mutate({data: roleGuest, objId: id, mutation: 'addRole', meta})
@@ -260,7 +260,10 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
         await subscriptions.can(id, userId, 'readDashboard')
         var currentState = await readDashboard(id)
         currentState.subscriptionsMeta = metaUtils.optimize(await subscriptions.getDashMeta(id))
+        currentState.subscriptionsToConfirmMeta = await subscriptions.getDashSubscriptionsToConfirmMeta(id)
         currentState.postsMeta = metaUtils.optimize(await posts.getDashPostsMeta(id))
+        currentState.postsToConfirmMeta = await posts.getDashPostsToConfirmMeta(id)
+        CONSOLE.hl('read currentState', currentState)
         return currentState
       },
       async remove (reqData, meta = {directCall: true}, getStream = null) {
@@ -341,6 +344,7 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
       createPost: posts.create,
       readPost: posts.read,
       updatePost: posts.update,
+      confirmPost: posts.confirm,
       removePost: posts.remove,
       addPostPic: posts.addPic,
       getPostPic: posts.getPic,

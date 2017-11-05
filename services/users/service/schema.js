@@ -1,3 +1,11 @@
+var addExtraSchema = function (prefix, extraSchema, schema) {
+  for (var itemName in extraSchema) {
+    for (var subitemName in extraSchema[itemName]) {
+      schema[itemName][prefix + subitemName[0].toUpperCase() + subitemName.substr(1)] = extraSchema[itemName][subitemName]
+    }
+  }
+}
+
 var jsFields = require('sint-bit-utils/utils/JSchemaFields')
 var jsUserById = { properties: { id: jsFields.id }, required: ['id'] }
 var jsRes = {
@@ -23,7 +31,7 @@ var loginRes = { properties: {
 var testRes = { additionalProperties: true, properties: { success: { type: 'string' }, error: { type: 'string' }, subtests: { type: 'array', items: subtestRes } } }
 var subtestRes = { properties: { count: { type: 'integer' }, success: { type: 'string' }, error: { type: 'string' } } }
 
-var jsRead = { properties: { id: jsFields.id, publicName: jsFields.name, hasPic: jsFields.hasPic, guest: { type: 'number' }, tags: jsFields.tags } }
+var jsRead = { properties: { publicName: jsFields.name, hasPic: jsFields.hasPic, guest: { type: 'number' } } }
 var jsReadPrivate = { properties: { id: jsFields.id, email: jsFields.email, emailStatus: jsFields.emailStatus, publicName: jsFields.name, hasPic: jsFields.hasPic, tags: jsFields.tags } }
 var jsQueryRes = { type: 'array', items: jsRead }
 
@@ -35,8 +43,7 @@ var toBool = (string, defaultVal = false) => {
   return false
 }
 var jsCanRes = { properties: { success: { type: 'string' }, error: { type: 'string' } } }
-
-module.exports = {
+var schema = {
   net: {
     'channels': {
       'httpPublic': {
@@ -233,3 +240,6 @@ module.exports = {
     }
   }
 }
+addExtraSchema('notifications', require('./notificationsSchema'), schema)
+console.log('SCHEMA ', schema)
+module.exports = schema

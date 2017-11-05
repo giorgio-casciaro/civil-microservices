@@ -1,19 +1,15 @@
 <template>
-<div class="DashboardPostsList">
-  <h4>Ultimi Messaggi</h4>
-    <div v-if="posts.status==='loading'">
-      Caricamento Messaggi
-    </div>
-    <div v-if="posts.items">
-      <div v-for="(postId, index) in posts.items">
+<div class="DashboardPostsToConfirmList">
+  <h4>Messaggi da confermare</h4>
+  <!-- <pre>{{posts}}</pre> -->
+    <div v-if="posts">
+      <div v-for="(postId, index) in posts">
         <SinglePost :postId="postId"></SinglePost>
       </div>
     </div>
-    <div v-if="!posts.items">
-      Non ci sono messagi in questa bacheca
+    <div v-if="!posts">
+      Non ci sono messagi da confermare
     </div>
-    <div><a class="button" @click="reload">Aggiorna</a></div>
-    <div><a class="button" @click="loadMore">Carica altri post</a></div>
 </div>
 </template>
 <script>
@@ -23,21 +19,24 @@ import {
 } from '@/i18n'
 
 export default {
-  name: 'DashboardPostsList',
+  name: 'DashboardPostsToConfirmList',
   props: {
     "dashId": Number
   },
-  mounted() {
-    this.$store.dispatch("dashboards/lastDashboardPosts", {
-      dashId: this.dashId
-    })
-  },
+  // mounted() {
+  //   this.$store.dispatch("dashboards/lastDashboardPosts", {
+  //     dashId: this.dashId
+  //   })
+  // },
   components: {
     SinglePost
   },
   computed: {
+    dashboard: function() {
+      return this.$store.getters["dashboards/getDashboard"](this.dashId)
+    },
     posts: function() {
-      return this.$store.state.dashboards.dashboardsPostsList[this.dashId]||{}
+      return this.dashboard.postsToConfirmMeta||[]
     }
   },
   methods: {

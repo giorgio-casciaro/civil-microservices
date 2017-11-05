@@ -143,6 +143,8 @@ async function create (reqData, meta = {directCall: true}, getStream = null) {
   CONSOLE.hl('dashPostCreate', reqData)
   var mutation = await mutate({data: reqData, objId: id, mutation: 'createPost', meta})
   var view = await updateView(id, [mutation], true)
+  // var data = await readPost(id, reqData.userId)
+  await addToDashPostsToConfirmMeta(view.dashId, view.id)
   netClient.emit('createPost', view)
   return {success: MODULE_NAME + `created`, id, data: view}
 }
@@ -155,16 +157,33 @@ function checkToTags (to, tags, userId) {
   CONSOLE.hl('checkToTags', to, tags, userId, founded)
   return founded
 }
-
 async function read (reqData, meta = {directCall: true}, getStream = null) {
   var id = reqData.id
   var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
-  var currentState = await readPost(id, userId)
+  var currentState = await readPost(id, userId, meta, true)
   if (!currentState) throw new Error('post not readable or deleted')
   // currentState.user = await netClient.rpc('readUser', {id: currentState.userId}, meta)
   return currentState
 }
-async function readPost (id, userId, meta, loadUser = true) {
+async function setReadedByUserMeta (id, userId) {
+  var key = new Key(aerospikeConfig.namespace, aerospikeConfig.metaSet, 'PU_' + id + '_' + userId)
+  var op = Aerospike.operator
+  var ops = [
+    op.listAppend('readed', Date.now()),
+    op.listSize('readed')
+  ]
+  var res = await kvDb.operate(kvDbClient, key, ops) || {readed: 0}
+  CONSOLE.hl('setReadedByUserMeta', res)
+  return res.readed
+}
+async function getReadedByUserMeta (id, userId, countOnly = true) {
+  var key = new Key(aerospikeConfig.namespace, aerospikeConfig.metaSet, 'PU_' + id + '_' + userId)
+  var result
+  if (countOnly)result = await kvDb.operate(kvDbClient, key, [Aerospike.operator.listSize('readed')])
+  else result = await kvDb.operate(kvDbClient, key, [Aerospike.operator.read('readed')])
+  return result.readed
+}
+async function readPost (id, userId, meta, loadUser = false) {
   var currentState = await getView(id)
   if (!currentState) return null
 
@@ -186,8 +205,9 @@ async function readPost (id, userId, meta, loadUser = true) {
       }
     }
   }
-  currentState.subscription = await subscriptions.readSubscription(currentState.subscriptionId)
+  currentState.subscription = await subscriptions.readSubscription(currentState.subscriptionId, currentState.userId, currentState.dashId, { meta, guestIfNull: true })
   if (loadUser)currentState.user = await netClient.rpc('readUser', {id: currentState.userId}, meta)
+  if (loadUser)currentState.readedByUser = await setReadedByUserMeta(id, userId)
     // currentState.subscriptionId = subscription.id
   CONSOLE.hl('readPost currentState', id, currentState)
   return currentState
@@ -204,6 +224,37 @@ async function update (reqData, meta = {directCall: true}, getStream = null) {
   var mutation = await mutate({data: reqData, objId: id, mutation: 'update', meta})
   await updateView(id, [mutation])
   return {success: MODULE_NAME + `updated`}
+}
+async function addToDashPostsToConfirmMeta (dashId, id) {
+  var key = new Key(aerospikeConfig.namespace, aerospikeConfig.metaSet, dashId + '_confirm')
+  var meta = await kvDb.get(kvDbClient, key)
+  if (!meta || !meta.items)meta = {items: []}
+  CONSOLE.hl('addToDashPostsToConfirmMeta', {meta})
+  meta.items.push(id)
+  await kvDb.put(kvDbClient, key, meta)
+}
+async function removeFromDashPostsToConfirmMeta (dashId, id) {
+  var key = new Key(aerospikeConfig.namespace, aerospikeConfig.metaSet, dashId + '_confirm')
+  var meta = await kvDb.get(kvDbClient, key) || {items: []}
+  CONSOLE.hl('removeFromDashPostsToConfirmMeta', {meta})
+  meta.items.splice(meta.items.indexOf(id), 1)
+  await kvDb.put(kvDbClient, key, meta)
+}
+async function getDashPostsToConfirmMeta (dashId) {
+  var key = new Key(aerospikeConfig.namespace, aerospikeConfig.metaSet, dashId + '_confirm')
+  var meta = await kvDb.get(kvDbClient, key) || {items: []}
+  CONSOLE.hl('getDashPostsToConfirmMeta', {meta})
+  return meta.items
+}
+async function confirm (reqData, meta = {directCall: true}, getStream = null) {
+  var id = reqData.id
+  var currentState = await getView(id)
+  var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
+  await subscriptions.can(currentState.dashId, userId, 'confirmPosts')
+  var mutation = await mutate({data: reqData, objId: id, mutation: 'confirmPost', meta})
+  var view = await updateView(id, [mutation])
+  await removeFromDashPostsToConfirmMeta(view.dashId, view.id)
+  return {success: MODULE_NAME + ` confirmed`}
 }
 async function remove (reqData, meta = {directCall: true}, getStream = null) {
   var id = reqData.id
@@ -282,7 +333,7 @@ async function queryLastPosts (reqData = {}, meta = {directCall: true}, getStrea
   CONSOLE.hl('queryLastPosts', dashId, dashPostsNumber, userId, rawIds)
   // return {}
   // await subscriptions.can(reqData.dashId, userId, 'readPosts')
-  var results = await Promise.all(rawIds.map((id) => readPost(id, userId, meta)))
+  var results = await Promise.all(rawIds.map((id) => readPost(id, userId, meta, true)))
   CONSOLE.hl('queryLastPosts results', results)
   return results.filter((post) => post !== null)
 }
@@ -303,12 +354,14 @@ module.exports = {
     // }, 1000)
   },
   getDashPostsMeta,
+  getDashPostsToConfirmMeta,
   addPic,
   removePic,
   getPic,
   create,
   read,
   update,
+  confirm,
   remove,
   updateView,
   getView,

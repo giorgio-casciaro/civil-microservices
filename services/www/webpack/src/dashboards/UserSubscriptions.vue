@@ -7,7 +7,7 @@
     <div v-if="subscription.dashInfo.pics&&subscription.dashInfo.pics[0]" class="image"><img :src="`${$store.state.apiServer}/dashboards/getPic/id/${subscription.dashInfo.pics[0]}`" /></div>
     <div class="tags">{{subscription.dashInfo.tags.join(",")}}</div>
     <a class="button" :href="'/#/dashboard/'+subscription.dashInfo.id">{{strEnter}}</a>
-    <pre>{{subscription}}</pre>
+    <!-- <pre>{{subscription}}</pre> -->
   </div>
   <!-- <pre>{{$store.state.dashboards.subscriptions}}</pre> -->
 </div>
@@ -22,7 +22,7 @@ export default {
   },
   components: {  },
   computed: {
-    strSubscriptionsList: function () { return t('Lista Iscrizioni') },
+    strSubscriptionsList: function () { return t('Le tue iscrizioni') },
     strEnter: function () { return t('Entra') }
   },
   methods: {

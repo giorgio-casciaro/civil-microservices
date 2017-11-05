@@ -109,6 +109,31 @@ var startTest = async function (netClient) {
   var updatePassword = await netClient.testLocalMethod('updatePassword', {id: create.id, password: fields.newPassword, confirmPassword: fields.newPassword, oldPassword: fields.password}, basicMeta)
   microTest(updatePassword, { success: 'string' }, 'updatePassword', TYPE_OF)
 
+  // NOTIFICATIONS
+  var notificationsCreate = await netClient.testLocalMethod('notificationsCreate', { users: [create.id], type: 'test', data: {title: 'Long text', body: 'Long text', dashId: null} }, basicMeta)
+  microTest(notificationsCreate, {success: 'Notifications created'}, 'notificationsCreate', FILTER_BY_KEYS)
+
+  var notificationsRead = await netClient.testLocalMethod('notificationsRead', { id: notificationsCreate.ids[0] }, basicMeta)
+  microTest(notificationsRead, {type: 'test'}, 'notificationsRead', FILTER_BY_KEYS)
+
+  var notificationsReaded = await netClient.testLocalMethod('notificationsReaded', { id: notificationsCreate.ids[0] }, basicMeta)
+  microTest(notificationsReaded, {success: 'Notifications readed'}, 'notificationsReaded', FILTER_BY_KEYS)
+
+  var notificationsReadReaded = await netClient.testLocalMethod('notificationsRead', { id: notificationsCreate.ids[0] }, basicMeta)
+  microTest(notificationsReadReaded, {readed: 'number'}, 'notificationsRead', TYPE_OF)
+
+  var notificationsCreateObjectId = await netClient.testLocalMethod('notificationsCreate', { users: [create.id], objectId: 'testObjectId', type: 'test', data: {title: 'Long text', body: 'Long text', dashId: null} }, basicMeta)
+  microTest(notificationsCreateObjectId, {success: 'Notifications created'}, 'notificationsCreateObjectId', FILTER_BY_KEYS)
+
+  var notificationsReadedByObjectId = await netClient.testLocalMethod('notificationsReadedByObjectId', { objectId: 'testObjectId' }, basicMeta)
+  microTest(notificationsReadedByObjectId, {success: 'Notifications readedByObjectId'}, 'notificationsReadedByObjectId', FILTER_BY_KEYS)
+
+  var notificationsReadReadedByObjectId = await netClient.testLocalMethod('notificationsRead', { id: notificationsCreateObjectId.ids[0] }, basicMeta)
+  microTest(notificationsReadReadedByObjectId, {readed: 'number'}, 'notificationsReadReadedByObjectId', TYPE_OF, 1)
+
+  var notificationsLastsByUserId = await netClient.testLocalMethod('notificationsLastsByUserId', { }, basicMeta)
+  microTest(notificationsLastsByUserId, 2, 'notificationsLastsByUserId', COUNT)
+
   var remove = await netClient.testLocalMethod('remove', { id: create.id }, basicMeta)
   microTest(remove, {success: 'User removed'}, 'remove')
   var readRemove = await netClient.testLocalMethod('read', { id: create.id }, basicMeta)
@@ -132,7 +157,7 @@ var startTest = async function (netClient) {
   microTest(queryResponse2, 3, 'queryResponse insert and query 3 items  from testTimestamp2', COUNT)
 
   var guest = {
-    email: `test${microRandom}@test${microRandom}.com`,
+    email: `test${microRandom}${microRandom}@test${microRandom}.com`,
     password: `t$@es${microRandom}Tt$te1st_com`,
     name: `name ${microRandom} Tt$te1st_com`,
     info: {ip: '123.213.123.213'}

@@ -72,6 +72,12 @@ module.exports = {
         }
       }
     },
+    'confirm': {
+      public: true,
+      responseType: 'response',
+      requestSchema: jsItemBySubscriptionId,
+      responseSchema: jsRes
+    },
     'update': {
       public: true,
       responseType: 'response',

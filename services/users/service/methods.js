@@ -17,7 +17,9 @@ const nodemailer = require('nodemailer')
 const vm = require('vm')
 const fs = require('fs')
 
+var methods
 const auth = require('sint-bit-utils/utils/auth')
+const notifications = require('./notifications')
 
 var service = async function getMethods (CONSOLE, netClient, CONFIG = require('./config')) {
   try {
@@ -63,7 +65,6 @@ var service = async function getMethods (CONSOLE, netClient, CONFIG = require('.
           await kvDb.put(kvDbClient, key, dbInitStatus)
         }
         CONSOLE.log('dbInitStatus', dbInitStatus)
-        if (dbInitStatus.version === 1) return true
         if (dbInitStatus.version < 1) {
           CONSOLE.log('dbInitStatus v1', dbInitStatus)
           await kvDb.createIndex(kvDbClient, { ns: CONFIG.aerospike.namespace, set: CONFIG.aerospike.set, bin: 'email', index: CONFIG.aerospike.set + '_email', datatype: Aerospike.indexDataType.STRING })
@@ -71,6 +72,7 @@ var service = async function getMethods (CONSOLE, netClient, CONFIG = require('.
           await kvDb.createIndex(kvDbClient, { ns: CONFIG.aerospike.namespace, set: CONFIG.aerospike.set, bin: 'created', index: CONFIG.aerospike.set + '_created', datatype: Aerospike.indexDataType.NUMERIC })
         }
         await kvDb.put(kvDbClient, key, {version: 1, timestamp: Date.now()})
+        await notifications.init(netClient, CONSOLE, kvDbClient, methods)
         CONSOLE.log('init ok')
       } catch (error) {
         CONSOLE.log('problems during init', error)
@@ -113,7 +115,7 @@ var service = async function getMethods (CONSOLE, netClient, CONFIG = require('.
         return view
       } catch (error) { throw new Error('problems during getView ' + error) }
     }
-    const readUser = async function (id, meta, checkValidity = false) {
+    const readUser = async function (id, checkValidity = false) {
       var currentState = await getView(id)
       CONSOLE.hl('readUser', id, currentState)
       if (checkValidity) {
@@ -153,7 +155,7 @@ var service = async function getMethods (CONSOLE, netClient, CONFIG = require('.
     const getPicPath = (id, type = 'mini', format = 'jpeg') => path.join(CONFIG.uploadPath, `pic-${type}-${id}.${format}`)
     await init()
 
-    return {
+    methods = {
       async getPermissions (reqData, meta = {directCall: true}, getStream = null) {
         return { permissions: [ [10, 'user.' + reqData.id + '.*', 1], [5, 'user.*.read', 1]] }
       },
@@ -186,7 +188,7 @@ var service = async function getMethods (CONSOLE, netClient, CONFIG = require('.
       async read (reqData, meta = {directCall: true}, getStream = null) {
         var id = reqData.id
         await auth.userCan('user.' + id + '.read', meta, CONFIG.jwt)
-        var user = await readUser(id)
+        var user = await readUser(id, true)
         return user
       },
       async readUsers (reqData, meta = {directCall: true}, getStream = null) {
@@ -335,6 +337,10 @@ var service = async function getMethods (CONSOLE, netClient, CONFIG = require('.
         return results
       }
     }
+    for (var notificationsMethod in notifications) {
+      methods['notifications' + notificationsMethod[0].toUpperCase() + notificationsMethod.substr(1)] = notifications[notificationsMethod]
+    }
+    return methods
   } catch (error) {
     CONSOLE.error('getMethods', error)
     return { error: 'getMethods error' }

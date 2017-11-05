@@ -26,7 +26,7 @@ var subtestRes = { properties: { count: { type: 'integer' }, success: { type: 's
 var testRes = { additionalProperties: true, properties: { success: { type: 'string' }, error: { type: 'string' }, subtests: { type: 'array', items: subtestRes } } }
 
 var jsInfo = { properties: { id: dashId, name: jsFields.name, description: jsFields.description, options: dashOptions, tags: jsFields.tags, maps: jsFields.maps, pics: {type: 'array'} } }
-var jsRead = { properties: { id: dashId, name: jsFields.name, description: jsFields.description, options: dashOptions, tags: jsFields.tags, maps: jsFields.maps, pics: {type: 'array'}, roles: {type: 'object'}, subscriptionsMeta: {type: 'object'}, postsMeta: {type: 'object'} } }
+var jsRead = { properties: { id: dashId, name: jsFields.name, description: jsFields.description, options: dashOptions, tags: jsFields.tags, maps: jsFields.maps, pics: {type: 'array'}, roles: {type: 'object'}, subscriptionsMeta: {type: 'object'}, postsMeta: {type: 'object'}, postsToConfirmMeta: {type: 'array'}, subscriptionsToConfirmMeta: {type: 'array'} } }
 var jsQueryRes = { type: 'array', items: jsInfo }
 
 var jsRoleProp = { id: jsFields.id, dashId: dashId, name: jsFields.name, public: jsFields.public, description: jsFields.description, tags: jsFields.tags, permissions: jsFields.rolePermissions }
@@ -193,6 +193,7 @@ module.exports = {
     readSubscription: subscriptionsSchema.methods.read,
     readMultipleSubscriptions: subscriptionsSchema.methods.readMultiple,
     updateSubscription: subscriptionsSchema.methods.update,
+    confirmSubscription: subscriptionsSchema.methods.confirm,
     removeSubscription: subscriptionsSchema.methods.remove,
     getExtendedSubscriptionsByUserId: subscriptionsSchema.methods.getExtendedByUserId,
     queryLastSubscriptions: subscriptionsSchema.methods.queryLast,
@@ -200,6 +201,7 @@ module.exports = {
     createPost: postsSchema.methods.create,
     readPost: postsSchema.methods.read,
     updatePost: postsSchema.methods.update,
+    confirmPost: postsSchema.methods.confirm,
     removePost: postsSchema.methods.remove,
     addPostPic: postsSchema.methods.addPic,
     getPostPic: postsSchema.methods.getPic,

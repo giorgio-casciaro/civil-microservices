@@ -1,5 +1,6 @@
 <template>
 <div class="DashboardEditForm">
+  <DashboardMenu :dashboard="dashboard"></DashboardMenu>
   <h2>{{strPageTitle}}</h2>
   <p>{{strPageDescription}}</p>
   <div v-if="dashId" class="dashboardEditMenu"><a :href="'/#/dashboardEdit/'+dashId">Info</a> <a :href="'/#/dashboardEditMaps/'+dashId">Mappe</a> <a :href="'/#/dashboardEditImages/'+dashId" >Immagini</a></div>
@@ -24,6 +25,7 @@
 <script>
 const mapboxgl = require("mapbox-gl")
 const style = require("../assets/mapstyle")
+import DashboardMenu from '@/dashboards/Menu'
 
 import {
   translate
@@ -60,7 +62,7 @@ export default {
       }
     }
   },
-  components: {},
+  components: { DashboardMenu },
   computed: {
     strPageTitle: function() {
       return translate('app', 'Bacheca')

@@ -1,5 +1,7 @@
 import Vue from 'vue'
 import Vuex from 'vuex'
+import * as moment from 'moment'
+
 // import createPersistedState from 'vuex-persistedstate'
 Vue.use(Vuex)
 var apiServer = '/api'
@@ -32,11 +34,11 @@ const store = new Vuex.Store({
     }
   },
   getters: {
-    getTranslation: (state, getters) => (group, string) => {
-      console.log('getTranslationStore', group, string, state.translations)
-
-      return string
+    toDate: (state, getters) => (timestamp, format) => {
+      moment.locale('it')
+      return moment(parseInt(timestamp)).format(format || 'dddd, D MMMM YYYY, h:m:s')
     }
+
   }
 })
 // const httpApiPost = (service, method, request, mutation, filterResponse = (x) => x, errorMutation = 'APP_ERROR') => {

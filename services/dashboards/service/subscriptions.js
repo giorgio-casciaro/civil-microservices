@@ -19,13 +19,6 @@ const auth = require('sint-bit-utils/utils/auth')
 
 var dashboards = require('./methods')
 
-const readRaw = async function (id, userId, subscription) {
-  CONSOLE.hl('read', id, userId, subscription)
-  var currentState = await getView(id)
-  CONSOLE.hl('read', id, userId, subscription)
-  if (!currentState || currentState._deleted) return null
-  return currentState
-}
 const getByDashIdAndUserId = async function (dashId, userId) {
   try {
     CONSOLE.hl('getByDashIdAndUserId', `${dashId}${userId}`)
@@ -49,31 +42,6 @@ const can = async function (dashId, userId, can, role, subscriptionId) {
     if (!role) throw new Error(`role ${subscription.roleId} not exists`)
     CONSOLE.hl('can subscription', subscription, dashId, userId, can, role)
     var rolePermissions = role.permissions || []
-    // if (!rolePermissions || rolePermissions.indexOf(can) === -1) {
-    //   var dashState = await dashboards.readDashboard(dashId)
-    //   if (role.id === 'guest' && dashState.options.guestRead === 'allow') {
-    //     rolePermissions.push('readPosts')
-    //     rolePermissions.push('readDashboard')
-    //   }
-    //   if (role.id === 'guest' && dashState.options.guestSubscribe === 'allow') {
-    //     rolePermissions.push('subscribe')
-    //   }
-    //   if (role.id === 'guest' && dashState.options.guestSubscribe === 'confirm') {
-    //     rolePermissions.push('confirmSubscribe')
-    //   }
-    //   if (role.id === 'guest' && dashState.options.guestWrite === 'allow') {
-    //     rolePermissions.push('writePosts')
-    //   }
-    //   if (role.id === 'guest' && dashState.options.guestWrite === 'confirm') {
-    //     rolePermissions.push('confirmWritePosts')
-    //   }
-    //   if (role.id === 'subscriber' && dashState.options.subscriberWrite === 'allow') {
-    //     rolePermissions.push('writePosts')
-    //   }
-    //   if (role.id === 'subscriber' && dashState.options.subscriberWrite === 'confirm') {
-    //     rolePermissions.push('confirmWritePosts')
-    //   }
-    // }
     CONSOLE.hl('can rolePermissions', role, rolePermissions)
 
     if (!rolePermissions || rolePermissions.indexOf(can) === -1) throw new Error('Dashboard Role ' + role.id + ' have no permissions to ' + can)
@@ -210,16 +178,49 @@ const create = async function (reqData, meta = {directCall: true}, getStream = n
   var returnResults = await createRaw(reqData, meta)
   return returnResults
 }
-
-async function readSubscription (id, userId, dashId, rawView) {
+async function addToDashSubscriptionsToConfirmMeta (dashId, id) {
+  var key = new Key(aerospikeConfig.namespace, aerospikeConfig.metaSet, dashId + '_confirm')
+  var meta = await kvDb.get(kvDbClient, key)
+  if (!meta || !meta.items)meta = {items: []}
+  CONSOLE.hl('addToDashSubscriptionsToConfirmMeta', {meta})
+  meta.items.push(id)
+  await kvDb.put(kvDbClient, key, meta)
+}
+async function removeFromDashSubscriptionsToConfirmMeta (dashId, id) {
+  var key = new Key(aerospikeConfig.namespace, aerospikeConfig.metaSet, dashId + '_confirm')
+  var meta = await kvDb.get(kvDbClient, key) || {items: []}
+  CONSOLE.hl('removeFromDashSubscriptionsToConfirmMeta', {meta})
+  meta.items.splice(meta.items.indexOf(id), 1)
+  await kvDb.put(kvDbClient, key, meta)
+}
+async function getDashSubscriptionsToConfirmMeta (dashId) {
+  var key = new Key(aerospikeConfig.namespace, aerospikeConfig.metaSet, dashId + '_confirm')
+  var meta = await kvDb.get(kvDbClient, key) || {items: []}
+  CONSOLE.hl('getDashSubscriptionsToConfirmMeta', {meta})
+  return meta.items
+}
+async function confirm (reqData, meta = {directCall: true}, getStream = null) {
+  var id = reqData.id
+  var currentState = await getView(id)
+  var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
+  await can(currentState.dashId, userId, 'confirmSubscriptions')
+  var mutation = await mutate({data: reqData, objId: id, mutation: 'confirmPost', meta})
+  var view = await updateView(id, [mutation])
+  await removeFromDashSubscriptionsToConfirmMeta(view.dashId, view.id)
+  return {success: MODULE_NAME + ` confirmed`}
+}
+async function readSubscription (id, userId, dashId, options = { meta: null, rawView: null, guestIfNull: false, user: false, dash: false }) {
   var guestSubscription = {id: '0_0', roleId: 'guest', dashId, userId, _confirmed: 1, permissions: []}
-  var currentState = await getView(id, rawView)
-  if (!currentState) return guestSubscription
-  if (currentState._deleted || !currentState._confirmed) {
-    // throw new Error('Subscription not active')
-    return guestSubscription
+  var currentState = await getView(id, options.rawView)
+  if (!currentState) {
+    if (options.guestIfNull)currentState = guestSubscription
+    else return null
   }
-  // subscription = {id: '0_0', roleId: 'guest', dashId, userId, _confirmed: 1, permissions: []}
+  if (currentState._deleted || !currentState._confirmed) {
+    await can(currentState.dashId, userId, 'readSubscription')
+  }
+  if (options.dash)currentState.dashboard = await dashboards.getDashboardInfo(currentState.dashId)
+  if (options.user)currentState.user = await netClient.rpc('readUser', {id: currentState.userId}, options.meta)
   return currentState
 }
 
@@ -228,7 +229,7 @@ async function read (reqData, meta = {directCall: true}, getStream = null) {
   var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
   var currentState = await readSubscription(id, userId)
   if (currentState.userId !== userId) {
-    await can(currentState.dashId, userId, 'readSubscriptions')
+    await can(currentState.dashId, userId, 'readSubscription')
   }
   return currentState
 }
@@ -252,10 +253,10 @@ async function update (reqData, meta = {directCall: true}, getStream = null) {
   var id = reqData.id
   var currentState = await getView(id)
   var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
-  if (currentState.userId !== userId) {
+  // if (currentState.userId !== userId) {
     // ONLY ADMIN OR SUBSCRIPTION OWNER
-    await can(currentState.dashId, userId, 'writeSubscriptions')
-  }
+  await can(currentState.dashId, userId, 'writeSubscriptions')
+  // }
   if (reqData.roleId) {
     // NOT PUBLIC ROLES CAN BE ASSIGNED ONLY WITH WRITE PERMISSIONS
     var role = await dashboards.getDashRole(reqData.roleId, currentState.dashId)
@@ -319,9 +320,8 @@ async function queryLast (reqData = {}, meta = {directCall: true}, getStream = n
     if (dashSubscriptionsNumber - i >= 0)rawIds.push(dashId + '_' + (dashSubscriptionsNumber - i))
   }
   CONSOLE.hl('queryLast', dashId, dashSubscriptionsNumber, userId, rawIds)
-  // return {}
-  // await can(reqData.dashId, userId, 'readPosts')
-  var results = await Promise.all(rawIds.map((id) => readRaw(id, userId, subscription)))
+
+  var results = await Promise.all(rawIds.map((id) => readSubscription(id, userId, dashId, {meta, user: true})))
   CONSOLE.hl('queryLast results', results)
   results = results.filter((subscription) => subscription !== null)
   return results
@@ -353,6 +353,7 @@ module.exports = {
   can,
   createRaw,
   getDashMeta,
+  getDashSubscriptionsToConfirmMeta,
   create,
   read,
   readSubscription,

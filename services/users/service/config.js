@@ -25,11 +25,20 @@ module.exports = {
     hosts: process.env.aerospikeHosts || '127.0.0.1:3000',
     // log: {level: process.env.aerospikeLogLevel || 4},
     set: process.env.aerospikeSet || 'users',
-    mutationsSet: process.env.aerospikeMutationsSet || 'mutationsUsers',
+    mutationsSet: process.env.aerospikeMutationsSet || 'mutations',
     filesSet: process.env.aerospikeFilesSet || 'filesSet',
     filesChunksSet: process.env.aerospikeFilesChunksSet || 'filesChunksSet',
-    viewsSet: process.env.aerospikeViewsSet || 'viewsUsers',
+    viewsSet: process.env.aerospikeViewsSet || 'views',
     namespace: process.env.aerospikeNamespace || 'cc_users',
+    policies: { timeout: parseInt(process.env.aerospikeTimeout) || 600000 }
+  },
+  aerospikeNotifications: {
+    hosts: process.env.aerospikeHosts || '127.0.0.1:3000',
+    // log: {level: process.env.aerospikeLogLevel || 4},
+    set: process.env.aerospikeNotificationsSet || 'notifications',
+    mutationsSet: process.env.aerospikeMutationsNotificationsSet || 'notificationsMutations',
+    viewsSet: process.env.aerospikeNotificationsViewsSet || 'notificationsViews',
+    namespace: process.env.aerospikeNotificationsNamespace || 'cc_users',
     policies: { timeout: parseInt(process.env.aerospikeTimeout) || 600000 }
   },
   console: { error: process.env.consoleError || true, debug: process.env.consoleDebug || true, log: process.env.consoleLog || true, warn: process.env.consoleWarn || true }

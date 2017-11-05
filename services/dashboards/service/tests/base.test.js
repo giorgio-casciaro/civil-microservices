@@ -273,7 +273,7 @@ var startTest = async function (netClient) {
   microTest(addPostPic, { success: 'Dashboard Posts - pic updated' }, 'addPostPic', FILTER_BY_KEYS)
 
   var readPost = await netClient.testLocalMethod('readPost', { id: createPost.id }, {token: user_posts.token})
-  microTest(readPost, {body: post.body}, 'readPost', FILTER_BY_KEYS)
+  microTest(readPost, {body: post.body, readedByUser: 1}, 'readPost', FILTER_BY_KEYS)
 
   var getPostPic = await netClient.testLocalMethod('getPostPic', {id: readPost.pics[0]}, {token: user_posts.token})
   microTest(typeof getPostPic, 'string', 'getPostPic')
@@ -285,7 +285,7 @@ var startTest = async function (netClient) {
   microTest(updatePost, { success: 'Dashboard Posts - updated' }, 'updatePost', FILTER_BY_KEYS)
 
   var readPost2 = await netClient.testLocalMethod('readPost', { id: createPost.id }, {token: user_posts.token})
-  microTest(readPost2, {body: post.body2}, 'readPost2', FILTER_BY_KEYS)
+  microTest(readPost2, {body: post.body2, readedByUser: 2}, 'readPost2', FILTER_BY_KEYS)
 
   var removePost = await netClient.testLocalMethod('removePost', { id: createPost.id }, {token: user_posts.token})
   microTest(removePost, { success: 'Dashboard Posts - removed' }, 'Post remove', FILTER_BY_KEYS)

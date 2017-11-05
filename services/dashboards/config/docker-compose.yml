@@ -6,7 +6,7 @@ services:
     #  logging:
     #    driver:        none
      working_dir:       /microservice
-     command:           sh -c "npm run watch_start"
+     command:           sh -c "npm run watch_test"
      environment:
        uploadPath:      /uploads/
        schemaHost:      'http://schema:10000'

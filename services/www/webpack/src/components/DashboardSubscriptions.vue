@@ -2,8 +2,10 @@
 <section class="viewportViewBody DashboardSubscriptions">
   <!-- <pre>{{dashboard}}</pre> -->
   <div v-if="dashId&&dashboard">
-    <h3>{{dashboard.name}} - {{strTitle}} <a class="button" :href="'/#/dashboardEdit/'+dashId">Opzioni Bacheca</a> <a class="button" :href="'/#/dashboard/'+dashId">Messaggi</a></h3>
-    <SubscriptionsList :dashId="dashId" ></SubscriptionsList>
+    <DashboardMenu :dashboard="dashboard"></DashboardMenu>
+    <div class="menu"><a @click="show='SubscriptionsList'" >Ultime iscrizioni</a> <a @click="show='SubscriptionsToConfirmList'" >Iscrizioni da confermare <i>({{this.dashboard.subscriptionsToConfirmMeta.length}})</i></a></div>
+    <SubscriptionsList  v-if="show==='SubscriptionsList'"  :dashId="dashId" ></SubscriptionsList>
+    <SubscriptionsToConfirmList  v-if="show==='SubscriptionsToConfirmList'"  :dashId="dashId" ></SubscriptionsToConfirmList>
   </div>
 </section>
 </template>
@@ -11,12 +13,15 @@
 <script>
 import {translate } from '@/i18n'
 import SubscriptionsList from '@/dashboards/SubscriptionsList'
+import SubscriptionsToConfirmList from '@/dashboards/SubscriptionsToConfirmList'
+import DashboardMenu from '@/dashboards/Menu'
+
 import Vue from 'vue'
 
 export default {
   name: 'DashboardSubscriptions',
   components: {
-    SubscriptionsList
+    SubscriptionsList,DashboardMenu,SubscriptionsToConfirmList
   },
   computed: {
     strTitle: function() {
@@ -29,7 +34,7 @@ export default {
     //   return this.$store.state.dashboards.subscriptionsByDashboardId[this.dashId]
     // },
     dashboard: function() {
-      if(!this.$store.state.dashboards.dashboardsById[this.dashId])this.$store.dispatch('dashboards/loadDashboard', this.dashId)
+      if(!this.$store.state.dashboards.dashboardsById[this.dashId])this.$store.dispatch('dashboards/loadDashboard', {dashId:this.dashId})
       return this.$store.state.dashboards.dashboardsById[this.dashId]
     },
     strNewPost: function () { return translate('dashboards', 'Nuovo Post') },
@@ -42,6 +47,7 @@ export default {
   },
   data() {
     return {
+      show:"SubscriptionsList"
     }
   },
 }

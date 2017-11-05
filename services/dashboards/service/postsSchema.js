@@ -30,7 +30,7 @@ var jsRes = {
 var goelocation = { type: 'array', items: { type: 'object', properties: { lat: {type: 'number'}, lng: {type: 'number'} }, required: ['lat', 'lng'] } }
 var pics = { type: 'array', items: jsFields.id }
 var to = { type: 'array', items: { type: 'string' } }
-var jsProp = { id: postId, name: jsFields.name, userId: jsFields.id, subscription: { type: 'object' }, dashId: dashId, public: jsFields.public, body: { type: 'string' }, location: goelocation, tags: jsFields.tags, to, pics, _confirmed: { type: 'number' }, _deleted: { type: 'number' }, updated: { type: 'string' }, created: { type: 'string' } }
+var jsProp = { id: postId, name: jsFields.name, userId: jsFields.id, subscription: { type: 'object' }, dashId: dashId, public: jsFields.public, body: { type: 'string' }, location: goelocation, tags: jsFields.tags, to, pics, _confirmed: { type: 'number' }, _deleted: { type: 'number' }, updated: { type: 'string' }, created: { type: 'string' }, user: { type: 'object' }, readedByUser: { type: 'number' } }
 var jsUpdate = { id: postId, name: jsFields.name, public: jsFields.public, body: { type: 'string' }, location: goelocation, tags: jsFields.tags, to, pics, _confirmed: { type: 'number' }, _deleted: { type: 'number' } }
 var jsQueryRes = { type: 'array', items: {properties: jsProp} }
 
@@ -83,6 +83,12 @@ module.exports = {
       responseSchema: false
     },
     'remove': {
+      public: true,
+      responseType: 'response',
+      requestSchema: jsItemByPostId,
+      responseSchema: jsRes
+    },
+    'confirm': {
       public: true,
       responseType: 'response',
       requestSchema: jsItemByPostId,

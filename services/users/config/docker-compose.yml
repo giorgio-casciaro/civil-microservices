@@ -2,8 +2,8 @@ version:                '3.2'
 
 services:
    users:
-    #  logging:
-    #    driver: none
+     logging:
+       driver: none
      image:             giorgiocasciaro/civil-microservices-users:12
      command:           sh -c "npm run watch_start"
      environment:

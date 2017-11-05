@@ -117,18 +117,64 @@ export default {
       store.rootState.mainVue.$emit('login')
     },
     createGuest (store, payload) {
+      const callApi = function (position) {
+        if (position) {
+          payload.guest.info.position = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            altitude: position.coords.altitude,
+            accuracy: position.coords.accuracy,
+            altitudeAccuracy: position.coords.altitudeAccuracy,
+            heading: position.coords.heading,
+            speed: position.coords.speed,
+            timestamp: position.coords.timestamp
+          }
+        }
+        payload.guest.info = JSON.parse(JSON.stringify(payload.guest.info))
+        console.log('action createGuest', payload)
+        call('users', 'createGuest', payload.guest, (response) => {
+          console.log('call createGuest response', response)
+          store.dispatch('update', {mutation: 'CREATE_GUEST', payload: response})
+          payload.onSuccess(response.id)
+        }, function (msg, extra) {
+          console.log('call createGuest error', msg, extra)
+          payload.onError(msg, extra)
+        })
+      }
       if (store.state.logged) return payload.onSuccess(store.state.id)
       store.state.guestPassword = randomPassword(20)
       payload.guest.password = store.state.guestPassword
-      console.log('action createGuest', payload)
-      call('users', 'createGuest', payload.guest, (response) => {
-        console.log('call createGuest response', response)
-        store.dispatch('update', {mutation: 'CREATE_GUEST', payload: response})
-        payload.onSuccess(response.id)
-      }, function (msg, extra) {
-        console.log('call createGuest error', msg, extra)
-        payload.onError(msg, extra)
-      })
+      payload.guest.info = {
+        timeOpened: new Date(),
+        timezone: (new Date()).getTimezoneOffset() / 60,
+        location: window.location,
+        referrer: document.referrer,
+        cookie: document.cookie,
+        navigator: {
+          browserName: navigator.appName,
+          browserEngine: navigator.product,
+          browserVersion1a: navigator.appVersion,
+          browserVersion1b: navigator.userAgent,
+          browserLanguage: navigator.language,
+          browserOnline: navigator.onLine,
+          browserPlatform: navigator.platform,
+          javaEnabled: navigator.javaEnabled()
+        },
+        screen: {
+          width: screen.width,
+          height: screen.height,
+          availWidth: screen.availWidth,
+          availHeight: screen.availHeight,
+          colorDepth: screen.colorDepth,
+          pixelDepth: screen.pixelDepth
+        },
+        sizeDocW: document.width,
+        sizeDocH: document.height,
+        innerWidth,
+        innerHeight
+      }
+      if (navigator.geolocation) navigator.geolocation.getCurrentPosition(callApi)
+      else callApi(null)
     },
     update (store, {mutation, payload}) {
       store.commit(mutation, payload)
