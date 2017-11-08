@@ -5,11 +5,6 @@ process.on('unhandledRejection', function (reason) {
 var path = require('path')
 
 var startTest = async function (netClient) {
-  var aerospike = require('../config').aerospike
-  aerospike.set = 'users_test_set'
-  aerospike.mutationsSet = 'users_test_mutations_set'
-  aerospike.viewsSet = 'users_test_views_set'
-
   // PREPARE DB
   var microRandom = Math.floor(Math.random() * 100000)
   var mainTest = require('sint-bit-utils/utils/microTest')('test Microservice local methods and db conenctions', 0)
@@ -126,7 +121,7 @@ var startTest = async function (netClient) {
   microTest(notificationsCreateObjectId, {success: 'Notifications created'}, 'notificationsCreateObjectId', FILTER_BY_KEYS)
 
   var notificationsReadedByObjectId = await netClient.testLocalMethod('notificationsReadedByObjectId', { objectId: 'testObjectId' }, basicMeta)
-  microTest(notificationsReadedByObjectId, {success: 'Notifications readedByObjectId'}, 'notificationsReadedByObjectId', FILTER_BY_KEYS)
+  microTest(notificationsReadedByObjectId, {success: 'Notifications readed'}, 'notificationsReadedByObjectId', FILTER_BY_KEYS)
 
   var notificationsReadReadedByObjectId = await netClient.testLocalMethod('notificationsRead', { id: notificationsCreateObjectId.ids[0] }, basicMeta)
   microTest(notificationsReadReadedByObjectId, {readed: 'number'}, 'notificationsReadReadedByObjectId', TYPE_OF, 1)

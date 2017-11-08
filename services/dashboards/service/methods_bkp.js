@@ -258,19 +258,19 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
       var mutation = await mutateSubscription({data: tag, objId: id, mutation: 'removeTag', meta})
       await updateSubscriptionView(id, [mutation])
     }
-    const createRawSubscription = async function (reqData, meta = {directCall: true}, getStream = null) {
+    const subscriptionsCreateRaw = async function (reqData, meta = {directCall: true}, getStream = null) {
       var subscriptionsMeta = await incrementDashSubscriptionsMetaCount(reqData.dashId)
       if (!subscriptionsMeta)subscriptionsMeta = {count: 0}
       if (!subscriptionsMeta.count)subscriptionsMeta.count = 0
       var id = reqData.dashId + '_' + (subscriptionsMeta.count)
-      CONSOLE.hl('createRawSubscription', id, reqData, subscriptionsMeta)
+      CONSOLE.hl('subscriptionsCreateRaw', id, reqData, subscriptionsMeta)
       reqData.id = id
       if (reqData.tags)reqData.tags = reqData.tags.map((item) => item.replace('#', ''))
       var mutation = await mutateSubscription({data: reqData, objId: id, mutation: 'create', meta})
       await updateSubscriptionView(id, [mutation], true)
       return {success: `Subscription created`, id}
     }
-    const createSubscription = async function (reqData, meta = {directCall: true}, getStream = null) {
+    const subscriptionsCreate = async function (reqData, meta = {directCall: true}, getStream = null) {
       var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
       if (!reqData.userId)reqData.userId = userId
       if (reqData.userId !== userId) {
@@ -285,7 +285,7 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
         }
         if (parseInt(role.public) !== 1) await subscriptionCan(reqData.dashId, userId, 'writeSubscriptions', role)
       }
-      var returnResults = await createRawSubscription(reqData, meta)
+      var returnResults = await subscriptionsCreateRaw(reqData, meta)
       return returnResults
     }
     const readSubscription = async function (id, userId, subscription) {
@@ -295,19 +295,19 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
       if (!currentState || currentState.tags.indexOf('removed') >= 0) return null
       return currentState
     }
-    const getSubscriptionByDashIdAndUserId = async function (dashId, userId) {
+    const subscriptionsGetByDashIdAndUserId = async function (dashId, userId) {
       try {
-        CONSOLE.hl('getSubscriptionByDashIdAndUserId', `${dashId}${userId}`)
+        CONSOLE.hl('subscriptionsGetByDashIdAndUserId', `${dashId}${userId}`)
         var result = await kvDb.query(kvDbClient, CONFIG.aerospike.namespace, CONFIG.aerospike.subscriptionsSet, (dbQuery) => {
           dbQuery.where(Aerospike.filter.equal('dashIdUserId', `${dashId}${userId}`))
         })
         if (!result[0]) return null
         return await getSubscriptionView(result[0].id, result[0])
-      } catch (error) { throw new Error('problems during getSubscriptionByDashIdAndUserId ' + error) }
+      } catch (error) { throw new Error('problems during subscriptionsGetByDashIdAndUserId ' + error) }
     }
     const subscriptionCan = async function (dashId, userId, can, role) {
       try {
-        var subscription = await getSubscriptionByDashIdAndUserId(dashId, userId)
+        var subscription = await subscriptionsGetByDashIdAndUserId(dashId, userId)
         CONSOLE.hl('subscriptionCan subscription', subscription, dashId, userId, can, role)
         if (!subscription) throw new Error('subscription not founded - ' + dashId + ' - ' + userId)
         var subscriptionRoleId = subscription.roleId
@@ -434,9 +434,9 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
         var createRoleSubscriber = await createRawRole(roleSubscriber, meta)
 
         var subscription = { dashId: id, roleId: createRoleAdmin.id, role: 'admin', userId, tags: ['admin'] }
-        var createAdminSubscription = await createRawSubscription(subscription, meta)
+        var createAdminSubscription = await subscriptionsCreateRaw(subscription, meta)
         CONSOLE.hl('createDashboard', {createRoleAdmin, createRoleSubscriber, createAdminSubscription})
-        // var subscription = await createSubscription({userId, dashId: id}, meta)
+        // var subscription = await subscriptionsCreate({userId, dashId: id}, meta)
         return {success: `Dashboard created`, id}
       },
       async info (reqData, meta = {directCall: true}, getStream = null) {
@@ -565,7 +565,7 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
         return {success: `Role removed`}
       },
       // SUBSCRIPTIONS
-      createSubscription,
+      subscriptionsCreate,
       async readSubscription (reqData, meta = {directCall: true}, getStream = null) {
         var id = reqData.id
         var currentState = await getSubscriptionView(id)

@@ -101,6 +101,12 @@ module.exports = {
       responseType: 'response',
       requestSchema: { required: ['from', 'dashId'], properties: { dashId, from: { type: 'integer' }, to: { type: 'integer' } } },
       responseSchema: { type: 'array', items: { properties: jsProp } }
+    },
+    'query': {
+      public: true,
+      responseType: 'response',
+      requestSchema: { 'additionalProperties': true },
+      responseSchema: { type: 'array', items: { properties: jsProp } }
     }
   }
 }

@@ -28,7 +28,7 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
   try {
     CONSOLE.debug('CONFIG', CONFIG)
     CONSOLE.log('CONFIG', CONFIG)
-
+    var aerospikeConfig = CONFIG.aerospike.dashboards
     // SMTP
     var smtpTrans = nodemailer.createTransport(require('./config').smtp)
     const getMailTemplate = async (template, sandbox = { title: 'title', header: 'header', body: 'body', footer: 'footer' }, ext = '.html') => {
@@ -48,8 +48,8 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
     //
     const init = async function () {
       try {
-        kvDbClient = await kvDb.getClient(CONFIG.aerospike)
-        var key = new Key(CONFIG.aerospike.namespace, CONFIG.aerospike.set, 'dbInitStatus')
+        kvDbClient = await kvDb.getClient(aerospikeConfig)
+        var key = new Key(aerospikeConfig.namespace, aerospikeConfig.set, 'dbInitStatus')
         await kvDb.put(kvDbClient, key, {version: 0, timestamp: Date.now()})
         var dbInitStatus = await kvDb.get(kvDbClient, key)
         // if (!dbInitStatus) await kvDb.put(kvDbClient, key, {version: 0, timestamp: Date.now()})
@@ -57,10 +57,10 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
         // if (dbInitStatus.version === 1) return true
         if (dbInitStatus.version < 1) {
         //   CONSOLE.log('dbInitStatus v1', dbInitStatus)
-          await kvDb.createIndex(kvDbClient, { ns: CONFIG.aerospike.namespace, set: CONFIG.aerospike.set, bin: 'created', index: CONFIG.aerospike.set + '_created', datatype: Aerospike.indexDataType.NUMERIC })
-          await kvDb.createIndex(kvDbClient, { ns: CONFIG.aerospike.namespace, set: CONFIG.aerospike.set, bin: 'updated', index: CONFIG.aerospike.set + '_updated', datatype: Aerospike.indexDataType.NUMERIC })
+          await kvDb.createIndex(kvDbClient, { ns: aerospikeConfig.namespace, set: aerospikeConfig.set, bin: 'created', index: aerospikeConfig.set + '_created', datatype: Aerospike.indexDataType.NUMERIC })
+          await kvDb.createIndex(kvDbClient, { ns: aerospikeConfig.namespace, set: aerospikeConfig.set, bin: 'updated', index: aerospikeConfig.set + '_updated', datatype: Aerospike.indexDataType.NUMERIC })
 
-          // await kvDb.createIndex(kvDbClient, { ns: CONFIG.aerospike.namespace, set: CONFIG.aerospike.rolesSet, bin: 'dashId', index: CONFIG.aerospike.rolesSet + '_dashId', datatype: Aerospike.indexDataType.STRING })
+          // await kvDb.createIndex(kvDbClient, { ns: aerospikeConfig.namespace, set: aerospikeConfig.rolesSet, bin: 'dashId', index: aerospikeConfig.rolesSet + '_dashId', datatype: Aerospike.indexDataType.STRING })
         }
         await kvDb.put(kvDbClient, key, {version: 1, timestamp: Date.now()})
         await subscriptions.init(netClient, CONSOLE, kvDbClient, methods)
@@ -76,7 +76,7 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
       try {
         var mutation = mutationsPack.mutate(args)
         CONSOLE.debug('mutate', mutation)
-        var key = new Key(CONFIG.aerospike.namespace, CONFIG.aerospike.mutationsSet, mutation.id)
+        var key = new Key(aerospikeConfig.namespace, aerospikeConfig.mutationsSet, mutation.id)
         await kvDb.put(kvDbClient, key, mutation)
         return mutation
       } catch (error) {
@@ -98,11 +98,11 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
       CONSOLE.hl('diffUpdatedView', oldTags, newTags, removedTags, addedTags)
       CONSOLE.hl('diffUpdatedView ops', ops)
 
-      await kvDb.operate(kvDbClient, new Key(CONFIG.aerospike.namespace, CONFIG.aerospike.metaSet, 'dashboards_meta'), ops)
+      await kvDb.operate(kvDbClient, new Key(aerospikeConfig.namespace, aerospikeConfig.metaSet, 'dashboards_meta'), ops)
     }
     const updateView = async function (id, mutations, isNew, set) {
       try {
-        var key = new Key(CONFIG.aerospike.namespace, set || CONFIG.aerospike.set, id)
+        var key = new Key(aerospikeConfig.namespace, set || aerospikeConfig.set, id)
         var rawView = await getView(id, null, false) || {state: {}}
         var state = mutationsPack.applyMutations(rawView.state, mutations)
         var view = {
@@ -121,7 +121,7 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
 
     const getView = async function (id, view = null, stateOnly = true) {
       try {
-        var key = new Key(CONFIG.aerospike.namespace, CONFIG.aerospike.set, id)
+        var key = new Key(aerospikeConfig.namespace, aerospikeConfig.set, id)
         if (!view) view = await kvDb.get(kvDbClient, key)
         if (!view) return null
         if (view.state)view.state = JSON.parse(view.state)
@@ -143,15 +143,16 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
         op.incr('count', 1),
         op.read('count')
       ]
-      var count = await kvDb.operate(kvDbClient, new Key(CONFIG.aerospike.namespace, CONFIG.aerospike.metaSet, 'dashboards_meta'), ops)
+      var count = await kvDb.operate(kvDbClient, new Key(aerospikeConfig.namespace, aerospikeConfig.metaSet, 'dashboards_meta'), ops)
       return count
     }
     async function getDashboardsMeta () {
-      var dashboardsMeta = await kvDb.get(kvDbClient, new Key(CONFIG.aerospike.namespace, CONFIG.aerospike.metaSet, 'dashboards_meta'))
+      var dashboardsMeta = await kvDb.get(kvDbClient, new Key(aerospikeConfig.namespace, aerospikeConfig.metaSet, 'dashboards_meta'))
       return dashboardsMeta
     }
     async function getDashboardInfo (id) {
       var currentState = await getView(id)
+      CONSOLE.hl('getDashboardInfo', {id, currentState})
       if (!currentState || currentState._deleted) return null
       return {id: currentState.id, name: currentState.name, description: currentState.description, options: currentState.options, tags: currentState.tags, pics: currentState.pics || []}
     }
@@ -284,7 +285,7 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
           throw error
         }
         var picId = uuid()
-        var returnResults = await pic.updatePic(CONFIG.aerospike, kvDbClient, picId, reqData.pic.path, CONFIG.uploadPath, [['mini', 100, 100], ['medium', 500, 500]])
+        var returnResults = await pic.updatePic(aerospikeConfig, kvDbClient, picId, reqData.pic.path, CONFIG.uploadPath, [['mini', 100, 100], ['medium', 500, 500]])
         var mutation = await mutate({data: {picId}, objId: id, mutation: 'addPic', meta})
         var view = await updateView(id, [mutation])
         // CONSOLE.hl('updatePic', view)
@@ -292,13 +293,13 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
       },
       async getPic (reqData, meta = {directCall: true}, getStream = null) {
         // CONSOLE.hl('getPic', reqData)
-        var returnResults = await pic.getPic(CONFIG.aerospike, kvDbClient, reqData.id, reqData.size || 'mini')
+        var returnResults = await pic.getPic(aerospikeConfig, kvDbClient, reqData.id, reqData.size || 'mini')
         return returnResults
       },
       async queryByTimestamp (query = {}, meta = {directCall: true}, getStream = null) {
         // await auth.userCan('dashboard.read.query', meta, CONFIG.jwt)
         query = Object.assign({from: 0, to: 100000000000000}, query)
-        var rawResults = await kvDb.query(kvDbClient, CONFIG.aerospike.namespace, CONFIG.aerospike.set, (dbQuery) => { dbQuery.where(Aerospike.filter.range('updated', query.from, query.to)) })
+        var rawResults = await kvDb.query(kvDbClient, aerospikeConfig.namespace, aerospikeConfig.set, (dbQuery) => { dbQuery.where(Aerospike.filter.range('updated', query.from, query.to)) })
         var results = await Promise.all(rawResults.map((result) => getView(result.id, result)))
         return results
       },
@@ -329,7 +330,7 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
       getDashboardInfo,
 
       // SUBSCRIPTIONS
-      getSubscriptionByDashIdAndUserId: subscriptions.getByDashIdAndUserId,
+      subscriptionsGetByDashIdAndUserId: subscriptions.getByDashIdAndUserId,
       subscriptionsCan: subscriptions.can,
       createSubscription: subscriptions.create,
       createRawSubscription: subscriptions.createRaw,
@@ -339,6 +340,7 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
       removeSubscription: subscriptions.remove,
       getExtendedSubscriptionsByUserId: subscriptions.getExtendedByUserId,
       queryLastSubscriptions: subscriptions.queryLast,
+      querySubscriptions: subscriptions.query,
 
       // POSTS
       createPost: posts.create,
@@ -355,6 +357,12 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
         CONSOLE.log('test results', results)
         return results
       }
+    }
+    for (var postsMethod in posts) {
+      methods['posts' + postsMethod[0].toUpperCase() + postsMethod.substr(1)] = posts[postsMethod]
+    }
+    for (var subscriptionsMethod in subscriptions) {
+      methods['subscriptions' + subscriptionsMethod[0].toUpperCase() + subscriptionsMethod.substr(1)] = subscriptions[subscriptionsMethod]
     }
     return methods
   } catch (error) {

@@ -8,7 +8,7 @@ var jsRes = {
   }
   // 'additionalProperties': true
 }
-var jsRead = { properties: {id: {type: 'string'}, userId: {type: 'string'}, objectId: {type: 'string'}, type: {type: 'string'}, data: {type: 'object'}, readed: {type: 'number'}} }
+var jsRead = { properties: {id: {type: 'string'}, userId: {type: 'string'}, type: {type: 'string'}, objectId: {type: 'string'}, data: {type: 'object'}, readed: {type: 'number'}} }
 
 module.exports = {
   eventsIn: {

@@ -14,7 +14,7 @@
   "devDependencies": {
   },
   "dependencies": {
-    "aerospike": "^2.5.2",
+    "aerospike": "^3.0.2",
     "bcrypt": "^1.0.2",
     "elasticsearch": "^13.0.0-rc2",
     "jsonwebtoken": "^7.4.0",

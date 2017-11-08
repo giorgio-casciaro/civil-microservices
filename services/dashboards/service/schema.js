@@ -1,3 +1,11 @@
+var addExtraSchema = function (prefix, extraSchema, schema) {
+  for (var itemName in extraSchema) {
+    for (var subitemName in extraSchema[itemName]) {
+      schema[itemName][prefix + subitemName[0].toUpperCase() + subitemName.substr(1)] = extraSchema[itemName][subitemName]
+    }
+  }
+}
+
 var jsFields = require('sint-bit-utils/utils/JSchemaFields')
 var postsSchema = require('./postsSchema')
 var subscriptionsSchema = require('./subscriptionsSchema')
@@ -41,7 +49,7 @@ var toBool = (string, defaultVal = false) => {
 // var jsCanReq = { properties: { data: { type: 'object' } } }
 // var jsCanRes = { properties: { success: { type: 'string' }, error: { type: 'string' } } }
 
-module.exports = {
+var schema = {
   net: {
     'channels': {
       'httpPublic': {
@@ -186,10 +194,10 @@ module.exports = {
       responseSchema: testRes
     },
     // SUBSCRIPTIONS
-    getSubscriptionByDashIdAndUserId: subscriptionsSchema.methods.getByDashIdAndUserId,
+    subscriptionsGetByDashIdAndUserId: subscriptionsSchema.methods.getByDashIdAndUserId,
     subscriptionCan: subscriptionsSchema.methods.can,
-    createSubscription: subscriptionsSchema.methods.create,
-    createRawSubscription: subscriptionsSchema.methods.createRaw,
+    subscriptionsCreate: subscriptionsSchema.methods.create,
+    subscriptionsCreateRaw: subscriptionsSchema.methods.createRaw,
     readSubscription: subscriptionsSchema.methods.read,
     readMultipleSubscriptions: subscriptionsSchema.methods.readMultiple,
     updateSubscription: subscriptionsSchema.methods.update,
@@ -197,6 +205,7 @@ module.exports = {
     removeSubscription: subscriptionsSchema.methods.remove,
     getExtendedSubscriptionsByUserId: subscriptionsSchema.methods.getExtendedByUserId,
     queryLastSubscriptions: subscriptionsSchema.methods.queryLast,
+    querySubscriptions: subscriptionsSchema.methods.query,
     // POSTS
     createPost: postsSchema.methods.create,
     readPost: postsSchema.methods.read,
@@ -209,3 +218,7 @@ module.exports = {
     queryLastPosts: postsSchema.methods.queryLastPosts
   }
 }
+addExtraSchema('posts', require('./postsSchema'), schema)
+addExtraSchema('subscriptions', require('./subscriptionsSchema'), schema)
+console.log('SCHEMA ', schema)
+module.exports = schema

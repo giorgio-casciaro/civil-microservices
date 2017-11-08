@@ -13,7 +13,7 @@ module.exports = async function start () {
 
   // SERVICES DEPENDECIES
   const wait = require('sint-bit-utils/utils/wait')
-  await wait.aerospike(CONFIG.aerospike)
+  await wait.aerospike(CONFIG.aerospike.dashboards)
   await wait.service('http://schema:10000/getSchema')
   await wait.service('http://users:10080/login')
   console.log('INIT SCHEMA')

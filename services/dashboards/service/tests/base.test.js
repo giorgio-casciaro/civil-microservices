@@ -5,11 +5,6 @@ process.on('unhandledRejection', function (reason) {
 var path = require('path')
 
 var startTest = async function (netClient) {
-  var aerospike = require('../config').aerospike
-  aerospike.set = 'dashboards_test_set'
-  aerospike.mutationsSet = 'dashboards_test_mutations_set'
-  aerospike.viewsSet = 'dashboards_test_views_set'
-
   var microRandom = Math.floor(Math.random() * 100000)
   var mainTest = require('sint-bit-utils/utils/microTest')('test Microservice local methods and db connections', 0)
   var microTest = mainTest.test
@@ -103,6 +98,9 @@ var startTest = async function (netClient) {
   var user1 = await createUser(userData)
   var user2 = await createUser(userData2)
 
+  var startDetDashboardsMeta = await netClient.testLocalMethod('getDashboardsMeta', { }, {token: user1.token})
+  var totalDashboards = startDetDashboardsMeta.count
+
   var create = await netClient.testLocalMethod('create', fields, {token: user1.token})
   microTest(create, { success: 'Dashboard created' }, 'Dashboard Create', FILTER_BY_KEYS, 0, fields)
 
@@ -186,52 +184,63 @@ var startTest = async function (netClient) {
   var wrongSubscription = {
     dashId: create.id,
     roleId: 'admin',
-    userId: user2.id
+    userId: user2.id,
+    notifications: {
+      email: true,
+      sms: true,
+      fb: true
+    }
   }
 
   var subscription = {
     dashId: create.id,
     roleId: 'subscriber',
-    userId: user2.id
+    userId: user2.id,
+    notifications: {
+      email: true,
+      sms: true,
+      fb: true
+    }
   }
 
   // WRONG SUB, user2 cant create not public roles
-  var createWrongSubscription = await netClient.testLocalMethod('createSubscription', wrongSubscription, {token: user2.token})
+  var createWrongSubscription = await netClient.testLocalMethod('subscriptionsCreate', wrongSubscription, {token: user2.token})
   microTest(createWrongSubscription, { error: 'string' }, 'createWrongSubscription', TYPE_OF)
 
-  var createSubscription = await netClient.testLocalMethod('createSubscription', subscription, {token: user2.token})
-  microTest(createSubscription, { success: 'Subscription created' }, 'createSubscription', FILTER_BY_KEYS)
+  var subscriptionsCreate = await netClient.testLocalMethod('subscriptionsCreate', subscription, {token: user2.token})
+  microTest(subscriptionsCreate, { success: 'Subscription created' }, 'subscriptionsCreate', FILTER_BY_KEYS)
 
-  var readSubscription = await netClient.testLocalMethod('readSubscription', { id: createSubscription.id }, {token: user2.token})
+  var readSubscription = await netClient.testLocalMethod('readSubscription', { id: subscriptionsCreate.id }, {token: user2.token})
   microTest(readSubscription, {name: subscription.name}, 'readSubscription', FILTER_BY_KEYS)
+  microTest(readSubscription, {notifications: 'objects'}, 'readSubscription notifications', TYPE_OF)
 
-  var updateSubscription = await netClient.testLocalMethod('updateSubscription', { id: createSubscription.id, roleId: 'admin'}, {token: user1.token})
-  microTest(updateSubscription, { success: 'Subscription updated' }, 'updateSubscription', FILTER_BY_KEYS, 0, { id: createSubscription.id, roleId: 'admin'})
+  var updateSubscription = await netClient.testLocalMethod('updateSubscription', { id: subscriptionsCreate.id, roleId: 'admin'}, {token: user1.token})
+  microTest(updateSubscription, { success: 'Subscription updated' }, 'updateSubscription', FILTER_BY_KEYS, 0, { id: subscriptionsCreate.id, roleId: 'admin'})
 
-  var readSubscription2 = await netClient.testLocalMethod('readSubscription', { id: createSubscription.id }, {token: user2.token})
+  var readSubscription2 = await netClient.testLocalMethod('readSubscription', { id: subscriptionsCreate.id }, {token: user2.token})
   microTest(readSubscription2, {roleId: 'admin'}, 'readSubscription2', FILTER_BY_KEYS)
 
-  var updateSubscription2 = await netClient.testLocalMethod('updateSubscription', { id: createSubscription.id, roleId: 'subscriber'}, {token: user2.token})
-  microTest(updateSubscription2, { success: 'Subscription updated' }, 'updateSubscription', FILTER_BY_KEYS, 0, { id: createSubscription.id, roleId: 'subscriber'})
+  var updateSubscription2 = await netClient.testLocalMethod('updateSubscription', { id: subscriptionsCreate.id, roleId: 'subscriber'}, {token: user2.token})
+  microTest(updateSubscription2, { success: 'Subscription updated' }, 'updateSubscription', FILTER_BY_KEYS, 0, { id: subscriptionsCreate.id, roleId: 'subscriber'})
 
-  var removeSubscription = await netClient.testLocalMethod('removeSubscription', { id: createSubscription.id }, {token: user2.token})
+  var removeSubscription = await netClient.testLocalMethod('removeSubscription', { id: subscriptionsCreate.id }, {token: user2.token})
   microTest(removeSubscription, { success: 'Subscription removed' }, 'Subscription remove', FILTER_BY_KEYS)
 
-  var wrongReadSubscription = await netClient.testLocalMethod('readSubscription', { id: createSubscription.id }, {token: user2.token})
+  var wrongReadSubscription = await netClient.testLocalMethod('readSubscription', { id: subscriptionsCreate.id }, {token: user2.token})
   microTest(wrongReadSubscription, { error: 'string' }, 'Wrong readSubscription (Subscription removed)', TYPE_OF)
 
   // SUBSCRIPTIONS QUERY
   const uuid = require('uuid/v4')
 
-  var rpcCreateSubscriptionN = (n) => netClient.testLocalMethod('createSubscription', {
+  var rpcsubscriptionsCreateN = (n) => netClient.testLocalMethod('subscriptionsCreate', {
     dashId: create.id,
     roleId: 'subscriber',
     userId: uuid()
   }, {token: user1.token})
 
   for (i = 0; i < 20; i++) {
-    var createSubscriptionN = await rpcCreateSubscriptionN(i)
-    microTest(createSubscriptionN, { success: 'Subscription created' }, 'createSubscriptionN' + i, FILTER_BY_KEYS)
+    var subscriptionsCreateN = await rpcsubscriptionsCreateN(i)
+    microTest(subscriptionsCreateN, { success: 'Subscription created' }, 'subscriptionsCreateN' + i, FILTER_BY_KEYS)
   }
 
   var queryLastSubscriptions = await netClient.testLocalMethod('queryLastSubscriptions', { dashId: create.id, from: 0, to: 10 }, {token: user1.token})
@@ -240,6 +249,9 @@ var startTest = async function (netClient) {
 
   var getExtendedSubscriptionsByUserId = await netClient.testLocalMethod('getExtendedSubscriptionsByUserId', { }, {token: user2.token})
   microTest(getExtendedSubscriptionsByUserId, 'array', 'getExtendedSubscriptionsByUserId', TYPE_OF, 0)
+
+  var querySubscriptions = await netClient.testLocalMethod('querySubscriptions', { dashId: create.id }, {token: user1.token})
+  microTest(querySubscriptions[0] || [], {dashId: create.id}, 'querySubscriptions', FILTER_BY_KEYS)
 
   // POSTS
   var user_posts = await createUser({
@@ -258,7 +270,12 @@ var startTest = async function (netClient) {
     location: [{lat: 39.882730, lng: 18.386065}],
     body: 'test post',
     body2: 'test post2',
-    tags: ['test', 'tag2', 'tag3']
+    tags: ['test', 'tag2', 'tag3'],
+    notifications: {
+      email: true,
+      sms: true,
+      fb: true
+    }
   }
 
   var createPost = await netClient.testLocalMethod('createPost', post, {token: user_posts.token})
@@ -274,6 +291,7 @@ var startTest = async function (netClient) {
 
   var readPost = await netClient.testLocalMethod('readPost', { id: createPost.id }, {token: user_posts.token})
   microTest(readPost, {body: post.body, readedByUser: 1}, 'readPost', FILTER_BY_KEYS)
+  microTest(readPost, {notifications: 'object'}, 'readPost notifications', TYPE_OF)
 
   var getPostPic = await netClient.testLocalMethod('getPostPic', {id: readPost.pics[0]}, {token: user_posts.token})
   microTest(typeof getPostPic, 'string', 'getPostPic')
@@ -350,7 +368,7 @@ var startTest = async function (netClient) {
   var denyGuestReadPost = await netClient.testLocalMethod('readPost', { id: createGuestReadPost.id }, {})
   microTest(denyGuestReadPost, { error: 'string' }, 'Deny Guest readPost', TYPE_OF)
 
-  var denyGuestSubscribe = await netClient.testLocalMethod('createSubscription', {
+  var denyGuestSubscribe = await netClient.testLocalMethod('subscriptionsCreate', {
     dashId: create.id,
     roleId: 'subscriber',
     userId: user3.id
@@ -390,7 +408,7 @@ var startTest = async function (netClient) {
       }
     }, {token: user1.token})
 
-  var confirmGuestSubscribe = await netClient.testLocalMethod('createSubscription', {
+  var confirmGuestSubscribe = await netClient.testLocalMethod('subscriptionsCreate', {
     dashId: create.id,
     roleId: 'subscriber',
     userId: user3.id
@@ -444,7 +462,7 @@ var startTest = async function (netClient) {
   var allowGuestReadPost = await netClient.testLocalMethod('readPost', { id: createGuestReadPost.id }, {})
   microTest(allowGuestReadPost, {body: post.body}, 'Guest readPost', FILTER_BY_KEYS)
 
-  var allowGuestSubscribe = await netClient.testLocalMethod('createSubscription', {
+  var allowGuestSubscribe = await netClient.testLocalMethod('subscriptionsCreate', {
     dashId: create.id,
     roleId: 'subscriber',
     userId: user4.id
@@ -496,6 +514,9 @@ var startTest = async function (netClient) {
 
   var wrongReadResp = await netClient.testLocalMethod('read', { id: create.id }, {token: user1.token})
   microTest(wrongReadResp, { error: 'string' }, 'Wrong Read (dash removed)', TYPE_OF)
+
+  var getDashboardsMeta = await netClient.testLocalMethod('getDashboardsMeta', { }, {token: user1.token})
+  microTest(getDashboardsMeta, {count: totalDashboards + 21}, 'getDashboardsMeta', FILTER_BY_KEYS)
 
   await new Promise((resolve) => setTimeout(resolve, 1000))
   return finishTest()

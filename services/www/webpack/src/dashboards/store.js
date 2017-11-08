@@ -234,7 +234,7 @@ var storeModule = {
     //   call('dashboards', 'queryLastSubscriptions', {from: store.state.dashboardsSubscriptionsListCount[payload.dashId], to: store.state.dashboardsSubscriptionsListCount[payload.dashId] + pageLength, dashId: payload.dashId}, (list) => store.commit('DASHBOARD_SUBSCRIPTIONS_LIST', {list, dashId: payload.dashId}))
     // },
     subscribe (store, payload) {
-      call('dashboards', 'createSubscription', payload, (payload) => store.dispatch('getUserSubscriptions', {}))
+      call('dashboards', 'subscriptionsCreate', payload, (payload) => store.dispatch('getUserSubscriptions', {}))
       // call('dashboards', 'queryLastSubscriptions', {from: store.state.dashboardsSubscriptionsListCount[payload.dashId], to: store.state.dashboardsSubscriptionsListCount[payload.dashId] + pageLength, dashId: payload.dashId}, (list) => store.commit('DASHBOARD_SUBSCRIPTIONS_LIST', {list, dashId: payload.dashId}))
     },
     afterLogin (store, payload) {

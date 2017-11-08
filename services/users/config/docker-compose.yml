@@ -2,10 +2,14 @@ version:                '3.2'
 
 services:
    users:
-     logging:
-       driver: none
      image:             giorgiocasciaro/civil-microservices-users:12
-     command:           sh -c "npm run watch_start"
+     logging:
+       driver:           none
+     working_dir:          /microservice
+    #  command:              sh -c "npm run watch_test"
+    #  environment:
+    #    aerospikeNamespace: cc_tests
+     command:              sh -c "npm run watch_start"
      environment:
        uploadPath:      /uploads/
        schemaHost:      'http://schema:10000'

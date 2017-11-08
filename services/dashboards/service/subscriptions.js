@@ -12,7 +12,7 @@ const pic = require('sint-bit-utils/utils/pic')
 const metaUtils = require('sint-bit-utils/utils/meta')
 
 var CONFIG = require('./config')
-var aerospikeConfig = CONFIG.aerospikeSubscriptions
+var aerospikeConfig = CONFIG.aerospike.subscriptions
 var mutationsPack = require('sint-bit-cqrs/mutations')({ mutationsPath: path.join(__dirname, '/mutations') })
 
 const auth = require('sint-bit-utils/utils/auth')
@@ -103,10 +103,10 @@ const updateView = async function (id, mutations, isNew) {
     var view = {
       updated: Date.now(),
       created: rawView.created || Date.now(),
-      id: state.id,
-      dashId: state.dashId,
+      id: '' + state.id,
+      dashId: '' + state.dashId,
       dashIdUserId: `${state.dashId}${state.userId}`,
-      userId: state.userId,
+      userId: '' + state.userId,
       tags: state.tags || [],
       roleId: state.roleId,
       state: JSON.stringify(state)
@@ -143,8 +143,9 @@ const createRaw = async function (reqData, meta = {directCall: true}, getStream 
   var id = reqData.dashId + '_' + (subscriptionsMeta.count)
   CONSOLE.hl('createRaw', id, reqData, subscriptionsMeta)
   reqData.id = id
-  if (reqData.tags)reqData.tags = reqData.tags.map((item) => item.replace('#', ''))
-  var mutation = await mutate({data: reqData, objId: id, mutation: 'createSubscription', meta})
+  if (reqData.tags)reqData.tags = reqData.tags.map((item) => reqData.dashId + '_' + item.replace('#', ''))
+
+  var mutation = await mutate({data: reqData, objId: id, mutation: 'subscriptionsCreate', meta})
   await updateView(id, [mutation], true)
   return {success: `Subscription created`, id}
 }
@@ -307,6 +308,14 @@ async function extendSubscription (subscription) {
   // subscription.dashInfo.roles = await dashboards.getDashRoles(subscription.dashId)
   return subscription
 }
+async function getByTagsAndRoles (dashId, tags, roles, select = ['notifications', 'userId']) {
+  var result = await kvDb.query(kvDbClient, aerospikeConfig.namespace, aerospikeConfig.set, (dbQuery) => {
+    dbQuery.select(select)
+    dbQuery.where(Aerospike.filter.equal('dashId', dashId))
+    dbQuery.setUdf('notifications', 'filterByTagsAndRoles', tags, roles)
+  })
+  return result
+}
 async function queryLast (reqData = {}, meta = {directCall: true}, getStream = null) {
   var dashId = reqData.dashId
   var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
@@ -326,6 +335,32 @@ async function queryLast (reqData = {}, meta = {directCall: true}, getStream = n
   results = results.filter((subscription) => subscription !== null)
   return results
 }
+async function query (reqData = {}, meta = {directCall: true}, getStream = null) {
+  var results = await getByTagsAndRoles(reqData.dashId, reqData.tags, reqData.roles)
+  CONSOLE.hl('query results', results)
+  // var dashId = reqData.dashId
+  // var query = kvDbClient.query(aerospikeConfig.namespace, aerospikeConfig.set)
+  // query.where(Aerospike.filter.equal('dashId', dashId))
+  // query.apply('example', 'filter_stream', function (err, result) {
+  //   if (err) throw err
+  //   CONSOLE.hl('query results', result)
+  // })
+}
+// async function queryFiltered (options, filterName, filterValue) {
+//   var results = await kvDb.query(kvDbClient, aerospikeConfig.namespace, aerospikeConfig.set, (dbQuery) => {
+//     if (filterName)dbQuery.where(Aerospike.filter.equal(filterName, filterValue))
+//     dbQuery.setUdf('example', 'filter_stream')
+//   })
+//   CONSOLE.hl('query results', results)
+//   // var dashId = reqData.dashId
+//   // var query = kvDbClient.query(aerospikeConfig.namespace, aerospikeConfig.set)
+//   // query.where(Aerospike.filter.equal('dashId', dashId))
+//   // query.apply('example', 'filter_stream', function (err, result) {
+//   //   if (err) throw err
+//   //   CONSOLE.hl('query results', result)
+//   // })
+// }
+
 var netClient, CONSOLE, kvDbClient, dashboards
 
 module.exports = {
@@ -342,7 +377,7 @@ module.exports = {
     await kvDb.createIndex(kvDbClient, { ns: aerospikeConfig.namespace, set: aerospikeConfig.set, bin: 'userId', index: aerospikeConfig.set + '_userId', datatype: Aerospike.indexDataType.STRING })
     await kvDb.createIndex(kvDbClient, { ns: aerospikeConfig.namespace, set: aerospikeConfig.set, bin: 'dashId', index: aerospikeConfig.set + '_dashId', datatype: Aerospike.indexDataType.STRING })
     await kvDb.createIndex(kvDbClient, { ns: aerospikeConfig.namespace, set: aerospikeConfig.set, bin: 'dashIdUserId', index: aerospikeConfig.set + '_dashIdUserId', datatype: Aerospike.indexDataType.STRING })
-
+    await kvDb.udfRegister(kvDbClient, { udf: path.join(__dirname, '/lua/notifications.lua') })
     CONSOLE.log(MODULE_NAME + ` finish init`)
     // setInterval(() => {
     //   CONSOLE.hl('EMIT TEST EVENT')
@@ -361,5 +396,6 @@ module.exports = {
   update,
   remove,
   getExtendedByUserId,
-  queryLast
+  queryLast,
+  query
 }

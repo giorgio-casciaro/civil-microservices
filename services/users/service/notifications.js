@@ -31,6 +31,7 @@ async function incrementUserMetaCount (userId) {
   CONSOLE.hl('incrementUserMetaCount', count)
   return count
 }
+var setAsReaded = (id) => kvDb.operate(kvDbClient, new Key(aerospikeConfig.namespace, aerospikeConfig.set, id), [Aerospike.operator.write('readed', Date.now())])
 
 module.exports = {
   init: async function (setNetClient, setCONSOLE, setKvDbClient) {
@@ -40,23 +41,23 @@ module.exports = {
     // DB INDEXES
     await kvDb.createIndex(kvDbClient, { ns: aerospikeConfig.namespace, set: aerospikeConfig.set, bin: 'created', index: aerospikeConfig.set + '_created', datatype: Aerospike.indexDataType.NUMERIC })
     await kvDb.createIndex(kvDbClient, { ns: aerospikeConfig.namespace, set: aerospikeConfig.set, bin: 'readed', index: aerospikeConfig.set + '_readed', datatype: Aerospike.indexDataType.NUMERIC })
-    await kvDb.createIndex(kvDbClient, { ns: aerospikeConfig.namespace, set: aerospikeConfig.set, bin: 'objectIdUserId', index: aerospikeConfig.set + '_object_id_user_id', datatype: Aerospike.indexDataType.STRING })
+    await kvDb.createIndex(kvDbClient, { ns: aerospikeConfig.namespace, set: aerospikeConfig.set, bin: 'userIdObjectId', index: aerospikeConfig.set + '_userIdObjectId', datatype: Aerospike.indexDataType.STRING })
   },
   create: async function (reqData = {}, meta = {directCall: true}, getStream = null) {
     CONSOLE.hl('kvDbClient', reqData)
     var notification = {
-      type: reqData.type || '',
+      type: reqData.type,
       created: Date.now(),
+      data: reqData.data,
       objectId: reqData.objectId || '',
-      data: reqData.data || {},
       readed: reqData.readed || 0
     }
     // reqData.users.forEach()
     var ids = await Promise.all(reqData.users.map(async function (userId) {
       var userMeta = await incrementUserMetaCount(userId) || {count: 0}
       notification.id = userId + '_' + userMeta.count
+      notification.userIdObjectId = userId + '_' + notification.objectId
       notification.userId = userId
-      notification.objectIdUserId = notification.objectId + '_' + userId
       await kvDb.put(kvDbClient, new Key(aerospikeConfig.namespace, aerospikeConfig.set, notification.id), notification)
       return notification.id
     }))
@@ -77,23 +78,21 @@ module.exports = {
     var notification = await kvDb.get(kvDbClient, new Key(aerospikeConfig.namespace, aerospikeConfig.set, reqData.id))
     CONSOLE.hl('notification', userId, notification, reqData)
     if (userId !== notification.userId) throw new Error('invalid user')
-    notification.readed = Date.now()
-    await kvDb.put(kvDbClient, new Key(aerospikeConfig.namespace, aerospikeConfig.set, notification.id), notification)
+    // notification.readed = Date.now()
+    // await kvDb.put(kvDbClient, new Key(aerospikeConfig.namespace, aerospikeConfig.set, notification.id), notification)
+    await setAsReaded(notification.id)
     return {success: 'Notifications readed', id: notification.id}
   },
   readedByObjectId: async function (reqData = {}, meta = {directCall: true}, getStream = null) {
     var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
     if (!userId) throw new Error('invalid token')
-    var objectIdUserId = reqData.objectId + '_' + userId
+    var userIdObjectId = userId + '_' + reqData.objectId
     var results = await kvDb.query(kvDbClient, aerospikeConfig.namespace, aerospikeConfig.set, (dbQuery) => {
-      dbQuery.where(Aerospike.filter.equal('objectIdUserId', objectIdUserId))
+      dbQuery.where(Aerospike.filter.equal('userIdObjectId', userIdObjectId))
     })
-    var ids = await Promise.all(results.map(async (result) => {
-      result.readed = Date.now()
-      await kvDb.put(kvDbClient, new Key(aerospikeConfig.namespace, aerospikeConfig.set, result.id), result)
-      return result.id
-    }))
-    return {success: 'Notifications readedByObjectId', ids}
+    await Promise.all(results.map((notification) => setAsReaded(notification.id)))
+    // CONSOLE.hl('readedByObjectId', results, await kvDb.get(kvDbClient, new Key(aerospikeConfig.namespace, aerospikeConfig.set, results[0].id)))
+    return {success: 'Notifications readed'}
   },
   lastsByUserId: async function (reqData = {}, meta = {directCall: true}, getStream = null) {
     var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)

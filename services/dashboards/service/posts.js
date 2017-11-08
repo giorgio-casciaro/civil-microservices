@@ -11,7 +11,7 @@ const kvDb = require('sint-bit-utils/utils/kvDb')
 const pic = require('sint-bit-utils/utils/pic')
 
 var CONFIG = require('./config')
-var aerospikeConfig = CONFIG.aerospikePosts
+var aerospikeConfig = CONFIG.aerospike.posts
 var mutationsPack = require('sint-bit-cqrs/mutations')({ mutationsPath: path.join(__dirname, '/mutations') })
 
 const auth = require('sint-bit-utils/utils/auth')

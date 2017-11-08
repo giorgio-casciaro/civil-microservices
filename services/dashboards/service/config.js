@@ -22,38 +22,44 @@ module.exports = {
     'publicCert': process.env.jwtPublicCert || fs.readFileSync(path.join(__dirname, './server.cert'))
   },
   aerospike: {
-    hosts: process.env.aerospikeHosts || '127.0.0.1:3000',
+    dashboards: {
+      hosts: process.env.aerospikeHosts || '127.0.0.1:3000',
     // log: {level: process.env.aerospikeLogLevel || 4},
-    set: process.env.aerospikeSet || 'dashboards',
-    metaSet: process.env.aerospikeMetaSet || 'dashboardsMeta',
-    mutationsSet: process.env.aerospikeMutationsSet || 'dashboardsMutations',
-    filesSet: process.env.aerospikeFilesSet || 'files',
-    filesChunksSet: process.env.aerospikeFilesChunksSet || 'filesChunks',
-    viewsSet: process.env.aerospikeViewsSet || 'dashboardsViews',
-    namespace: process.env.aerospikeNamespace || 'cc_dashboards',
-    policies: { timeout: parseInt(process.env.aerospikeTimeout) || 600000 }
-  },
-  aerospikePosts: {
-    hosts: process.env.aerospikeHosts || '127.0.0.1:3000',
+      modlua: {userPath: path.join(__dirname, '/lua')},
+      set: process.env.aerospikeSet || 'dashboards',
+      metaSet: process.env.aerospikeMetaSet || 'dashboardsMeta',
+      mutationsSet: process.env.aerospikeMutationsSet || 'dashboardsMutations',
+      filesSet: process.env.aerospikeFilesSet || 'files',
+      filesChunksSet: process.env.aerospikeFilesChunksSet || 'filesChunks',
+      viewsSet: process.env.aerospikeViewsSet || 'dashboardsViews',
+      namespace: process.env.aerospikeNamespace || 'cc_dashboards',
+      policies: { timeout: parseInt(process.env.aerospikeTimeout) || 600000 }
+    },
+    posts: {
+      hosts: process.env.aerospikeHosts || '127.0.0.1:3000',
     // log: {level: process.env.aerospikeLogLevel || 4},
-    set: process.env.aerospikePostsSet || 'posts',
-    metaSet: process.env.aerospikePostsMetaSet || 'postsMeta',
-    mutationsSet: process.env.aerospikePostsMutationsSet || 'postsMutations',
-    filesSet: process.env.aerospikePostsFilesSet || 'postsFiles',
-    filesChunksSet: process.env.aerospikePostsFilesChunksSet || 'postsFilesChunks',
-    viewsSet: process.env.aerospikePostsViewsSet || 'postsViews',
-    namespace: process.env.aerospikeNamespace || 'cc_dashboards',
-    policies: { timeout: parseInt(process.env.aerospikeTimeout) || 600000 }
-  },
-  aerospikeSubscriptions: {
-    hosts: process.env.aerospikeHosts || '127.0.0.1:3000',
+      modlua: {userPath: path.join(__dirname, '/lua')},
+      set: process.env.aerospikePostsSet || 'posts',
+      metaSet: process.env.aerospikePostsMetaSet || 'postsMeta',
+      mutationsSet: process.env.aerospikePostsMutationsSet || 'postsMutations',
+      filesSet: process.env.aerospikePostsFilesSet || 'postsFiles',
+      filesChunksSet: process.env.aerospikePostsFilesChunksSet || 'postsFilesChunks',
+      viewsSet: process.env.aerospikePostsViewsSet || 'postsViews',
+      namespace: process.env.aerospikeNamespace || 'cc_dashboards',
+      policies: { timeout: parseInt(process.env.aerospikeTimeout) || 600000 }
+    },
+    subscriptions: {
+      hosts: process.env.aerospikeHosts || '127.0.0.1:3000',
     // log: {level: process.env.aerospikeLogLevel || 4},
-    set: process.env.aerospikePostsSet || 'subscriptions',
-    metaSet: process.env.aerospikePostsMetaSet || 'subscriptionsMeta',
-    mutationsSet: process.env.aerospikePostsMutationsSet || 'subscriptionsMutations',
-    viewsSet: process.env.aerospikePostsViewsSet || 'subscriptionsViews',
-    namespace: process.env.aerospikeNamespace || 'cc_dashboards',
-    policies: { timeout: parseInt(process.env.aerospikeTimeout) || 600000 }
+      modlua: {userPath: path.join(__dirname, '/lua')},
+      set: process.env.aerospikeSubscriptionsSet || 'subscriptions',
+      metaSet: process.env.aerospikeSubscriptionsMetaSet || 'subscriptionsMeta',
+      tagsSet: process.env.aerospikeSubscriptionsTagsSet || 'subscriptionsTags',
+      mutationsSet: process.env.aerospikeSubscriptionsMutationsSet || 'subscriptionsMutations',
+      viewsSet: process.env.aerospikeSubscriptionsViewsSet || 'subscriptionsViews',
+      namespace: process.env.aerospikeNamespace || 'cc_dashboards',
+      policies: { timeout: parseInt(process.env.aerospikeTimeout) || 600000 }
+    }
   },
 
   console: { error: process.env.consoleError || true, debug: process.env.consoleDebug || false, log: process.env.consoleLog || true, warn: process.env.consoleWarn || true }
