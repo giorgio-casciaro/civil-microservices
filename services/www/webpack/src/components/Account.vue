@@ -3,16 +3,18 @@
   <header>
     <h3 v-html="strTitle" :title="strDescription"></h3>
   </header>
-  <div v-if="$store.state.users.logged">
-    <User></User>
-    <Logout @success="$store.commit('OPEN_VIEWPORT', 'main');$router.push('/')" ></Logout>
-    <a class="button" @click="$store.commit('OPEN_VIEWPORT', 'main');$router.push('/profile')">profilo</a>
-    <Notifications></Notifications>
+  <div class="body" >
+    <div v-if="$store.state.users.logged">
+      <User></User>
+      <Logout @success="$store.commit('OPEN_VIEWPORT', 'main');$router.push('/')"></Logout>
+      <a class="button" @click="$store.commit('OPEN_VIEWPORT', 'main');$router.push('/profile')">profilo</a>
+      <Notifications></Notifications>
+    </div>
+    <div v-if="!$store.state.users.logged">
+      <RegisterOrLogin setShow="Login" @loginSuccess="$router.push('/dashboards/')" @registerSuccess="$router.push('/registration/ConfirmEmail/'+$store.state.users.email)"></RegisterOrLogin>
+    </div>
+    <pre>{{$store.state.users}}</pre>
   </div>
-  <div v-if="!$store.state.users.logged">
-    <RegisterOrLogin setShow="Login" @loginSuccess="$router.push('/dashboards/')" @registerSuccess="$router.push('/registration/ConfirmEmail/'+$store.state.users.email)"></RegisterOrLogin>
-  </div>
-  <pre>{{$store.state.users}}</pre>
 </section>
 </template>
 <script>
@@ -35,3 +37,6 @@ export default {
   }
 }
 </script>
+<style scoped>
+.body{overflow: auto;}
+</style>

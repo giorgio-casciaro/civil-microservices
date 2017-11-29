@@ -7,7 +7,7 @@
     <div><input class="publicName" :placeholder="strGuestPublicName" :disabled="waiting" type="text" v-model="guestForm.publicName" :class="{notValid:validation.errors.publicName}" /></div>
     <div><input class="email" :placeholder="strGuestEmail" :disabled="waiting" type="email" v-model="guestForm.email" :class="{notValid:validation.errors.email}" /></div>
   </form>
-  <form class="Create" @click="active=true" @submit.prevent="waiting=true;submitForm()" @input="validation=validate('dashboards','createPost',form)" :class="{validForm:validation.valid,activeForm:active}">
+  <form class="Create" @click="active=true" @submit.prevent="waiting=true;submitForm()" @input="validation=validate('dashboards','postsCreate',form)" :class="{validForm:validation.valid,activeForm:active}">
     <div><input class="name" :placeholder="strName" :disabled="waiting" type="text" v-model="form.name" :class="{notValid:validation.errors.name}" /></div>
     <div><textarea class="body" :placeholder="strBody" :disabled="waiting" type="text" v-model="form.body" :class="{notValid:validation.errors.body}" /></div>
     <div>
@@ -191,7 +191,7 @@ export default {
       };
     },
     submitForm() {
-        this.$store.dispatch("dashboards/createPost",{post:this.form,guest:this.guestForm,onError:this.err,onSuccess:this.succ})
+        this.$store.dispatch("dashboards/postsCreate",{post:this.form,guest:this.guestForm,onError:this.err,onSuccess:this.succ})
     },
     addTag(tag) {
       tag=tag.replace("#","")

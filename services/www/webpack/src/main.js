@@ -25,25 +25,25 @@ var router = getRouter(extraRoutes)
 // LONG POLLING
 // Not a real URL, just using for demo purposes
 // var es = new EventSource(store.state.apiServer + '/liveevents/getEvents')
-var es = new EventSource('http://127.0.0.1:11000/getEvents')
-
-es.addEventListener('message', event => {
-  console.log('EventSource message', event.data, event)
-  // let data = JSON.parse(event.data)
-  // this.stockData = data.stockData
-}, false)
-
-es.addEventListener('open', event => {
-  console.log('EventSource open', event.data, event)
-  // let data = JSON.parse(event.data)
-  // this.stockData = data.stockData
-}, false)
-
-es.addEventListener('error', event => {
-  if (event.readyState === EventSource.CLOSED) {
-    console.log('EventSource error', event.data, event)
-  }
-}, false)
+// var es = new EventSource('http://127.0.0.1:11000/getEvents')
+//
+// es.addEventListener('message', event => {
+//   console.log('EventSource message', event.data, event)
+//   // let data = JSON.parse(event.data)
+//   // this.stockData = data.stockData
+// }, false)
+//
+// es.addEventListener('open', event => {
+//   console.log('EventSource open', event.data, event)
+//   // let data = JSON.parse(event.data)
+//   // this.stockData = data.stockData
+// }, false)
+//
+// es.addEventListener('error', event => {
+//   if (event.readyState === EventSource.CLOSED) {
+//     console.log('EventSource error', event.data, event)
+//   }
+// }, false)
 
 // function longPolling () {
 //   console.log('longPolling start')

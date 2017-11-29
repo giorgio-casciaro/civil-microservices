@@ -27,25 +27,13 @@ async function mutate (args) {
     var mutation = mutationsPack.mutate(args)
     var key = new Key(aerospikeConfig.namespace, aerospikeConfig.mutationsSet, mutation.id)
     await kvDb.put(kvDbClient, key, mutation)
+    delete mutation.meta
     return mutation
   } catch (error) {
     throw new Error(MODULE_NAME + 'problems during mutate a ' + error)
   }
 }
-async function getView (id, view = null, stateOnly = true) {
-  try {
-    var key = new Key(aerospikeConfig.namespace, aerospikeConfig.set, id)
-    if (!view) view = await kvDb.get(kvDbClient, key)
-    if (!view) return null
-    if (view.state)view.state = JSON.parse(view.state)
-    if (stateOnly) {
-      view.state.created = view.created
-      view.state.updated = view.updated
-      return view.state
-    }
-    return view
-  } catch (error) { throw new Error(MODULE_NAME + 'problems during getView ' + error) }
-}
+
 async function diffUpdatedView (oldState, newState) {
   var oldTags = oldState.tags ? oldState.tags : []
   var newTags = newState.tags ? newState.tags : []
@@ -73,22 +61,50 @@ async function getDashPostsMeta (dashId) {
 async function updateView (id, mutations, isNew) {
   try {
     var key = new Key(aerospikeConfig.namespace, aerospikeConfig.set, id)
-    var rawView = await getView(id, null, false) || {state: {}}
-    var state = mutationsPack.applyMutations(rawView.state, mutations)
+    var rawView = await getView(id, null, false) || {}
+    var state = mutationsPack.applyMutations(rawView, mutations)
     var view = {
       updated: Date.now(),
       created: rawView.created || Date.now(),
-      id: state.id,
-      dashId: state.dashId,
+      id: '' + state.id,
+      dashId: '' + state.dashId,
       state: JSON.stringify(state),
-      tags: state.tags || []
+      public: state.public || 0,
+      tags: state.tags || [],
+      toTags: state.toTags || [],
+      toRoles: state.toRoles || []
     }
-    if (state.location && state.location[0])view.location = new GeoJSON({type: 'Point', coordinates: [state.location[0].lng, state.location[0].lat]})
+    if (state.location)view.location = state.location.map((point) => new GeoJSON({type: 'Point', coordinates: [point.lng, point.lat]}))
+
+    var jsonState = {}
+    var viewKeys = Object.keys(view)
+    Object.keys(state).forEach(function (key) {
+      if (viewKeys.indexOf() < 0)jsonState[key] = state[key]
+    })
+    view.state = JSON.stringify(jsonState)
+
     await kvDb.put(kvDbClient, key, view)
-    await diffUpdatedView(rawView.state, state)
+    await diffUpdatedView(rawView, state)
+    netClient.emit('POST_MUTATIONS', { id: view.id, mutations: mutations, dashId: view.dashId, toTags: view.toTags, toRoles: view.toRoles })
     return view
   } catch (error) { throw new Error(MODULE_NAME + 'problems during updateView ' + error) }
 }
+
+const getView = async function (id, view = null) {
+  try {
+    var key = new Key(aerospikeConfig.namespace, aerospikeConfig.set, id)
+    if (!view) view = await kvDb.get(kvDbClient, key)
+    if (!view) return null
+    if (view.state) {
+      var state = JSON.parse(view.state)
+      var expandedView = Object.assign({}, view, state)
+      delete expandedView.state
+      return expandedView
+    }
+    return view
+  } catch (error) { throw new Error('problems during getView ' + error) }
+}
+
 async function addTag (id, tag, meta) {
   var mutation = await mutate({data: tag, objId: id, mutation: 'addTag', meta})
   await updateView(id, [mutation])
@@ -106,15 +122,19 @@ async function incrementDashPostNumber (dashId) {
   var dashPostsNumber = await kvDb.operate(kvDbClient, new Key(aerospikeConfig.namespace, aerospikeConfig.metaSet, dashId + '_meta'), ops)
   return dashPostsNumber
 }
-// async function getDashPostNumber (dashId) {
-//   var dashPostsNumber = await kvDb.get(kvDbClient, new Key(aerospikeConfig.namespace, aerospikeConfig.metaSet, dashId + '_meta'))
-//   return dashPostsNumber.count
-// }
+async function getUsersInfo (dashId, isPublic, toTags, toRoles) {
+  CONSOLE.hl('Posts getUsersInfo', {dashId, isPublic, toTags, toRoles})
+  var users = []
+  if (isPublic)users = await subscriptions.getByDashId(dashId, ['userId', 'notifications'])
+  else if (toTags || toRoles)users = await subscriptions.getByTagsAndRoles(dashId, toTags, toRoles, ['userId', 'notifications'])
+  CONSOLE.hl('Posts getUsersInfo results', {users})
+  return users
+}
 async function create (reqData, meta = {directCall: true}, getStream = null) {
+  CONSOLE.hl('post create', reqData)
   var dashId = reqData.dashId
   var dashCounter = await incrementDashPostNumber(dashId)
   var id = dashId + '_' + dashCounter.count
-  CONSOLE.hl('dashPostsNumber', dashId, dashCounter, id)
   reqData.id = id
   // var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
   // se lo user non è un admin (can "write") può inserire solo post a suo nome
@@ -141,26 +161,28 @@ async function create (reqData, meta = {directCall: true}, getStream = null) {
   reqData.subscriptionId = subscription.id
   if (reqData.tags)reqData.tags = reqData.tags.map((item) => item.replace('#', ''))
   CONSOLE.hl('dashPostCreate', reqData)
-  var mutation = await mutate({data: reqData, objId: id, mutation: 'createPost', meta})
+  var mutation = await mutate({data: reqData, objId: id, mutation: 'postsCreate', meta})
   var view = await updateView(id, [mutation], true)
-  // var data = await readPost(id, reqData.userId)
-  await addToDashPostsToConfirmMeta(view.dashId, view.id)
-  netClient.emit('createPost', view)
+  // var data = await postsRead(id, reqData.userId)
+  if (!reqData._confirmed) await addToDashPostsToConfirmMeta(view.dashId, view.id)
+  var users = await getUsersInfo(view.dashId, view.public, view.toTags, view.toRoles)
+  CONSOLE.hl('dashPostCreate', view, users)
+  netClient.emit('POST_CREATED', {view, users})
   return {success: MODULE_NAME + `created`, id, data: view}
 }
-function checkToTags (to, tags, userId) {
-  var founded = false
-  for (var tag of tags) {
-    if (to.indexOf('#' + tag.replace('#', '')) >= 0)founded = true
-    if (to.indexOf('@' + userId) >= 0)founded = true
-  }
-  CONSOLE.hl('checkToTags', to, tags, userId, founded)
-  return founded
-}
+// function checkToTags (to, tags, userId) {
+//   var founded = false
+//   for (var tag of tags) {
+//     if (to.indexOf('#' + tag.replace('#', '')) >= 0)founded = true
+//     if (to.indexOf('@' + userId) >= 0)founded = true
+//   }
+//   CONSOLE.hl('checkToTags', to, tags, userId, founded)
+//   return founded
+// }
 async function read (reqData, meta = {directCall: true}, getStream = null) {
   var id = reqData.id
   var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
-  var currentState = await readPost(id, userId, meta, true)
+  var currentState = await postsRead(id, userId, meta, true)
   if (!currentState) throw new Error('post not readable or deleted')
   // currentState.user = await netClient.rpc('readUser', {id: currentState.userId}, meta)
   return currentState
@@ -183,33 +205,55 @@ async function getReadedByUserMeta (id, userId, countOnly = true) {
   else result = await kvDb.operate(kvDbClient, key, [Aerospike.operator.read('readed')])
   return result.readed
 }
-async function readPost (id, userId, meta, loadUser = false) {
-  var currentState = await getView(id)
-  if (!currentState) return null
-
+function canBeRead (currentState, userId, subscription) {
+  CONSOLE.hl('canBeRead', {currentState, userId, subscription, role: subscription.role})
   if (currentState.userId !== userId) {
-    if (currentState._deleted || !currentState._confirmed) {
-      try {
-        await subscriptions.can(currentState.dashId, userId, 'readHiddenPosts')
-      } catch (error) {
-        return null
-      }
-    } else { await subscriptions.can(currentState.dashId, userId, 'readPosts') }
+    if ((currentState._deleted || !currentState._confirmed) && subscription.role.permissions.indexOf('readHiddenPosts') === -1) {
+      CONSOLE.hl('canBeRead', 'cant readHiddenPosts')
+      return false
+    } else if (subscription.role.permissions.indexOf('postsReads') === -1) {
+      CONSOLE.hl('canBeRead', 'cant postsReads')
+      return false
+    }
     if (!currentState.public) {
-      if (!currentState.to) {
-        throw new Error(MODULE_NAME + '  receivers is empty')
+      if (!subscription.tags && !subscription.roleId) {
+        CONSOLE.hl('canBeRead', 'tags or roleId empty')
+        return false
       }
-      var userSubscription = await subscriptions.getByDashIdAndUserId(currentState.dashId, userId)
-      if (!checkToTags(currentState.to, userSubscription.tags, userId)) { // currentState.to.indexOf('@' + userId) < 0 ||
-        throw new Error(MODULE_NAME + ' not readable by userId ' + userId)
+      var toTagsIntersection = subscription.tags.filter((n) => currentState.toTags.includes(n)).length > 0
+      var toRolesIntersection = currentState.toRoles.includes(subscription.roleId)
+      if (!toTagsIntersection && !toRolesIntersection) {
+        CONSOLE.hl('canBeRead', 'not have role or tag')
+        return false
       }
     }
   }
-  currentState.subscription = await subscriptions.readSubscription(currentState.subscriptionId, currentState.userId, currentState.dashId, { meta, guestIfNull: true })
+  return true
+}
+async function exportCanBeRead (reqData, meta = {directCall: true}, getStream = null) {
+  var func = canBeRead.toString()
+  CONSOLE.hl('exportCanBeRead', {func})
+  return {func}
+}
+async function exportMutations (reqData, meta = {directCall: true}, getStream = null) {
+  var mutations = {}
+  var files = fs.readdirSync(path.join(__dirname, '/mutations'))
+  CONSOLE.hl('exportMutations', {files, mutations})
+  files.forEach(function (file, index) {
+    mutations[file] = require(path.join(__dirname, '/mutations/', file)).toString()
+  })
+  return mutations
+}
+async function postsRead (id, userId, meta, loadUser = false) {
+  var currentState = await getView(id)
+  if (!currentState) return null
+  var subscription = await subscriptions.readByDashIdAndUserId({dashId: currentState.dashId, userId})
+  if (!canBeRead(currentState, userId, subscription)) return null
+  currentState.subscription = await subscriptions.subscriptionsRead(currentState.subscriptionId, currentState.userId, currentState.dashId, { meta, guestIfNull: true })
   if (loadUser)currentState.user = await netClient.rpc('readUser', {id: currentState.userId}, meta)
   if (loadUser)currentState.readedByUser = await setReadedByUserMeta(id, userId)
     // currentState.subscriptionId = subscription.id
-  CONSOLE.hl('readPost currentState', id, currentState)
+  CONSOLE.hl('postsRead currentState', id, currentState)
   return currentState
 }
 
@@ -222,7 +266,9 @@ async function update (reqData, meta = {directCall: true}, getStream = null) {
   // else await subscriptions.can(currentState.dashId, userId, 'writePosts')
   if (reqData.tags)reqData.tags = reqData.tags.map((item) => item.replace('#', ''))
   var mutation = await mutate({data: reqData, objId: id, mutation: 'update', meta})
-  await updateView(id, [mutation])
+  var view = await updateView(id, [mutation])
+  var users = await getUsersInfo(view.dashId, view.public, view.toTags, view.toRoles)
+  netClient.emit('POST_UPDATED', {view, users})
   return {success: MODULE_NAME + `updated`}
 }
 async function addToDashPostsToConfirmMeta (dashId, id) {
@@ -250,8 +296,8 @@ async function confirm (reqData, meta = {directCall: true}, getStream = null) {
   var id = reqData.id
   var currentState = await getView(id)
   var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
-  await subscriptions.can(currentState.dashId, userId, 'confirmPosts')
-  var mutation = await mutate({data: reqData, objId: id, mutation: 'confirmPost', meta})
+  await subscriptions.can(currentState.dashId, userId, 'postsConfirms')
+  var mutation = await mutate({data: reqData, objId: id, mutation: 'postsConfirm', meta})
   var view = await updateView(id, [mutation])
   await removeFromDashPostsToConfirmMeta(view.dashId, view.id)
   return {success: MODULE_NAME + ` confirmed`}
@@ -263,7 +309,9 @@ async function remove (reqData, meta = {directCall: true}, getStream = null) {
   if (userId !== currentState.userId) await subscriptions.can(currentState.dashId, userId, 'writeOtherUsersPosts')
   // else await subscriptions.can(currentState.dashId, userId, 'writePosts')
   var mutation = await mutate({data: {}, objId: id, mutation: 'delete', meta})
-  await updateView(id, [mutation])
+  var view = await updateView(id, [mutation])
+  var users = await getUsersInfo(view.dashId, view.public, view.toTags, view.toRoles)
+  netClient.emit('POST_REMOVED', {view, users})
   return {success: MODULE_NAME + `removed`}
 }
 async function updatePic (reqData, meta = {directCall: true}, getStream = null) {
@@ -318,10 +366,10 @@ async function queryByTimestamp (query = {}, meta = {directCall: true}, getStrea
   return results
 }
 
-async function queryLastPosts (reqData = {}, meta = {directCall: true}, getStream = null) {
+async function queryLast (reqData = {}, meta = {directCall: true}, getStream = null) {
   var dashId = reqData.dashId
   var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
-  await subscriptions.can(dashId, userId, 'readPosts')
+  await subscriptions.can(dashId, userId, 'postsReads')
 
   var dashPostsMeta = await getDashPostsMeta(dashId)
   var dashPostsNumber = dashPostsMeta ? dashPostsMeta.count : 0
@@ -330,11 +378,11 @@ async function queryLastPosts (reqData = {}, meta = {directCall: true}, getStrea
   for (var i = reqData.from; i < reqData.to; i++) {
     rawIds.push(dashId + '_' + (dashPostsNumber - i))
   }
-  CONSOLE.hl('queryLastPosts', dashId, dashPostsNumber, userId, rawIds)
+  CONSOLE.hl('queryLast', dashId, dashPostsNumber, userId, rawIds)
   // return {}
-  // await subscriptions.can(reqData.dashId, userId, 'readPosts')
-  var results = await Promise.all(rawIds.map((id) => readPost(id, userId, meta, true)))
-  CONSOLE.hl('queryLastPosts results', results)
+  // await subscriptions.can(reqData.dashId, userId, 'postsReads')
+  var results = await Promise.all(rawIds.map((id) => postsRead(id, userId, meta, true)))
+  CONSOLE.hl('queryLast results', results)
   return results.filter((post) => post !== null)
 }
 module.exports = {
@@ -344,15 +392,33 @@ module.exports = {
     netClient = setNetClient
     dashboards = setDashboards
     // DB INDEXES
-    await kvDb.createIndex(kvDbClient, { ns: aerospikeConfig.namespace, set: aerospikeConfig.set, bin: 'created', index: aerospikeConfig.set + '_created', datatype: Aerospike.indexDataType.NUMERIC })
-    await kvDb.createIndex(kvDbClient, { ns: aerospikeConfig.namespace, set: aerospikeConfig.set, bin: 'updated', index: aerospikeConfig.set + '_updated', datatype: Aerospike.indexDataType.NUMERIC })
-    await kvDb.createIndex(kvDbClient, { ns: aerospikeConfig.namespace, set: aerospikeConfig.set, bin: 'location', index: aerospikeConfig.set + '_location', datatype: Aerospike.indexDataType.GEO2DSPHERE })
-    CONSOLE.log(MODULE_NAME + ` finish init`)
+    // await kvDb.createIndex(kvDbClient, { ns: aerospikeConfig.namespace, set: aerospikeConfig.set, bin: 'created', index: aerospikeConfig.set + '_created', datatype: Aerospike.indexDataType.NUMERIC })
+    // await kvDb.createIndex(kvDbClient, { ns: aerospikeConfig.namespace, set: aerospikeConfig.set, bin: 'updated', index: aerospikeConfig.set + '_updated', datatype: Aerospike.indexDataType.NUMERIC })
+
+    var secondaryIndexLocation = await kvDb.get(kvDbClient, new Key(aerospikeConfig.namespace, aerospikeConfig.metaSet, 'secondaryIndexLocation'))
+    if (!secondaryIndexLocation) {
+      await kvDb.createIndex(kvDbClient, { ns: aerospikeConfig.namespace, set: aerospikeConfig.set, bin: 'location', index: aerospikeConfig.set + '_location', datatype: Aerospike.indexDataType.GEO2DSPHERE })
+      await kvDb.put(kvDbClient, new Key(aerospikeConfig.namespace, aerospikeConfig.metaSet, 'secondaryIndexLocation'), {created: Date.now()})
+    }
+    var secondaryIndexUpdated = await kvDb.get(kvDbClient, new Key(aerospikeConfig.namespace, aerospikeConfig.metaSet, 'secondaryIndexUpdated'))
+    if (!secondaryIndexUpdated) {
+      await kvDb.createIndex(kvDbClient, { ns: aerospikeConfig.namespace, set: aerospikeConfig.set, bin: 'updated', index: aerospikeConfig.set + '_updated', datatype: Aerospike.indexDataType.NUMERIC })
+      await kvDb.put(kvDbClient, new Key(aerospikeConfig.namespace, aerospikeConfig.metaSet, 'secondaryIndexUpdated'), {created: Date.now()})
+    }
+    var secondaryIndexCreated = await kvDb.get(kvDbClient, new Key(aerospikeConfig.namespace, aerospikeConfig.metaSet, 'secondaryIndexCreated'))
+    if (!secondaryIndexCreated) {
+      await kvDb.createIndex(kvDbClient, { ns: aerospikeConfig.namespace, set: aerospikeConfig.set, bin: 'created', index: aerospikeConfig.set + '_created', datatype: Aerospike.indexDataType.NUMERIC })
+      await kvDb.put(kvDbClient, new Key(aerospikeConfig.namespace, aerospikeConfig.metaSet, 'secondaryIndexCreated'), {created: Date.now()})
+    }
+    CONSOLE.hl('INIT Secondary Index', {secondaryIndexLocation, secondaryIndexUpdated, secondaryIndexCreated})
+
     // setInterval(() => {
     //   CONSOLE.hl('EMIT TEST EVENT')
     //   netClient.emit('testRemoteEvent', {'testEvent': Date.now()})
     // }, 1000)
   },
+  exportMutations,
+  exportCanBeRead,
   getDashPostsMeta,
   getDashPostsToConfirmMeta,
   addPic,
@@ -368,5 +434,5 @@ module.exports = {
   addTag,
   removeTag,
   queryByTimestamp,
-  queryLastPosts
+  queryLast
 }

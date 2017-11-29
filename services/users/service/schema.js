@@ -1,7 +1,12 @@
 var addExtraSchema = function (prefix, extraSchema, schema) {
   for (var itemName in extraSchema) {
     for (var subitemName in extraSchema[itemName]) {
-      schema[itemName][prefix + subitemName[0].toUpperCase() + subitemName.substr(1)] = extraSchema[itemName][subitemName]
+      if (itemName === 'methods') {
+        schema[itemName][prefix + subitemName[0].toUpperCase() + subitemName.substr(1)] = extraSchema[itemName][subitemName]
+      } else {
+        schema[itemName][subitemName] = extraSchema[itemName][subitemName]
+        if (schema[itemName][subitemName].method)schema[itemName][subitemName].method = prefix + schema[itemName][subitemName].method[0].toUpperCase() + schema[itemName][subitemName].method.substr(1)
+      }
     }
   }
 }

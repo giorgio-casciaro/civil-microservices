@@ -20,7 +20,14 @@ module.exports = {
     }
   },
   exportToPublicApi: toBool(process.env.exportToPublicApi, true),
-  rpcOut: {},
+  rpcOut: {
+    'readSubscription': {
+      to: 'dashboards',
+      method: 'subscriptionsReadByDashIdAndUserId',
+      requestSchema: {'type': 'object'},
+      responseSchema: {'type': 'object'}
+    }
+  },
   eventsIn: {
     'testEvent': {
       method: 'testEvent'
@@ -28,8 +35,11 @@ module.exports = {
     'testRemoteEvent': {
       method: 'triggerEvent'
     },
-    'createPost': {
-      method: 'triggerEvent'
+    'POST_MUTATIONS': {
+      method: 'POST_MUTATIONS'
+    },
+    'NOTIFICATION_CREATED': {
+      method: 'NOTIFICATION_CREATED'
     }
   },
   eventsOut: {},
@@ -40,16 +50,36 @@ module.exports = {
       requestSchema: {'additionalProperties': true, properties: {}},
       responseSchema: {'additionalProperties': true, properties: {}}
     },
+    'POST_MUTATIONS': {
+      public: false,
+      responseType: 'aknowlegment',
+      requestSchema: {properties: {id: {'type': 'string'}, mutations: {'type': 'array'}, dashId: {'type': 'string'}, toTags: {'type': 'array'}, toRoles: {'type': 'array'}}},
+      responseSchema: false
+    },
+    'NOTIFICATION_CREATED': {
+      public: false,
+      responseType: 'aknowlegment',
+      requestSchema: false,
+      responseSchema: false
+    },
     'triggerEvent': {
       public: false,
       responseType: 'aknowlegment',
       requestSchema: false,
       responseSchema: false
     },
-    'getEvents': {
+    'getDashEvents': {
       public: true,
       responseType: 'stream',
-      requestSchema: false,
+      requestSchema: { required: ['dashId'], properties: { dashId: {'type': 'string'}, token: {'type': 'string'} } },
+      responseSchema: false
+      // requestSchema: {'additionalProperties': true, properties: {}},
+      // responseSchema: {'additionalProperties': true, properties: {}}
+    },
+    'getUserEvents': {
+      public: true,
+      responseType: 'stream',
+      requestSchema: { properties: { token: {'type': 'string'} } },
       responseSchema: false
       // requestSchema: {'additionalProperties': true, properties: {}},
       // responseSchema: {'additionalProperties': true, properties: {}}

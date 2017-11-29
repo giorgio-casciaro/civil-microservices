@@ -6,11 +6,11 @@ services:
     #  logging:
     #    driver:           none
      working_dir:          /microservice
-     command:              sh -c "npm run watch_test"
-     environment:
-       aerospikeNamespace: cc_tests
-    #  command:              sh -c "npm run watch_start"
+    #  command:              sh -c "npm run watch_test"
     #  environment:
+    #    aerospikeNamespace: cc_tests
+     command:              sh -c "npm run watch_start"
+     environment:
        uploadPath:         /uploads/
        schemaHost:         'http://schema:10000'
        serviceName:        dashboards

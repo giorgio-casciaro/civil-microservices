@@ -1,13 +1,13 @@
 <template>
-<div v-if="$store.state.users.logged">
-  <h3 v-html="str.title"></h3>
-  <p v-html="str.description"></p>
-  <PublicName></PublicName>
-  <PersonalInfo></PersonalInfo>
-  <ChangePassword></ChangePassword>
-  <Pic></Pic>
-  <Unregister @success="$router.push('/')"></Unregister>
-</div>
+  <div v-if="$store.state.users.logged">
+    <h3 v-html="str.title"></h3>
+    <p v-html="str.description"></p>
+    <PublicName></PublicName>
+    <PersonalInfo></PersonalInfo>
+    <ChangePassword></ChangePassword>
+    <Pic></Pic>
+    <Unregister @success="$router.push('/')"></Unregister>
+  </div>
 </template>
 
 <script language="javascript">
@@ -41,5 +41,4 @@ export default {
 
 <!-- Add "scoped" attribute to limit CSS to this component only -->
 <style scoped>
-
 </style>

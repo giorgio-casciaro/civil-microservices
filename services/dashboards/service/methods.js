@@ -49,20 +49,17 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
     const init = async function () {
       try {
         kvDbClient = await kvDb.getClient(aerospikeConfig)
-        var key = new Key(aerospikeConfig.namespace, aerospikeConfig.set, 'dbInitStatus')
-        await kvDb.put(kvDbClient, key, {version: 0, timestamp: Date.now()})
-        var dbInitStatus = await kvDb.get(kvDbClient, key)
-        // if (!dbInitStatus) await kvDb.put(kvDbClient, key, {version: 0, timestamp: Date.now()})
-        CONSOLE.log('dbInitStatus', dbInitStatus)
-        // if (dbInitStatus.version === 1) return true
-        if (dbInitStatus.version < 1) {
-        //   CONSOLE.log('dbInitStatus v1', dbInitStatus)
-          await kvDb.createIndex(kvDbClient, { ns: aerospikeConfig.namespace, set: aerospikeConfig.set, bin: 'created', index: aerospikeConfig.set + '_created', datatype: Aerospike.indexDataType.NUMERIC })
+        var secondaryIndexUpdated = await kvDb.get(kvDbClient, new Key(aerospikeConfig.namespace, aerospikeConfig.metaSet, 'secondaryIndexUpdated'))
+        if (!secondaryIndexUpdated) {
           await kvDb.createIndex(kvDbClient, { ns: aerospikeConfig.namespace, set: aerospikeConfig.set, bin: 'updated', index: aerospikeConfig.set + '_updated', datatype: Aerospike.indexDataType.NUMERIC })
-
-          // await kvDb.createIndex(kvDbClient, { ns: aerospikeConfig.namespace, set: aerospikeConfig.rolesSet, bin: 'dashId', index: aerospikeConfig.rolesSet + '_dashId', datatype: Aerospike.indexDataType.STRING })
+          await kvDb.put(kvDbClient, new Key(aerospikeConfig.namespace, aerospikeConfig.metaSet, 'secondaryIndexUpdated'), {created: Date.now()})
         }
-        await kvDb.put(kvDbClient, key, {version: 1, timestamp: Date.now()})
+        var secondaryIndexCreated = await kvDb.get(kvDbClient, new Key(aerospikeConfig.namespace, aerospikeConfig.metaSet, 'secondaryIndexCreated'))
+        if (!secondaryIndexCreated) {
+          await kvDb.createIndex(kvDbClient, { ns: aerospikeConfig.namespace, set: aerospikeConfig.set, bin: 'created', index: aerospikeConfig.set + '_created', datatype: Aerospike.indexDataType.NUMERIC })
+          await kvDb.put(kvDbClient, new Key(aerospikeConfig.namespace, aerospikeConfig.metaSet, 'secondaryIndexCreated'), {created: Date.now()})
+        }
+        CONSOLE.hl('INIT Secondary Index', { secondaryIndexUpdated, secondaryIndexCreated })
         await subscriptions.init(netClient, CONSOLE, kvDbClient, methods)
         await posts.init(netClient, CONSOLE, kvDbClient, methods)
       } catch (error) {
@@ -161,7 +158,7 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
         var role = currentState.roles[roleId]
         var rolePermissions = role.permissions
         if (role.id === 'guest' && currentState.options.guestRead === 'allow') {
-          rolePermissions.push('readPosts')
+          rolePermissions.push('postsReads')
           rolePermissions.push('readDashboard')
         }
         if (role.id === 'guest' && currentState.options.guestSubscribe === 'allow') {
@@ -186,8 +183,9 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
     }
     const getDashRole = async function (roleId, dashId, currentState) {
       try {
+        CONSOLE.hl('getDashRole roleId, dashId, currentState', roleId, dashId, currentState)
+
         if (!currentState) currentState = await readDashboard(dashId)
-        CONSOLE.hl('getDashRole dashId, currentState', dashId, currentState)
         if (!currentState || !currentState.roles || !currentState.roles[roleId]) throw new Error(`role not founded: dash id ${dashId}, role id ${roleId}`)
         return currentState.roles[roleId]
       } catch (error) { throw new Error('problems during getDashRole ' + error) }
@@ -222,11 +220,11 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
         await auth.userCan('dashboard.create', meta, CONFIG.jwt)
         if (reqData.tags)reqData.tags = reqData.tags.map((item) => item.replace('#', ''))
         var mutation = await mutate({data: reqData, objId: id, mutation: 'create', meta})
-        var roleAdmin = { id: 'admin', name: 'Admin', public: 0, description: 'Main dashboard administrators', permissions: [ 'writeDashboard', 'readDashboard', 'writeSubscriptions', 'readSubscription', 'readSubscriptions', 'writeRoles', 'readRoles', 'writePosts', 'readPosts', 'confirmPosts', 'readHiddenPosts', 'writeOtherUsersPosts' ] }
+        var roleAdmin = { id: 'admin', name: 'Admin', public: 0, description: 'Main dashboard administrators', permissions: ['unsubscribe', 'writeDashboard', 'readDashboard', 'writeSubscriptions', 'subscriptionsRead', 'subscriptionsReads', 'writeRoles', 'readRoles', 'writePosts', 'postsReads', 'postsConfirms', 'readHiddenPosts', 'writeOtherUsersPosts' ] }
         var mutationRoleAdmin = await mutate({data: roleAdmin, objId: id, mutation: 'addRole', meta})
-        var rolePostAdmin = { id: 'postsAdmin', name: 'Posts Admin', public: 0, description: 'Dashboard posts admin', permissions: ['readDashboard', 'writePosts', 'readPosts', 'confirmPosts', 'readHiddenPosts', 'readSubscription', 'readRoles', 'writeOtherUsersPosts'] }
+        var rolePostAdmin = { id: 'postsAdmin', name: 'Posts Admin', public: 0, description: 'Dashboard posts admin', permissions: ['unsubscribe', 'readDashboard', 'writePosts', 'postsReads', 'postsConfirms', 'readHiddenPosts', 'subscriptionsRead', 'readRoles', 'writeOtherUsersPosts'] }
         var mutationRolePostsAdmin = await mutate({data: rolePostAdmin, objId: id, mutation: 'addRole', meta})
-        var roleSubscriber = { id: 'subscriber', name: 'Subscriber', public: 1, description: 'Dashboard subscribers', permissions: ['readDashboard', 'readPosts', 'readSubscription', 'readRoles'] }
+        var roleSubscriber = { id: 'subscriber', name: 'Subscriber', public: 1, description: 'Dashboard subscribers', permissions: ['unsubscribe', 'readDashboard', 'postsReads', 'subscriptionsRead', 'readRoles'] }
         var mutationRoleSubscriber = await mutate({data: roleSubscriber, objId: id, mutation: 'addRole', meta})
         var roleGuest = { id: 'guest', name: 'Guest', public: 0, description: 'Dashboard guests, No Role', permissions: [] }
         var mutationRoleGuest = await mutate({data: roleGuest, objId: id, mutation: 'addRole', meta})
@@ -237,7 +235,6 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
         var subscription = { dashId: id, roleId: 'admin', userId, tags: ['admin'], _confirmed: 1 }
         var createAdminSubscription = await subscriptions.createRaw(subscription, meta)
         CONSOLE.hl('createDashboard createAdminSubscription', {createAdminSubscription})
-        // var subscription = await createSubscription({userId, dashId: id}, meta)
         return {success: `Dashboard created`, id}
       },
       async info (reqData, meta = {directCall: true}, getStream = null) {
@@ -328,30 +325,6 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
       readDashboard,
       getDashRole,
       getDashboardInfo,
-
-      // SUBSCRIPTIONS
-      subscriptionsGetByDashIdAndUserId: subscriptions.getByDashIdAndUserId,
-      subscriptionsCan: subscriptions.can,
-      createSubscription: subscriptions.create,
-      createRawSubscription: subscriptions.createRaw,
-      readSubscription: subscriptions.read,
-      readMultipleSubscriptions: subscriptions.readMultiple,
-      updateSubscription: subscriptions.update,
-      removeSubscription: subscriptions.remove,
-      getExtendedSubscriptionsByUserId: subscriptions.getExtendedByUserId,
-      queryLastSubscriptions: subscriptions.queryLast,
-      querySubscriptions: subscriptions.query,
-
-      // POSTS
-      createPost: posts.create,
-      readPost: posts.read,
-      updatePost: posts.update,
-      confirmPost: posts.confirm,
-      removePost: posts.remove,
-      addPostPic: posts.addPic,
-      getPostPic: posts.getPic,
-      removePostPic: posts.removePic,
-      queryLastPosts: posts.queryLastPosts,
       async test (query = {}, meta = {directCall: true}, getStream = null) {
         var results = await require('./tests/base.test')(netClient)
         CONSOLE.log('test results', results)

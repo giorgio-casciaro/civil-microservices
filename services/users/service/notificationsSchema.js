@@ -12,8 +12,22 @@ var jsRead = { properties: {id: {type: 'string'}, userId: {type: 'string'}, type
 
 module.exports = {
   eventsIn: {
+    'POST_CREATED': {
+      method: 'postEvent'
+    },
+    'POST_UPDATED': {
+      method: 'postEvent'
+    },
+    'POST_REMOVED': {
+      method: 'postEvent'
+    }
   },
   eventsOut: {
+    'NOTIFICATION_CREATED': {
+      multipleResponse: false,
+      requestSchema: false,
+      responseSchema: false
+    }
   },
   methods: {
     'create': {
@@ -27,6 +41,12 @@ module.exports = {
       responseType: 'response',
       requestSchema: { properties: {id: {type: 'string'}}, required: [ 'id' ] },
       responseSchema: jsRead
+    },
+    'postEvent': {
+      public: false,
+      responseType: 'response',
+      requestSchema: { properties: { view: {type: 'object'}, users: {type: 'array'} } },
+      responseSchema: { properties: { ids: {type: 'array'} } }
     },
     'readed': {
       public: true,
@@ -43,7 +63,7 @@ module.exports = {
     'lastsByUserId': {
       public: true,
       responseType: 'response',
-      requestSchema: { },
+      requestSchema: { required: ['from'], properties: { from: { type: 'integer' }, to: { type: 'integer' } } },
       responseSchema: {type: 'array'}
     }
   }

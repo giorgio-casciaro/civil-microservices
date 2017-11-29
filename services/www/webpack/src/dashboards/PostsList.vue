@@ -1,6 +1,7 @@
 <template>
 <div class="DashboardPostsList">
   <h4>Ultimi Messaggi</h4>
+  {{posts.items}}
     <div v-if="posts.status==='loading'">
       Caricamento Messaggi
     </div>

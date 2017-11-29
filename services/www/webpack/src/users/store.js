@@ -1,6 +1,7 @@
 import {validate, call} from '@/api'
 import Vue from 'vue'
 import * as Cookies from 'js-cookie'
+import {translate} from '@/i18n'
 
 function randomPassword (length) {
   var chars = 'abcdefghijklmnopqrstuvwxyz#?!@$%^&*-ABCDEFGHIJKLMNOP1234567890'
@@ -33,6 +34,8 @@ var initState = {
   passwordAssigned: false,
   rememberMe: false,
   publicName: false,
+  notificationsList: false,
+  notificationsById: {},
   usersById: {}
 }
 if (localStorage && localStorage.getItem('userState')) {
@@ -100,15 +103,56 @@ export default {
       state.rememberMe = true
       state.logged = true
       state.isGuest = true
+    },
+    NOTIFICATIONS_LIST (state, payload) {
+      var dataState = state.notificationsList
+      if (payload.reset || !dataState) dataState = {status: 'loading', items: []}
+      if (payload.status) dataState.status = payload.status
+      if (payload.add) {
+        if (payload.addBefore)dataState.items = payload.add.map((notification) => notification.id).concat(dataState.items)
+        else dataState.items = dataState.items.concat(payload.add.map((notification) => notification.id))
+        payload.add.forEach((notification) => Vue.set(state.notificationsById, notification.id, notification))
+      }
+      Vue.set(state, 'notificationsList', dataState)
+      console.log('DASHBOARD_POSTS_LIST', payload, dataState, state.notificationsList)
     }
   },
   actions: {
+    backEndEvent (store, payload) {
+      console.log('backEndEvent', {payload})
+      if (payload.entity === 'notification' && payload.type === 'created') {
+        store.commit('NOTIFICATIONS_LIST', {add: [payload.data], addBefore: true})
+      }
+    },
+    mountLiveEvents (store) {
+      console.log('mountLiveEvents')
+      if (store.es) return false
+      store.es = new EventSource('https://127.0.0.1/liveevents/getUserEvents/token/' + store.state.token)
+      store.es.addEventListener('message', event => {
+        let data = JSON.parse(event.data)
+        console.log('EventSource message', event.data, event)
+        console.log('EventSource parsed data', data)
+        store.dispatch('backEndEvent', data)
+        // this.stockData = data.stockData
+      }, false)
+      store.es.addEventListener('open', event => {
+        console.log('EventSource open', event.data, event)
+        // let data = JSON.parse(event.data)
+        // this.stockData = data.stockData
+      }, false)
+      store.es.addEventListener('error', event => {
+        if (event.readyState === EventSource.CLOSED) {
+          console.log('EventSource error', event.data, event)
+        }
+      }, false)
+    },
     init (store) {
       if (typeof store.state.token !== 'string')store.dispatch('update', { mutation: 'LOGGEDOUT', payload: {} })
       if (store.state.logged) {
         call('users', 'refreshToken', {token: store.state.token}, (payload) => {
           store.dispatch('update', {mutation: 'SET_TOKEN', payload})
           store.rootState.mainVue.$emit('login')
+          store.dispatch('mountLiveEvents')
         }, (payload) => store.dispatch('update', {mutation: 'EXPIRED_TOKEN', payload}))
       }
     },
@@ -201,7 +245,7 @@ export default {
       } else {
         ids = payload.ids
       }
-      console.log('readMultipleSubscriptions', {ids})
+      console.log('subscriptionsReadMultiple', {ids})
       if (ids.length) {
         call('users', 'readUsers', {ids: payload.ids}, (response) => {
           store.commit('USERS_LOADED', response)
@@ -214,7 +258,28 @@ export default {
       Cookies.remove('civil-connect-token')
       localStorage.removeItem('userState')
       store.rootState.mainVue.$emit('logout')
+    },
+    notificationsLoad (store, payload) {
+      store.commit('NOTIFICATIONS_LIST', { status: 'loading' })
+      call('users', 'notificationsLastsByUserId', { from: 0, to: 30 }, (list) => {
+        store.commit('NOTIFICATIONS_LIST', { status: 'ready', add: list, reset: true })
+      })
+    },
+    notificationsLoadMore (store, payload) {
+      store.commit('NOTIFICATIONS_LIST', {status: 'loading'})
+      call('users', 'notificationsLastsByUserId', {from: store.state.notificationsList.items.length, to: store.state.notificationsList.items.length + 30}, (list) => {
+        store.commit('NOTIFICATIONS_LIST', {add: list, status: 'ready'})
+      })
+    },
+    notificationLoad (store, {notificationId, force}) {
+      if (!store.state.notificationsById[notificationId] || force)call('users', 'notificationsRead', {id: notificationId}, (notification) => store.commit('LOAD_NOTIFICATION', notification))
     }
+  },
+  getters: {
+    notificationGet: (state, getters) => (id) => {
+      return state.notificationsById[id]
+    },
+    t: (state, getters) => (string) => translate('users', string)
   }
 }
 //

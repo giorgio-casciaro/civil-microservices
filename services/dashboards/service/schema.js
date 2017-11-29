@@ -1,7 +1,12 @@
 var addExtraSchema = function (prefix, extraSchema, schema) {
   for (var itemName in extraSchema) {
     for (var subitemName in extraSchema[itemName]) {
-      schema[itemName][prefix + subitemName[0].toUpperCase() + subitemName.substr(1)] = extraSchema[itemName][subitemName]
+      if (itemName === 'methods') {
+        schema[itemName][prefix + subitemName[0].toUpperCase() + subitemName.substr(1)] = extraSchema[itemName][subitemName]
+      } else {
+        schema[itemName][subitemName] = extraSchema[itemName][subitemName]
+        if (schema[itemName][subitemName].method)schema[itemName][subitemName].method = prefix + schema[itemName][subitemName].method[0].toUpperCase() + schema[itemName][subitemName].method.substr(1)
+      }
     }
   }
 }
@@ -79,7 +84,17 @@ var schema = {
       requestSchema: false,
       responseSchema: false
     },
-    'createPost': {
+    'POST_CREATED': {
+      multipleResponse: false,
+      requestSchema: false,
+      responseSchema: false
+    },
+    'POST_UPDATED': {
+      multipleResponse: false,
+      requestSchema: false,
+      responseSchema: false
+    },
+    'POST_REMOVED': {
       multipleResponse: false,
       requestSchema: false,
       responseSchema: false
@@ -192,30 +207,7 @@ var schema = {
       responseType: 'response',
       requestSchema: {},
       responseSchema: testRes
-    },
-    // SUBSCRIPTIONS
-    subscriptionsGetByDashIdAndUserId: subscriptionsSchema.methods.getByDashIdAndUserId,
-    subscriptionCan: subscriptionsSchema.methods.can,
-    subscriptionsCreate: subscriptionsSchema.methods.create,
-    subscriptionsCreateRaw: subscriptionsSchema.methods.createRaw,
-    readSubscription: subscriptionsSchema.methods.read,
-    readMultipleSubscriptions: subscriptionsSchema.methods.readMultiple,
-    updateSubscription: subscriptionsSchema.methods.update,
-    confirmSubscription: subscriptionsSchema.methods.confirm,
-    removeSubscription: subscriptionsSchema.methods.remove,
-    getExtendedSubscriptionsByUserId: subscriptionsSchema.methods.getExtendedByUserId,
-    queryLastSubscriptions: subscriptionsSchema.methods.queryLast,
-    querySubscriptions: subscriptionsSchema.methods.query,
-    // POSTS
-    createPost: postsSchema.methods.create,
-    readPost: postsSchema.methods.read,
-    updatePost: postsSchema.methods.update,
-    confirmPost: postsSchema.methods.confirm,
-    removePost: postsSchema.methods.remove,
-    addPostPic: postsSchema.methods.addPic,
-    getPostPic: postsSchema.methods.getPic,
-    removePostPic: postsSchema.methods.removePic,
-    queryLastPosts: postsSchema.methods.queryLastPosts
+    }
   }
 }
 addExtraSchema('posts', require('./postsSchema'), schema)

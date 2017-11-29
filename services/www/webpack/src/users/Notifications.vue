@@ -1,35 +1,56 @@
 <template>
-<div class="Notifications" >
-  <h3 v-html="strTitle"></h3>
-  <ul>
-    <li v-for="notification in notifications">
-      <h4><a v-html="notification.title" ></a></h4>
-      <div v-html="notification.content" ></div>
-    </li>
-  </ul>
+<div class="NotificationsList">
+  <h4>Ultime Notifiche</h4>
+    <div v-if="notifications.status==='loading'">
+      Caricamento Messaggi
+    </div>
+    <div v-if="notifications.items">
+      <div v-for="(notificationId, index) in notifications.items">
+        <Notification :notificationId="notificationId"></Notification>
+      </div>
+    </div>
+    <div v-if="!notifications.items">
+      Non ci sono notifiche
+    </div>
+    <div><a class="button" @click="reload">Aggiorna</a></div>
+    <div><a class="button" @click="loadMore">Carica altre notifiche</a></div>
 </div>
 </template>
-
 <script>
-import Vue from 'vue'
-import {translate} from '@/i18n'
-var t= function(string) { return translate( 'users', string) }
+import Notification from '@/users/Notification'
+import {
+  translate
+} from '@/i18n'
 
 export default {
-  name: 'Notifications',
-  data () {
-    var notifications=[];
-    for (var i = 1; i <= 3; i++) notifications.push({title:"notification title",content:"saoi opnpo ahjpiu hoig g ooihgioh"});
-    return {
-      notifications
-    }
+  name: 'NotificationsList',
+  mounted() {
+    this.$store.dispatch("users/notificationsLoad")
   },
   computed: {
-    strTitle: function () { return t(  'Notifications') }
+    notifications: function() {
+      return this.$store.state.users.notificationsList||[]
+    }
+  },
+  components: {
+    Notification
   },
   methods: {
-    t,
+    t(string) {
+      console.log("translate string", string)
+      return translate("notifications", string)
+    },
+    loadMore() {
+      this.$store.dispatch("users/notificationsLoadMore")
+    },
+    reload() {
+      this.$store.dispatch("users/notificationsLoad")
+    }
+  },
+  data() {
+    return {
+      dataLoaded: false
+    }
   }
 }
-
 </script>

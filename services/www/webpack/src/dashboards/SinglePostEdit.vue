@@ -199,12 +199,12 @@ export default {
     },
     submitForm() {
       this.waiting=true;
-      if(this.new_post)call('dashboards','createPost',this.form,this.succ,this.err)
-      else call('dashboards','updatePost',this.form,this.succ,this.err)
+      if(this.new_post)call('dashboards','postsCreate',this.form,this.succ,this.err)
+      else call('dashboards','postsUpdate',this.form,this.succ,this.err)
     },
     validateForm() {
-      if(this.new_post)this.validation=validate('dashboards','createPost',this.form)
-      else this.validation=validate('dashboards','updatePost',this.form)
+      if(this.new_post)this.validation=validate('dashboards','postsCreate',this.form)
+      else this.validation=validate('dashboards','postsUpdate',this.form)
     },
     // updateMapForm() {
     //   var center=map.getCenter()

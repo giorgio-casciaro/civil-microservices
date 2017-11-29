@@ -3,8 +3,9 @@
   <!-- <pre>{{userSubscription}}</pre>
   <pre>{{userRole}}</pre> -->
   <div v-if="dashId&&dashboard">
-    <!-- <h3>{{dashboard.name}} - {{strTitle}} <a v-if="can('writeDashboard')" class="button" :href="'/#/dashboardEdit/'+dashId">Opzioni Bacheca</a> <a v-if="can('readSubscriptions')" class="button" :href="'/#/dashboardSubscriptions/'+dashId">Iscrizioni</a></h3> -->
+    <!-- <h3>{{dashboard.name}} - {{strTitle}} <a v-if="can('writeDashboard')" class="button" :href="'/#/dashboardEdit/'+dashId">Opzioni Bacheca</a> <a v-if="can('subscriptionsReads')" class="button" :href="'/#/dashboardSubscriptions/'+dashId">Iscrizioni</a></h3> -->
     <!-- <p v-html="strDescription"></p> -->
+    <a v-if="can('unsubscribe')" class="button" @click="unsubscribe()" >Cancella Iscrizione</a>
     <DashboardMenu :dashboard="dashboard"></DashboardMenu>
     <div id='dashboardMap' style='width: 400px; height: 300px;'></div>
     <div class="menu"><a @click="showNewPost=!showNewPost">{{strNewPost}}</a> <a @click="show='PostsList'" >Ultimi messaggi</a> <a @click="show='PostsToConfirmList'" >Messaggi da confermare <i>({{this.dashboard.postsToConfirmMeta.length}})</i></a></div>
@@ -29,19 +30,26 @@ const mapboxgl = require("mapbox-gl")
 const style = require("../assets/mapstyle")
 var map
 
+
+
 export default {
   name: 'Dashboard',
   mounted() {
     if (this.dashboard) {
       this.$nextTick(function () {
        this.mapMount()
+       this.mountLiveEvents()
      })
     }
+  },
+  beforeDestroy() {
+    this.es.close()
   },
   watch: {
     dashboard: function (val) {
       this.$nextTick(function () {
        this.mapMount()
+       this.mountLiveEvents()
      })
     }
   },
@@ -73,6 +81,29 @@ export default {
   },
   methods: {
     can(permission){return this.$store.getters['dashboards/can'](this.dashId, permission)},
+    unsubscribe(){
+      this.$store.dispatch('dashboards/unsubscribe', {dashId: this.dashId})
+    },
+    mountLiveEvents(){
+      this.es = new EventSource('https://127.0.0.1/liveevents/getDashEvents/dashId/'+this.dashId+'/token/'+this.$store.state.users.token)
+      this.es.addEventListener('message', event => {
+        let data = JSON.parse(event.data)
+        console.log('EventSource message', event.data, event)
+        console.log('EventSource parsed data', data)
+        this.$store.dispatch("dashboards/backEndMutation",data)
+        // this.stockData = data.stockData
+      }, false)
+      this.es.addEventListener('open', event => {
+        console.log('EventSource open', event.data, event)
+        // let data = JSON.parse(event.data)
+        // this.stockData = data.stockData
+      }, false)
+      this.es.addEventListener('error', event => {
+        if (event.readyState === EventSource.CLOSED) {
+          console.log('EventSource error', event.data, event)
+        }
+      }, false)
+    },
     mapMount() {
       var mapInfo = {
         centerLng: 12.73931877340101,

@@ -25,7 +25,7 @@ module.exports = {
     dashboards: {
       hosts: process.env.aerospikeHosts || '127.0.0.1:3000',
     // log: {level: process.env.aerospikeLogLevel || 4},
-      modlua: {userPath: path.join(__dirname, '/lua')},
+      // modlua: {userPath: path.join(__dirname, '/lua')},
       set: process.env.aerospikeSet || 'dashboards',
       metaSet: process.env.aerospikeMetaSet || 'dashboardsMeta',
       mutationsSet: process.env.aerospikeMutationsSet || 'dashboardsMutations',
@@ -38,7 +38,7 @@ module.exports = {
     posts: {
       hosts: process.env.aerospikeHosts || '127.0.0.1:3000',
     // log: {level: process.env.aerospikeLogLevel || 4},
-      modlua: {userPath: path.join(__dirname, '/lua')},
+      // modlua: {userPath: path.join(__dirname, '/lua')},
       set: process.env.aerospikePostsSet || 'posts',
       metaSet: process.env.aerospikePostsMetaSet || 'postsMeta',
       mutationsSet: process.env.aerospikePostsMutationsSet || 'postsMutations',
@@ -51,7 +51,7 @@ module.exports = {
     subscriptions: {
       hosts: process.env.aerospikeHosts || '127.0.0.1:3000',
     // log: {level: process.env.aerospikeLogLevel || 4},
-      modlua: {userPath: path.join(__dirname, '/lua')},
+      // modlua: {userPath: path.join(__dirname, '/lua')},
       set: process.env.aerospikeSubscriptionsSet || 'subscriptions',
       metaSet: process.env.aerospikeSubscriptionsMetaSet || 'subscriptionsMeta',
       tagsSet: process.env.aerospikeSubscriptionsTagsSet || 'subscriptionsTags',

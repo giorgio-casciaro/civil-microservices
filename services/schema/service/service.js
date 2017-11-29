@@ -23,8 +23,17 @@ module.exports = async function service () {
   console.log('INIT SCHEMA')
   const kvDb = require('sint-bit-utils/utils/kvDb')
   var kvDbClient = await kvDb.getClient(CONFIG.aerospike)
-  const loadSchema = async () => JSON.parse((await kvDb.get(kvDbClient, 'schema') || {}).schema || '{}')
-  const saveSchema = async (specificSchema) => await kvDb.put(kvDbClient, 'schema', {schema: JSON.stringify(specificSchema || SCHEMA)})
+  const loadSchema = async () => {
+    var rawSchema = await kvDb.get(kvDbClient, 'schema')
+    if (rawSchema && rawSchema.schema) return JSON.parse(rawSchema.schema)
+    return {}
+  }
+  const saveSchema = async (specificSchema) => {
+    if (specificSchema)SCHEMA = specificSchema
+    var result = await kvDb.put(kvDbClient, 'schema', {schema: JSON.stringify(SCHEMA)})
+    CONSOLE.hl('saveSchema', result)
+    return result
+  }
   var SCHEMA = {}
   try { SCHEMA = await loadSchema() } catch (error) { await saveSchema() }
   console.log('SCHEMA', SCHEMA)
@@ -35,11 +44,13 @@ module.exports = async function service () {
   async function checkLiveServices () {
     CONSOLE.log('checkLiveServices')
     var currentTime = Date.now()
-    SCHEMA = await loadSchema()
+    // SCHEMA = await loadSchema()
+    var schemaUpdated = false
     var serviceName
     for (serviceName in SCHEMA) {
       if (!liveSignals[serviceName]) {
         delete SCHEMA[serviceName]
+        schemaUpdated = true
         CONSOLE.log('service removed', serviceName)
         if (SCHEMA[serviceName])CONSOLE.log('error service not removed', SCHEMA[serviceName])
       }
@@ -47,11 +58,13 @@ module.exports = async function service () {
     for (serviceName in liveSignals) {
       if (liveSignals[serviceName] < currentTime - liveSignalTime) {
         delete SCHEMA[serviceName]
+        delete liveSignals[serviceName]
+        schemaUpdated = true
         CONSOLE.log('service removed', serviceName)
         if (SCHEMA[serviceName])CONSOLE.log('error service not removed', SCHEMA[serviceName])
       }
     }
-    await saveSchema(SCHEMA)
+    if (schemaUpdated) await saveSchema(SCHEMA)
   }
   setInterval(checkLiveServices, 1000)
   function liveSignal (service) {
@@ -65,7 +78,7 @@ module.exports = async function service () {
   }
   // DOMAIN
   app.get('/getSchema', async function (req, res) {
-    CONSOLE.log('getSchema', SCHEMA)
+    CONSOLE.log('getSchema')
     res.setHeader('Content-Type', 'application/json')
     SCHEMA = await loadSchema()
     res.send(JSON.stringify(SCHEMA))
@@ -91,7 +104,7 @@ module.exports = async function service () {
     res.send(liveSignal(service))
   })
   app.post('/setServiceSchema', async function (req, res) {
-    CONSOLE.hl('setServiceSchema', req.body)
+    CONSOLE.hl('setServiceSchema', req.body.service)
     SCHEMA = await loadSchema()
     SCHEMA[req.body.service] = JSON.parse(req.body.schema)
     liveSignal(req.body.service)

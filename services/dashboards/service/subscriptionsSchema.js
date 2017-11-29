@@ -26,7 +26,7 @@ var jsRes = {
 }
 
 var jsItemBySubscriptionId = { properties: { id: subscriptionId }, required: ['id'] }
-var jsProp = { id: subscriptionId, dashId: dashId, roleId, tags: jsFields.tags, userId: jsFields.id, _confirmed: { type: 'number' }, _deleted: { type: 'number' }, updated: { type: 'string' }, created: { type: 'string' } }
+var jsProp = { id: subscriptionId, dashId: dashId, roleId, tags: jsFields.tags, userId: jsFields.id, _confirmed: { type: 'number' }, _deleted: { type: 'number' }, updated: { type: 'string' }, created: { type: 'string' }, notifications: { type: 'array' }, role: { type: 'object' } }
 var jsUpdateProp = { id: subscriptionId, roleId, tags: jsFields.tags, _confirmed: { type: 'number' }, _deleted: { type: 'number' } }
 var jsQueryRes = { type: 'array', items: { properties: jsProp } }
 
@@ -96,17 +96,25 @@ module.exports = {
       requestSchema: { properties: {} },
       responseSchema: { type: 'array' }
     },
+    'readByDashIdAndUserId': {
+      public: false,
+      responseType: 'response',
+      requestSchema: { required: ['dashId'], properties: { dashId, userId: jsFields.id } },
+      responseSchema: {
+        properties: jsProp
+      }
+    },
     'queryLast': {
       public: true,
       responseType: 'response',
       requestSchema: { required: ['from', 'dashId'], properties: { dashId, from: { type: 'integer' }, to: { type: 'integer' } } },
       responseSchema: { type: 'array', items: { properties: jsProp } }
     },
-    'query': {
+    'queryByTagsAndRoles': {
       public: true,
       responseType: 'response',
       requestSchema: { 'additionalProperties': true },
-      responseSchema: { type: 'array', items: { properties: jsProp } }
+      responseSchema: { type: 'array'}
     }
   }
 }

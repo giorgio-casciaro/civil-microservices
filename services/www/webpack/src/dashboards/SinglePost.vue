@@ -8,7 +8,7 @@
   <span v-for="(item, index) in post.tags"> #{{ item }} </span>
 </div>
 <div v-if="can('writePosts')"><a @click="edit_mode=!edit_mode">Edit</a></div>
-<div v-if="can('confirmPosts')&&!post._confirmed"><a @click="confirm()">Confirm</a></div>
+<div v-if="can('postsConfirms')&&!post._confirmed"><a @click="confirm()">Confirm</a></div>
 <h4>{{post.name}}</h4>
 <div class="body">{{post.body}}</div>
 
@@ -59,7 +59,7 @@ export default {
     toDate(timestamp, format) {
       return this.$store.getters['toDate'](timestamp, format)
     },
-    confirm(){return this.$store.dispatch('dashboards/confirmPost',this.post.id)},
+    confirm(){return this.$store.dispatch('dashboards/postsConfirm',this.post.id)},
 
   },
   data () {

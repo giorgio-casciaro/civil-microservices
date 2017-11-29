@@ -24,7 +24,7 @@ services:
             console {
               context any warning
               context ldt warning
-              context udf warning
+              context udf info
               context query warning
             }
           }
