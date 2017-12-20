@@ -38,7 +38,7 @@ export default {
   },
   created(){
     this.$store.dispatch("dashboards/lastDashboards")
-    // call('dashboards', 'queryLastDashboards', {from: 0, to: pageLength}, (payload) => store.commit('DASHBOARDS_LIST', payload))
+    // call('dashboards', 'listLastDashboards', {from: 0, to: pageLength}, (payload) => store.commit('DASHBOARDS_LIST', payload))
   },
   components: {  },
   computed: {

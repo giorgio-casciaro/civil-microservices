@@ -1,4 +1,4 @@
-version: '3.2'
+version: '3.3'
 
 services:
    www:
@@ -86,13 +86,6 @@ services:
                 }
             }
 
-            server {
-                listen       81;
-                location ~ /(.*) {
-                  proxy_pass http://aerospikeamc:8081/$$1 ;
-                }
-            }
-
           }
      volumes:
         - ../../www:/microservice
@@ -100,6 +93,8 @@ services:
        - microservicesNet
      ports:
       - 81:81
+      - 82:82
+      - 83:83
       - 443:443
 
 

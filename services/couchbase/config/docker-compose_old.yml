@@ -1,0 +1,74 @@
+version:                '3.3'
+services:
+  couchbase_master:
+    image:              couchbase/server:community-5.0.0
+    # deploy:
+    #   replicas:         1
+    ports:
+      - 8091:8091
+    command: bash -c "echo \"$$configureScript\" > /opt/couchbase/configure.sh ; bash /opt/couchbase/configure.sh "
+    networks:
+     - microservicesNet
+    volumes:
+       - ../../couchbase/gitignore/master_var:/opt/couchbase/var
+    environment:
+       COUCHBASE_ADMINISTRATOR_USERNAME: Administrator
+       COUCHBASE_ADMINISTRATOR_PASSWORD: password
+       COUCHBASE_BUCKET: default
+       COUCHBASE_BUCKET_PASSWORD:
+       configureScript: |-
+          set -m
+          set -x
+          /entrypoint.sh couchbase-server &
+          hostname
+          cat /etc/hostname
+          hostname -i
+          sleep 50
+          curl -v http://0.0.0.0:8091/pools/default -d memoryQuota=512 -d indexMemoryQuota=512 -d ftsMemoryQuota=512
+          curl -v http://0.0.0.0:8091/nodes/self/controller/settings  -d data_path=%2Fopt%2Fcouchbase%2Fvar%2Flib%2Fcouchbase%2Fdata  -d index_path=%2Fopt%2Fcouchbase%2Fvar%2Flib%2Fcouchbase%2Findexdata
+          curl -v http://0.0.0.0:8091/node/controller/setupServices -d services=kv%2Cn1ql%2Cindex%2Cfts
+          curl -v http://0.0.0.0:8091/settings/web -d port=8091 -d username=$$COUCHBASE_ADMINISTRATOR_USERNAME -d password=$$COUCHBASE_ADMINISTRATOR_PASSWORD
+          fg 1
+
+  couchbase_worker:
+    image:              couchbase/server:community-5.0.0
+    depends_on:
+      - couchbase_master
+    ports:
+      - 8092:8091
+    command: bash -c "echo \"$$configureScript\" > /opt/couchbase/configure.sh ;  bash /opt/couchbase/configure.sh "
+    networks:
+     - microservicesNet
+    volumes:
+       - ../../couchbase/gitignore/worker_var:/opt/couchbase/var
+    deploy:
+      replicas: 2
+    environment:
+       COUCHBASE_ADMINISTRATOR_USERNAME: Administrator
+       COUCHBASE_ADMINISTRATOR_PASSWORD: password
+       COUCHBASE_BUCKET: default
+       COUCHBASE_BUCKET_PASSWORD:
+       configureScript: |-
+          set -m
+          set -x
+          cat /etc/hostname
+          hostname
+          /entrypoint.sh couchbase-server &
+          hostname -i
+          sleep 60
+          curl -v http://0.0.0.0:8091/pools/default -d memoryQuota=512 -d indexMemoryQuota=512 -d ftsMemoryQuota=512
+          curl -v  http://0.0.0.0:8091/nodes/self/controller/settings  -d data_path=%2Fopt%2Fcouchbase%2Fvar%2Flib%2Fcouchbase%2Fdata  -d index_path=%2Fopt%2Fcouchbase%2Fvar%2Flib%2Fcouchbase%2Findexdata
+          curl -v http://0.0.0.0:8091/node/controller/setupServices -d services=kv%2Cn1ql%2Cindex%2Cfts
+          curl -v http://0.0.0.0:8091/settings/web -d port=8091 -d username=$$COUCHBASE_ADMINISTRATOR_USERNAME -d password=$$COUCHBASE_ADMINISTRATOR_PASSWORD
+          curl -v  -u $$COUCHBASE_ADMINISTRATOR_USERNAME:$$COUCHBASE_ADMINISTRATOR_PASSWORD http://couchbase_master:8091/controller/addNode -d "hostname=$$(hostname -i)&user=$$COUCHBASE_ADMINISTRATOR_USERNAME&password=$$COUCHBASE_ADMINISTRATOR_PASSWORD&services=kv%2Cn1ql%2Cindex%2Cfts"
+          # curl -v   -u $$COUCHBASE_ADMINISTRATOR_USERNAME:$$COUCHBASE_ADMINISTRATOR_PASSWORD http://couchbase_master:8091/controller/rebalance -d "ejectedNodes=&knownNodes=$$(hostname -i)%40$$(hostname -i)"
+          couchbase-cli rebalance --cluster=couchbase_master:8091 --user Administrator --password password
+          fg 1
+
+networks:
+  microservicesNet:
+    driver:             bridge
+
+
+#/opt/couchbase/var/lib/couchbase/data
+#/opt/couchbase/var/lib/couchbase/data

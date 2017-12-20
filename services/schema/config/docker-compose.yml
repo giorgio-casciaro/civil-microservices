@@ -1,11 +1,11 @@
-version:              '3.2'
+version:              '3.3'
 
 services:
   schema:
-    # logging:
-    #    driver:        none
+    logging:
+       driver:        none
     image:            giorgiocasciaro/civil-microservices-schema:6
-    command:          sh -c "npm run watch_start"
+    command:          sh -c "npm run start"
     environment:
       netHost:        schema
       netHostPort:    10000

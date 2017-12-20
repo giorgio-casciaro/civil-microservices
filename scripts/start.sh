@@ -23,4 +23,4 @@ fi
 reset
 echo "docker-compose $CIVIL_SERV exec $1 /bin/bash" > $DIR/config/dev_service_string
 
-bash -c "docker-compose $CIVIL_SERV up $1"
+bash -c "docker-compose $CIVIL_SERV up $1  --remove-orphans --force-recreate"

@@ -1,12 +1,12 @@
-version:                '3.2'
+version:                '3.3'
 
 services:
    liveevents:
      image:             giorgiocasciaro/ubuntu-node:v3
-    #  logging:
-    #    driver:        none
+     logging:
+       driver:        none
      working_dir:       /microservice
-     command:           sh -c "npm run watch_start"
+     command:           sh -c "npm run start"
      environment:
        uploadPath:      /uploads/
        schemaHost:      'http://schema:10000'

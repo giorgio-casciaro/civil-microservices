@@ -147,12 +147,12 @@ module.exports = {
     for (var i = reqData.from; i < reqData.to; i++) {
       if (userMetaCount - i >= 0)rawIds.push(userId + '_' + (userMetaCount - i))
     }
-    CONSOLE.hl('queryLast', userId, userMetaCount, rawIds)
+    CONSOLE.hl('listLast', userId, userMetaCount, rawIds)
 
     var results = await Promise.all(rawIds.map((id) => {
       return kvDb.get(kvDbClient, new Key(aerospikeConfig.namespace, aerospikeConfig.set, id))
     }))
-    CONSOLE.hl('queryLast results', results)
+    CONSOLE.hl('listLast results', results)
     results = results.filter((subscription) => subscription !== null)
     return results
   }

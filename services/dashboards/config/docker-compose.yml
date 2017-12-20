@@ -1,4 +1,4 @@
-version:                   '3.2'
+version:                   '3.3'
 
 services:
    dashboards:
@@ -6,11 +6,11 @@ services:
     #  logging:
     #    driver:           none
      working_dir:          /microservice
-    #  command:              sh -c "npm run watch_test"
-    #  environment:
-    #    aerospikeNamespace: cc_tests
-     command:              sh -c "npm run watch_start"
+     command:              sh -c "npm run watch_test"
      environment:
+       aerospikeNamespace: cc_tests
+     # command:              sh -c "npm run start"
+     # environment:
        uploadPath:         /uploads/
        schemaHost:         'http://schema:10000'
        serviceName:        dashboards
@@ -24,7 +24,7 @@ services:
        smtpConfigJson: '{ "host": "fakesmtp", "port": 1025, "secure": false }'
      volumes:
        - ../../dashboards:/microservice
-       - ../../../../civil_microservices_shared_modules/:/microservice/node_modules
+       # - ../../../../civil_microservices_shared_modules/:/microservice/node_modules
        - ../../../NPM/jesus:/microservice/service/node_modules/sint-bit-jesus
        - ../../../NPM/cqrs:/microservice/service/node_modules/sint-bit-cqrs
        - ../../../NPM/sint-bit-utils:/microservice/service/node_modules/sint-bit-utils

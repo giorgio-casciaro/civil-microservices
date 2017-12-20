@@ -1,4 +1,4 @@
-version: '3.2'
+version: '3.3'
 
 services:
    aerospike:
@@ -53,10 +53,7 @@ services:
           namespace cc_tests {
           	replication-factor 1
           	memory-size 100M
-          	storage-engine device {
-          		file /opt/aerospike/data/cc_tests.dat
-          		filesize 100M
-          	}
+          	storage-engine memory
           }
 
           namespace cc_schema {
