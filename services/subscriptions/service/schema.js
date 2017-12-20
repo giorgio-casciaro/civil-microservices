@@ -1,3 +1,9 @@
+var toBool = (string, defaultVal = false) => {
+  if (typeof string === 'undefined') return defaultVal
+  if (typeof string === 'boolean') return string
+  if (typeof string === 'string' && string === 'true') return true
+  return false
+}
 var jsFields = require('sint-bit-utils/utils/JSchemaFields')
 var subscriptionId = {
   type: 'string',
@@ -36,6 +42,24 @@ var jsProp = { id: subscriptionId, dashId: dashId, roleId, tags: jsFields.tags, 
 var jsUpdateProp = { id: subscriptionId, roleId, tags: jsFields.tags, meta }
 
 module.exports = {
+  net: {
+    'channels': {
+      'httpPublic': {
+        'url': `${process.env.netHost || '127.0.0.1'}:${process.env.netHostHttpPublicPort || '10080'}`,
+        'cors': process.env.netCors || process.env.netHost || '127.0.0.1'
+      },
+      'http': { 'url': `${process.env.netHost || '127.0.0.1'}:${process.env.netHostHttpPort || '10081'}` }
+    }
+  },
+  exportToPublicApi: toBool(process.env.exportToPublicApi, true),
+  rpcOut: {
+    'readUser': {
+      to: 'users',
+      method: 'read',
+      requestSchema: {'type': 'object'},
+      responseSchema: {'type': 'object'}
+    }
+  },
   eventsIn: {
   },
   eventsOut: {

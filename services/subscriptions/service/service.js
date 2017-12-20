@@ -13,9 +13,9 @@ module.exports = async function start () {
 
   // SERVICES DEPENDECIES
   const wait = require('sint-bit-utils/utils/wait')
-  await wait.aerospike(CONFIG.aerospike.dashboards)
   await wait.service('http://schema:10000/getSchema')
   await wait.service('http://users:10080/login')
+  await wait.service('http://dashboards:10080/')
   await wait.service('http://couchbase_nodes:8091/')
   console.log('INIT SCHEMA')
 
@@ -24,12 +24,14 @@ module.exports = async function start () {
   var jesusClient = require('sint-bit-jesus/net.client')
   var generateId = require('uuid/v4')
   var path = require('path')
+  var methods = require(path.join(__dirname, './methods'))
+
   var getServiceSchema = require('sint-bit-utils/utils/schema')(CONFIG.schemaHost, require('./schema'), CONFIG.service.serviceName)
   var DI = {
     serviceName: CONFIG.service.serviceName,
     serviceId: CONFIG.service.serviceId || generateId(),
     CONSOLE,
-    getMethods: () => require(path.join(__dirname, './methods'))(CONSOLE, netClient),
+    getMethods: () => methods,
     getMethodsConfig: function (service, exclude) {
       console.log('getMethodsConfig', service, exclude)
       return getServiceSchema('methods', service)
@@ -43,7 +45,8 @@ module.exports = async function start () {
   }
   var netClient = jesusClient(DI)
   var netServer = jesusServer(DI)
-  await require(path.join(__dirname, './methods'))(CONSOLE, netClient).init()
+  await methods.init(netClient)
+  // await require(path.join(__dirname, './methods'))(CONSOLE, netClient).init()
 
 // CONSOLE.log('DI', DI)
   netServer.start()

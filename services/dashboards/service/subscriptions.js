@@ -1,8 +1,6 @@
 var MODULE_NAME = 'Dashboard Subscriptions - '
 
 const path = require('path')
-const uuid = require('uuid/v4')
-
 const DB = require('sint-bit-utils/utils/dbCouchbase')
 var CONFIG = require('./config')
 var mutationsPack = require('sint-bit-cqrs/mutations')({ mutationsPath: path.join(__dirname, '/subscriptionsMutations') })
@@ -12,11 +10,13 @@ const auth = require('sint-bit-utils/utils/auth')
 // var dashboards = require('./methods')
 var guestSubscription = (dashId, userId) => ({id: '0_0', roleId: 'guest', dashId, userId, meta: {confirmed: true}, permissions: []})
 
-async function getByDashIdAndUserId (dashId, userId) {
-  try {
-    var result = await DB.query('subscriptionsViews', 'SELECT item.* FROM subscriptionsViews item WHERE dashId=$1 AND userId=$2 LIMIT 1', [dashId, userId])
-    return result && result[0] ? result[0] : null
-  } catch (error) { throw new Error('problems during getByDashIdAndUserId ' + error) }
+async function getByDashIdAndUserId (dashId, userId, waitIndexUpdate = false) {
+  var result = await getView(dashId + '_' + userId)
+  return result
+  // try {
+  //   var result = await DB.query('subscriptionsViews', 'SELECT item.* FROM subscriptionsViews item WHERE dashId=$1 AND userId=$2 LIMIT 1', [dashId, userId], waitIndexUpdate)
+  //   return result && result[0] ? result[0] : null
+  // } catch (error) { throw new Error('problems during getByDashIdAndUserId ' + error) }
 }
 async function listByDashId (dashId, select = ['notifications', 'userId', 'tags', 'roleId']) {
   try {
@@ -127,9 +127,11 @@ const removeTag = async function (id, tag, meta) {
 }
 const createRaw = async function (reqData, meta = {directCall: true}, getStream = null) {
   try {
-    var id = reqData.id = uuid()
+    var id = reqData.id = reqData.dashId + '_' + reqData.userId
+    // var id = reqData.id = uuid()
     var mutation = await mutate({data: reqData, objId: id, mutation: 'create', meta})
     await updateView(id, [mutation], true)
+    // INDEX UPDATE FRO IMPORTANT INDEX
     return {success: `Subscription created`, id}
   } catch (error) { throw new Error('problems during createRaw ' + error) }
 }

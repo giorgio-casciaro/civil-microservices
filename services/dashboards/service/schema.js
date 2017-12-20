@@ -202,6 +202,18 @@ var schema = {
       requestSchema: { type: 'object' },
       responseSchema: { properties: { count: { type: 'integer' }, tags: { type: 'array' } } }
     },
+    'getDashboardRole': {
+      public: true,
+      responseType: 'response',
+      requestSchema: { required: ['dashId', 'roleId'], properties: { dashId, roleId: { type: 'string' } } },
+      responseSchema: { type: 'object', 'additionalProperties': true }
+    },
+    'getDashboardInfo': {
+      public: false,
+      responseType: 'response',
+      requestSchema: { required: ['dashId'], properties: { dashId } },
+      responseSchema: { type: 'object', 'additionalProperties': true }
+    },
     'test': {
       public: true,
       responseType: 'response',

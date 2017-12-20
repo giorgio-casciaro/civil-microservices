@@ -1,23 +1,18 @@
-var MODULE_NAME = 'Dashboard Subscriptions - '
-
 const path = require('path')
-const uuid = require('uuid/v4')
-
 const DB = require('sint-bit-utils/utils/dbCouchbase')
 var CONFIG = require('./config')
-var mutationsPack = require('sint-bit-cqrs/mutations')({ mutationsPath: path.join(__dirname, '/subscriptionsMutations') })
-
+const getConsole = (serviceName, serviceId, pack) => require('sint-bit-utils/utils/utils').getConsole({error: true, debug: true, log: true, warn: true}, serviceName, serviceId, pack)
+var PACKAGE = 'microservice'
+var CONSOLE = getConsole(PACKAGE, '----', '-----')
+var mutationsPack = require('sint-bit-cqrs/mutations')({ mutationsPath: path.join(__dirname, '/mutations') })
 const auth = require('sint-bit-utils/utils/auth')
 
 // var dashboards = require('./methods')
 var guestSubscription = (dashId, userId) => ({id: '0_0', roleId: 'guest', dashId, userId, meta: {confirmed: true}, permissions: []})
+var getDashboardRole = (roleId, dashId) => netClient.rpcCall({to: 'dashboards', method: 'getDashboardRole', data: {roleId, dashId}})
+var getDashboardInfo = (dashId) => netClient.rpcCall({to: 'dashboards', method: 'getDashboardInfo', data: {dashId}})
 
-async function getByDashIdAndUserId (dashId, userId) {
-  try {
-    var result = await DB.query('subscriptionsViews', 'SELECT item.* FROM subscriptionsViews item WHERE dashId=$1 AND userId=$2 LIMIT 1', [dashId, userId])
-    return result && result[0] ? result[0] : null
-  } catch (error) { throw new Error('problems during getByDashIdAndUserId ' + error) }
-}
+var getByDashIdAndUserId = (dashId, userId, waitIndexUpdate = false) => getView(dashId + '_' + userId)
 async function listByDashId (dashId, select = ['notifications', 'userId', 'tags', 'roleId']) {
   try {
     var result = await DB.query('subscriptionsViews', 'SELECT ' + select.join(',') + ' FROM subscriptionsViews item WHERE dashId=$1', [dashId])
@@ -64,7 +59,7 @@ const can = async function (dashId, userId, can, role, subscriptionId) {
     else subscription = await getByDashIdAndUserId(dashId, userId)
     if (!subscription || subscription.meta.deleted || !subscription.meta.confirmed) subscription = guestSubscription(dashId, userId)
     CONSOLE.hl('can subscription', subscription, dashId, userId, can, role)
-    if (!role)role = await dashboards.getDashRole(subscription.roleId, dashId)
+    if (!role)role = await getDashboardRole(subscription.roleId, dashId)
     if (!role) throw new Error(`role ${subscription.roleId} not exists`)
     var rolePermissions = role.permissions || []
     CONSOLE.hl('can rolePermissions', role, rolePermissions)
@@ -97,7 +92,6 @@ const mutate = async function (args) {
 
 const updateView = async function (id, mutations, isNew) {
   try {
-    // var key = new Key(aerospikeConfig.namespace, aerospikeConfig.set, id)
     var rawView = await getView(id, null, false) || {}
     var view = mutationsPack.applyMutations(rawView, mutations)
     CONSOLE.hl('updateView state', view)
@@ -127,9 +121,11 @@ const removeTag = async function (id, tag, meta) {
 }
 const createRaw = async function (reqData, meta = {directCall: true}, getStream = null) {
   try {
-    var id = reqData.id = uuid()
+    var id = reqData.id = reqData.dashId + '_' + reqData.userId
+    // var id = reqData.id = uuid()
     var mutation = await mutate({data: reqData, objId: id, mutation: 'create', meta})
     await updateView(id, [mutation], true)
+    // INDEX UPDATE FRO IMPORTANT INDEX
     return {success: `Subscription created`, id}
   } catch (error) { throw new Error('problems during createRaw ' + error) }
 }
@@ -147,7 +143,7 @@ const create = async function (reqData, meta = {directCall: true}, getStream = n
     else throw new Error(reqData.dashId + ' ' + userId + '  can\'t subscribe')
   }
   if (!reqData.roleId)reqData.roleId = 'subscriber'
-  var role = await dashboards.getDashRole(reqData.roleId, reqData.dashId)
+  var role = await getDashboardRole(reqData.roleId, reqData.dashId)
   if (!role) throw new Error('Role not exists or is not active')
   CONSOLE.hl('role', role)
   // NOT PUBLIC ROLES CAN BE ASSIGNED ONLY WITH WRITE PERMISSIONS
@@ -165,7 +161,7 @@ async function confirm (reqData, meta = {directCall: true}, getStream = null) {
   await can(currentState.dashId, userId, 'confirmSubscriptions')
   var mutation = await mutate({data: reqData, objId: id, mutation: 'postsConfirm', meta})
   var view = await updateView(id, [mutation])
-  return {success: MODULE_NAME + ` confirmed`}
+  return {success: ` Dashboard Subscriptions - confirmed`}
 }
 
 async function read (reqData, meta = {directCall: true}, getStream = null) {
@@ -181,13 +177,11 @@ async function read (reqData, meta = {directCall: true}, getStream = null) {
   if (currentState.meta.deleted || !currentState.meta.confirmed) {
     await can(currentState.dashId, userId, 'subscriptionsReadHidden')
   }
-  if (reqData.loadDash)currentState.dashboard = await dashboards.getDashboardInfo(currentState.dashId)
+  if (reqData.loadDash)currentState.dashboard = await getDashboardInfo(currentState.dashId)
   if (reqData.loadUser)currentState.user = await netClient.rpc('readUser', {id: currentState.userId}, meta)
-
   if (currentState.userId !== userId) {
     await can(currentState.dashId, userId, 'subscriptionsRead')
   }
-
   return currentState
 }
 
@@ -196,7 +190,7 @@ async function readByDashIdAndUserId (reqData, meta = {directCall: true}, getStr
   var userId = reqData.userId
   var subscription = await getByDashIdAndUserId(dashId, userId)
   if (!subscription)subscription = {id: '0_0', roleId: 'guest', dashId, userId, meta: {confirmed: true}, permissions: []}
-  subscription.role = await dashboards.getDashRole(subscription.roleId, dashId)
+  subscription.role = await getDashboardRole(subscription.roleId, dashId)
   return subscription
 }
 
@@ -212,7 +206,7 @@ async function update (reqData, meta = {directCall: true}, getStream = null) {
   }
   if (reqData.roleId) {
     // NOT PUBLIC ROLES CAN BE ASSIGNED ONLY WITH WRITE PERMISSIONS
-    var role = await dashboards.getDashRole(reqData.roleId, currentState.dashId)
+    var role = await getDashboardRole(reqData.roleId, currentState.dashId)
     if (!role) {
       throw new Error('Role not exists or is not active')
     }
@@ -248,20 +242,17 @@ async function getExtendedByUserId (reqData, meta = {directCall: true}, getStrea
 }
 async function extendSubscription (subscription) {
   // if (typeof subscription === 'string')subscription = JSON.parse(subscription)
-  subscription.dashInfo = await dashboards.getDashboardInfo(subscription.dashId)
+  subscription.dashInfo = await getDashboardInfo(subscription.dashId)
   // subscription.dashInfo.subscriptionsMeta = metaUtils.optimize(await getDashMeta(subscription.dashId))
   // subscription.dashInfo.postsMeta = metaUtils.optimize(await posts.getDashPostsMeta(subscription.dashId))
-  // subscription.dashInfo.roles = await dashboards.getDashRoles(subscription.dashId)
+  // subscription.dashInfo.roles = await getDashboardRoles(subscription.dashId)
   return subscription
 }
-var netClient, CONSOLE, kvDbClient, dashboards
+var netClient
 
 module.exports = {
-  init: async function (setNetClient, setCONSOLE, setKvDbClient, setDashboards) {
-    CONSOLE = setCONSOLE
+  init: async function (setNetClient) {
     netClient = setNetClient
-    dashboards = setDashboards
-
     await DB.init(CONFIG.couchbase.url, CONFIG.couchbase.username, CONFIG.couchbase.password)
     await DB.createIndex('subscriptionsViews', ['dashId', 'userId'])
     await DB.createIndex('subscriptionsViews', ['userId'])

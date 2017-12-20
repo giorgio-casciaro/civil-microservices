@@ -104,7 +104,7 @@ var startTest = async function (netClient) {
   // mainTest.consoleResume()
   var create = await netClient.testLocalMethod('create', fields, {token: user1.token})
   microTest(create, { success: 'Dashboard created' }, 'Dashboard Create', FILTER_BY_KEYS, 0, fields)
-  await new Promise((resolve) => setTimeout(resolve, 1000))
+  // await new Promise((resolve) => setTimeout(resolve, 1000))
 
   var read = await netClient.testLocalMethod('read', { id: create.id }, {token: user1.token})
   microTest(read, {name: fields.name}, 'Dashboard Read', FILTER_BY_KEYS)

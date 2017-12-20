@@ -147,9 +147,9 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
       var dashboardsMeta = await kvDb.get(kvDbClient, new Key(aerospikeConfig.namespace, aerospikeConfig.metaSet, 'dashboards_meta'))
       return dashboardsMeta
     }
-    async function getDashboardInfo (id) {
+    async function getDashInfo (id) {
       var currentState = await getView(id)
-      CONSOLE.hl('getDashboardInfo', {id, currentState})
+      CONSOLE.hl('getDashInfo', {id, currentState})
       if (!currentState || currentState._deleted) return null
       return {id: currentState.id, name: currentState.name, description: currentState.description, options: currentState.options, tags: currentState.tags, pics: currentState.pics || []}
     }
@@ -191,6 +191,7 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
         return currentState.roles[roleId]
       } catch (error) { throw new Error('problems during getDashRole ' + error) }
     }
+
     // const getDashRoles = async function (dashId) {
     //   try {
     //     var currentState = await getView(dashId)
@@ -210,6 +211,14 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
 
     methods = {
       init,
+      async getDashboardRole (reqData, meta = {directCall: true}, getStream = null) {
+        CONSOLE.hl('getDashRole reqData', reqData)
+        if (!reqData.currentState) reqData.currentState = await readDashboard(reqData.dashId)
+        CONSOLE.hl('getDashRole reqData.currentState.roles', reqData.currentState.roles)
+        if (!reqData.currentState || !reqData.currentState.roles || !reqData.currentState.roles[reqData.roleId]) throw new Error(`role not founded: dash id ${reqData.dashId}, role id ${reqData.roleId}`)
+        CONSOLE.hl('getDashRole reqData.currentState.roles[reqData.roleId]', reqData.currentState.roles[reqData.roleId])
+        return reqData.currentState.roles[reqData.roleId]
+      },
       async getPermissions (reqData, meta = {directCall: true}, getStream = null) {
         // recuperare iscrizioni
         return { permissions: [ [10, 'dashboard.create', 1], [10, 'dashboard.read', 1] ] }
@@ -241,7 +250,7 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
       async info (reqData, meta = {directCall: true}, getStream = null) {
         var id = reqData.id
         await auth.userCan('dashboard.read', meta, CONFIG.jwt)
-        var returnResults = await getDashboardInfo(id)
+        var returnResults = await getDashInfo(id)
         return returnResults
       },
       async update (reqData, meta = {directCall: true}, getStream = null) {
@@ -311,7 +320,7 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
           rawIds.push(dashboardsMeta.count - i)
         }
         CONSOLE.hl('listLastDashboards', dashboardsMeta, rawIds)
-        var results = await Promise.all(rawIds.map((id) => getDashboardInfo(id)))
+        var results = await Promise.all(rawIds.map((id) => getDashInfo(id)))
         return results.filter((post) => post !== null)
       },
       async getDashboardsMeta (reqData = {}, meta = {directCall: true}, getStream = null) {
@@ -325,7 +334,7 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
       },
       readDashboard,
       getDashRole,
-      getDashboardInfo,
+      getDashboardInfo (reqData = {}, meta = {directCall: true}, getStream = null) { return getDashInfo(reqData.id) },
       async test (query = {}, meta = {directCall: true}, getStream = null) {
         var results = await require('./tests/base.test')(netClient)
         CONSOLE.log('test results', results)

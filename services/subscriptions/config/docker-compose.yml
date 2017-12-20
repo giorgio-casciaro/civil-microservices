@@ -1,29 +1,24 @@
 version:                   '3.3'
 
 services:
-   dashboards:
+   subscriptions:
      image:                giorgiocasciaro/ubuntu-node:v3
     #  logging:
     #    driver:           none
      working_dir:          /microservice
      command:              sh -c "npm run watch_test"
      environment:
-       aerospikeNamespace: cc_tests
-     # command:              sh -c "npm run start"
-     # environment:
        uploadPath:         /uploads/
        schemaHost:         'http://schema:10000'
-       serviceName:        dashboards
-       netHost:            dashboards
+       serviceName:        subscriptions
+       netHost:            subscriptions
       #  netHostHttpPublicPort: 10080
        netCors:            http://localhost:82,http://127.0.0.1:82,http://localhost:8080,http://127.0.0.1:8080,http://localhost:10080,http://127.0.0.1:10080
-       aerospikeTimeout:   600000
-       aerospikeHosts:     aerospike:3000
        NODE_ENV:           development
        sendEmails:         'true'
        smtpConfigJson: '{ "host": "fakesmtp", "port": 1025, "secure": false }'
      volumes:
-       - ../../dashboards:/microservice
+       - ../../subscriptions:/microservice
        # - ../../../../civil_microservices_shared_modules/:/microservice/node_modules
        - ../../../NPM/jesus:/microservice/service/node_modules/sint-bit-jesus
        - ../../../NPM/cqrs:/microservice/service/node_modules/sint-bit-cqrs
@@ -31,16 +26,12 @@ services:
        - ../../../FS/:/uploads/
 
      depends_on:
-       - aerospike
-       - schema
        - dashboards
+       - schema
        - users
      networks:
        - microservicesNet
-       - aerospike
 
 networks:
   microservicesNet:
-    driver:                bridge
-  aerospike:
     driver:                bridge
