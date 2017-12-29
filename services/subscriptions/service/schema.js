@@ -11,8 +11,8 @@ var subscriptionId = {
   // pattern: '^[0-9]*_[0-9]*$'
 }
 var dashId = {
-  type: 'number',
-  description: 'dash number'
+  type: 'string',
+  description: 'dash string'
 }
 var roleId = {
   type: 'string',
@@ -21,12 +21,12 @@ var roleId = {
 }
 var jsRes = {
   properties: {
-    success: { type: 'string' },
+    success: { type: 'boolean' },
     error: { type: 'string' },
     data: { type: 'object' },
     method: { type: 'string' },
     type: { type: 'string' },
-    id: subscriptionId
+    id: { type: 'string' }
   },
   'additionalProperties': true
 }
@@ -65,6 +65,42 @@ module.exports = {
   eventsOut: {
   },
   methods: {
+    'createMulti': {
+      public: true,
+      responseType: 'response',
+      requestSchema: {
+        properties: {items: {type: 'array', items: jsProp}, extend: jsProp},
+        required: [ 'items' ]
+      },
+      responseSchema: {properties: {results: {type: 'array', items: jsRes}, errors: {type: 'array'}}}
+    },
+    'updateMulti': {
+      public: true,
+      responseType: 'response',
+      requestSchema: {
+        properties: {items: {type: 'array', items: jsProp}, extend: jsProp},
+        required: [ 'items' ]
+      },
+      responseSchema: {properties: {results: {type: 'array', items: jsRes}, errors: {type: 'array'}}}
+    },
+    'readMulti': {
+      public: true,
+      responseType: 'response',
+      requestSchema: {
+        properties: { ids: { type: 'array', items: { type: 'string' } } },
+        required: [ 'ids' ]
+      },
+      responseSchema: {properties: {results: {type: 'array', items: jsRes}, errors: {type: 'array'}}}
+    },
+    'deleteMulti': {
+      public: true,
+      responseType: 'response',
+      requestSchema: {
+        properties: { ids: { type: 'array', items: { type: 'string' } } },
+        required: [ 'ids' ]
+      },
+        responseSchema: {properties: {results: {type: 'array', items: jsRes}, errors: {type: 'array'}}}
+    },
     'create': {
       public: true,
       responseType: 'response',

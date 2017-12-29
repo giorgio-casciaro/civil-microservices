@@ -1,3 +1,9 @@
+var jesusServer = require('sint-bit-jesus/net.server')
+var jesusClient = require('sint-bit-jesus/net.client')
+var generateId = require('uuid/v4')
+var path = require('path')
+var methods = require(path.join(__dirname, './methods'))
+
 process.on('unhandledRejection', (err, p) => {
   console.error(err)
   console.log('An unhandledRejection occurred')
@@ -5,32 +11,11 @@ process.on('unhandledRejection', (err, p) => {
   console.log(`Rejection: ${err}`)
 })
 module.exports = async function start () {
-  // BASE
   var CONFIG = require('./config')
-  const getConsole = (serviceName, serviceId, pack) => require('sint-bit-utils/utils/utils').getConsole({error: true, debug: true, log: true, warn: true}, serviceName, serviceId, pack)
-  var PACKAGE = 'microservice'
-  var CONSOLE = getConsole(PACKAGE, '----', '-----')
-
-  // SERVICES DEPENDECIES
-  const wait = require('sint-bit-utils/utils/wait')
-  await wait.service('http://schema:10000/getSchema')
-  await wait.service('http://users:10080/login')
-  await wait.service('http://dashboards:10080/')
-  await wait.service('http://couchbase_nodes:8091/')
-  console.log('INIT SCHEMA')
-
-  // DOMAIN
-  var jesusServer = require('sint-bit-jesus/net.server')
-  var jesusClient = require('sint-bit-jesus/net.client')
-  var generateId = require('uuid/v4')
-  var path = require('path')
-  var methods = require(path.join(__dirname, './methods'))
-
   var getServiceSchema = require('sint-bit-utils/utils/schema')(CONFIG.schemaHost, require('./schema'), CONFIG.service.serviceName)
   var DI = {
     serviceName: CONFIG.service.serviceName,
     serviceId: CONFIG.service.serviceId || generateId(),
-    CONSOLE,
     getMethods: () => methods,
     getMethodsConfig: function (service, exclude) {
       console.log('getMethodsConfig', service, exclude)
@@ -46,9 +31,7 @@ module.exports = async function start () {
   var netClient = jesusClient(DI)
   var netServer = jesusServer(DI)
   await methods.init(netClient)
-  // await require(path.join(__dirname, './methods'))(CONSOLE, netClient).init()
 
-// CONSOLE.log('DI', DI)
   netServer.start()
   return {
     DI,

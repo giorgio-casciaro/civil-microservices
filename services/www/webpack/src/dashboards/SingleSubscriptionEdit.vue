@@ -71,12 +71,12 @@ export default {
     },
     submitForm() {
       this.waiting = true;
-      if (this.newSubscription) call('dashboards', 'subscriptionsCreate', this.form, this.succ, this.err)
-      else call('dashboards', 'subscriptionsUpdate', this.form, this.succ, this.err)
+      if (this.newSubscription) call('subscriptions', 'create', this.form, this.succ, this.err)
+      else call('subscriptions', 'update', this.form, this.succ, this.err)
     },
     validateForm() {
-      if (this.newSubscription) this.validation = validate('dashboards', 'subscriptionsCreate', this.form)
-      else this.validation = validate('dashboards', 'subscriptionsUpdate', this.form)
+      if (this.newSubscription) this.validation = validate('subscriptions', 'create', this.form)
+      else this.validation = validate('subscriptions', 'update', this.form)
     },
     err(msg, extra = false) {
       this.error = this.errors = this.waiting = false

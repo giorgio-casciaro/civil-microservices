@@ -1,273 +1,281 @@
 const path = require('path')
-const DB = require('sint-bit-utils/utils/dbCouchbase')
+const DB = require('sint-bit-utils/utils/dbCouchbaseV2')
 var CONFIG = require('./config')
-const getConsole = (serviceName, serviceId, pack) => require('sint-bit-utils/utils/utils').getConsole({error: true, debug: true, log: true, warn: true}, serviceName, serviceId, pack)
-var PACKAGE = 'microservice'
-var CONSOLE = getConsole(PACKAGE, '----', '-----')
 var mutationsPack = require('sint-bit-cqrs/mutations')({ mutationsPath: path.join(__dirname, '/mutations') })
 const auth = require('sint-bit-utils/utils/auth')
-
-// var dashboards = require('./methods')
-var guestSubscription = (dashId, userId) => ({id: '0_0', roleId: 'guest', dashId, userId, meta: {confirmed: true}, permissions: []})
-var getDashboardRole = (roleId, dashId) => netClient.rpcCall({to: 'dashboards', method: 'getDashboardRole', data: {roleId, dashId}})
-var getDashboardInfo = (dashId) => netClient.rpcCall({to: 'dashboards', method: 'getDashboardInfo', data: {dashId}})
-
-var getByDashIdAndUserId = (dashId, userId, waitIndexUpdate = false) => getView(dashId + '_' + userId)
-async function listByDashId (dashId, select = ['notifications', 'userId', 'tags', 'roleId']) {
-  try {
-    var result = await DB.query('subscriptionsViews', 'SELECT ' + select.join(',') + ' FROM subscriptionsViews item WHERE dashId=$1', [dashId])
-    return result
-  } catch (error) { throw new Error('problems during listByDashId ' + error) }
-}
-async function listByDashIdTagsRoles (reqData = {}, meta = {directCall: true}, getStream = null) {
-  if (!reqData.select)reqData.select = ['id', 'dashId', 'roleId', 'userId']
-  var results = await DB.query('subscriptionsViews', 'SELECT ' + reqData.select.join(',') + ' FROM subscriptionsViews  WHERE dashId=$1 AND (ARRAY_LENGTH(ARRAY_INTERSECT(tags,$2)) > 0 OR roleId IN $3 )', [reqData.dashId, reqData.tags, reqData.roles])
-  CONSOLE.hl('query results', results)
-  return results
-}
-async function listByUserId (userId) {
-  try {
-    // CREATE INDEX subscriptionsViewsUserId ON subscriptionsViews  (userId)
-    CONSOLE.hl('listByUserId', userId)
-    var result = await DB.query('subscriptionsViews', 'SELECT item.* FROM subscriptionsViews item WHERE userId=$1 LIMIT 1', [userId])
-    return result || null
-  } catch (error) { throw new Error('problems during listByUserId ' + error) }
-}
-async function listLast (reqData = {}, meta = {directCall: true}, getStream = null) {
-  var dashId = reqData.dashId
-  var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
-  var canReadHiddenSubscriptions = false
-  var canInfo = await can(dashId, userId, 'subscriptionsReads')
-  var subscriptionRole = canInfo.role
-  canReadHiddenSubscriptions = (subscriptionRole.permissions.indexOf('subscriptionsReadHidden') !== -1)
-  var result
-  var limit = reqData.to || 20 - reqData.from || 0
-  var offset = reqData.from
-  CONSOLE.hl('listLast', {dashId, userId, limit, offset})
-  if (canReadHiddenSubscriptions) {
-    result = await DB.query('subscriptionsViews', 'SELECT item.* FROM subscriptionsViews item WHERE dashId=$1 ORDER BY item.meta.updated DESC LIMIT $2 OFFSET $3', [dashId, limit, offset])
-  } else {
-    result = await DB.query('subscriptionsViews', 'SELECT item.* FROM subscriptionsViews item WHERE dashId=$1 AND (item.userId=$4 OR (item.meta.deleted!=true AND item.meta.confirmed=true)) ORDER BY item.meta.updated DESC LIMIT $2  OFFSET $3', [dashId, limit, offset, userId])
-  }
-  return result
-}
-
-const can = async function (dashId, userId, can, role, subscriptionId) {
-  try {
-    var subscription
-    if (subscriptionId)subscription = await getView(subscriptionId)
-    else subscription = await getByDashIdAndUserId(dashId, userId)
-    if (!subscription || subscription.meta.deleted || !subscription.meta.confirmed) subscription = guestSubscription(dashId, userId)
-    CONSOLE.hl('can subscription', subscription, dashId, userId, can, role)
-    if (!role)role = await getDashboardRole(subscription.roleId, dashId)
-    if (!role) throw new Error(`role ${subscription.roleId} not exists`)
-    var rolePermissions = role.permissions || []
-    CONSOLE.hl('can rolePermissions', role, rolePermissions)
-
-    if (!rolePermissions || rolePermissions.indexOf(can) === -1) throw new Error('Dashboard Role ' + role.id + ' have no permissions to ' + can)
-    return {subscription, role}
-  } catch (error) { throw new Error('problems during can ' + error) }
-}
-
-const canBool = async function (dashId, userId, permission, role, subscriptionId) {
-  try {
-    await can(dashId, userId, permission, role, subscriptionId)
-    return true
-  } catch (error) {
-    CONSOLE.hl('canBool error', error)
-    return false
-  }
-}
-
-const mutate = async function (args) {
-  try {
-    var mutation = mutationsPack.mutate(args)
-    CONSOLE.debug('mutate', mutation)
-    await DB.put('subscriptionsMutations', mutation.id, mutation)
-    return mutation
-  } catch (error) {
-    throw new Error('problems during mutate a ' + error)
-  }
-}
-
-const updateView = async function (id, mutations, isNew) {
-  try {
-    var rawView = await getView(id, null, false) || {}
-    var view = mutationsPack.applyMutations(rawView, mutations)
-    CONSOLE.hl('updateView state', view)
-    view.meta = view.meta || {}
-    view.meta.updated = Date.now()
-    view.meta.created = view.meta.created || Date.now()
-    CONSOLE.hl('updateView view', view)
-    await DB.put('subscriptionsViews', id, view)
-    return view
-  } catch (error) { throw new Error('problems during updateView ' + error) }
-}
-
-const getView = async function (id, view = null) {
-  try {
-    if (!view) view = await DB.get('subscriptionsViews', id)
-    if (!view) return null
-    return view
-  } catch (error) { throw new Error('problems during getView ' + error) }
-}
-const addTag = async function (id, tag, meta) {
-  var mutation = await mutate({data: tag, objId: id, mutation: 'addTag', meta})
-  await updateView(id, [mutation])
-}
-const removeTag = async function (id, tag, meta) {
-  var mutation = await mutate({data: tag, objId: id, mutation: 'removeTag', meta})
-  await updateView(id, [mutation])
-}
-const createRaw = async function (reqData, meta = {directCall: true}, getStream = null) {
-  try {
-    var id = reqData.id = reqData.dashId + '_' + reqData.userId
-    // var id = reqData.id = uuid()
-    var mutation = await mutate({data: reqData, objId: id, mutation: 'create', meta})
-    await updateView(id, [mutation], true)
-    // INDEX UPDATE FRO IMPORTANT INDEX
-    return {success: `Subscription created`, id}
-  } catch (error) { throw new Error('problems during createRaw ' + error) }
-}
-const create = async function (reqData, meta = {directCall: true}, getStream = null) {
-  var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
-  if (!reqData.meta)reqData.meta = {}
-  if (reqData.userId !== userId) {
-    // ONLY ADMIN OR SUBSCRIPTION OWNER
-    await can(reqData.dashId, userId, 'writeSubscriptions')
-    if (!reqData.userId)reqData.userId = userId
-    reqData.meta.confirmed = 1
-  } else {
-    if (await canBool(reqData.dashId, userId, 'subscribe')) reqData.meta.confirmed = 1
-    else if (await canBool(reqData.dashId, userId, 'confirmSubscribe'))reqData.meta.confirmed = 0
-    else throw new Error(reqData.dashId + ' ' + userId + '  can\'t subscribe')
-  }
-  if (!reqData.roleId)reqData.roleId = 'subscriber'
-  var role = await getDashboardRole(reqData.roleId, reqData.dashId)
-  if (!role) throw new Error('Role not exists or is not active')
-  CONSOLE.hl('role', role)
-  // NOT PUBLIC ROLES CAN BE ASSIGNED ONLY WITH WRITE PERMISSIONS
-  if (parseInt(role.public) !== 1) await can(reqData.dashId, userId, 'writeSubscriptions')
-
-  // var dashData = dashboards.readDashboard(reqData.dashId)
-  CONSOLE.hl('create data', reqData)
-  var returnResults = await createRaw(reqData, meta)
-  return returnResults
-}
-async function confirm (reqData, meta = {directCall: true}, getStream = null) {
-  var id = reqData.id
-  var currentState = await getView(id)
-  var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
-  await can(currentState.dashId, userId, 'confirmSubscriptions')
-  var mutation = await mutate({data: reqData, objId: id, mutation: 'postsConfirm', meta})
-  var view = await updateView(id, [mutation])
-  return {success: ` Dashboard Subscriptions - confirmed`}
-}
-
-async function read (reqData, meta = {directCall: true}, getStream = null) {
-  var id = reqData.id
-  var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
-  CONSOLE.hl('read ', {reqData, userId})
-  var currentState = reqData.rawView || await getView(id)
-  CONSOLE.hl('subscriptionsRead', currentState)
-  if (!currentState) {
-    if (reqData.guestIfNull && reqData.dashId && reqData.userId)currentState = guestSubscription(reqData.dashId, reqData.userId)
-    else return null
-  }
-  if (currentState.meta.deleted || !currentState.meta.confirmed) {
-    await can(currentState.dashId, userId, 'subscriptionsReadHidden')
-  }
-  if (reqData.loadDash)currentState.dashboard = await getDashboardInfo(currentState.dashId)
-  if (reqData.loadUser)currentState.user = await netClient.rpc('readUser', {id: currentState.userId}, meta)
-  if (currentState.userId !== userId) {
-    await can(currentState.dashId, userId, 'subscriptionsRead')
-  }
-  return currentState
-}
-
-async function readByDashIdAndUserId (reqData, meta = {directCall: true}, getStream = null) {
-  var dashId = reqData.dashId
-  var userId = reqData.userId
-  var subscription = await getByDashIdAndUserId(dashId, userId)
-  if (!subscription)subscription = {id: '0_0', roleId: 'guest', dashId, userId, meta: {confirmed: true}, permissions: []}
-  subscription.role = await getDashboardRole(subscription.roleId, dashId)
-  return subscription
-}
-
-async function update (reqData, meta = {directCall: true}, getStream = null) {
-  CONSOLE.hl('update reqData', reqData)
-  var id = reqData.id
-  var currentState = await getView(id)
-  var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
-  CONSOLE.hl('update currentState', {currentState, userId})
-  if (currentState.userId !== userId) {
-    // ONLY ADMIN OR SUBSCRIPTION OWNER
-    await can(currentState.dashId, userId, 'writeSubscriptions')
-  }
-  if (reqData.roleId) {
-    // NOT PUBLIC ROLES CAN BE ASSIGNED ONLY WITH WRITE PERMISSIONS
-    var role = await getDashboardRole(reqData.roleId, currentState.dashId)
-    if (!role) {
-      throw new Error('Role not exists or is not active')
-    }
-    if (parseInt(role.public) !== 1) await can(currentState.dashId, userId, 'writeSubscriptions', role)
-  }
-  if (reqData.tags)reqData.tags = reqData.tags.map((item) => item.replace('#', ''))
-  var mutation = await mutate({data: reqData, objId: id, mutation: 'update', meta})
-  await updateView(id, [mutation])
-  return {success: `Subscription updated`}
-}
-async function remove (reqData, meta = {directCall: true}, getStream = null) {
-  var id = reqData.id
-  var currentState = await getView(id)
-  var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
-  if (currentState.userId !== userId) {
-    // ONLY ADMIN OR SUBSCRIPTION OWNER
-    await can(currentState.dashId, userId, 'writeSubscription')
-  }
-  var mutation = await mutate({data: {}, objId: id, mutation: 'delete', meta})
-  await updateView(id, [mutation])
-  return {success: `Subscription removed`}
-}
-
-async function getExtendedByUserId (reqData, meta = {directCall: true}, getStream = null) {
-  try {
-    var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
-    var subscriptions = await listByUserId(userId)
-    CONSOLE.hl('getExtendedByUserId listByUserId subscriptions', subscriptions)
-    var results = await Promise.all(subscriptions.map(extendSubscription))
-    CONSOLE.hl('getExtendedByUserId results', results)
-    return results
-  } catch (error) { throw new Error('problems during getExtendedByUserId ' + error) }
-}
-async function extendSubscription (subscription) {
-  // if (typeof subscription === 'string')subscription = JSON.parse(subscription)
-  subscription.dashInfo = await getDashboardInfo(subscription.dashId)
-  // subscription.dashInfo.subscriptionsMeta = metaUtils.optimize(await getDashMeta(subscription.dashId))
-  // subscription.dashInfo.postsMeta = metaUtils.optimize(await posts.getDashPostsMeta(subscription.dashId))
-  // subscription.dashInfo.roles = await getDashboardRoles(subscription.dashId)
-  return subscription
-}
 var netClient
 
+const log = (msg, data) => { console.log('\n' + JSON.stringify(['LOG', 'MAIN', msg, data])) }
+const debug = (msg, data) => { console.log('\n' + JSON.stringify(['WARN', 'MAIN', msg, data])) }
+const error = (msg, data) => { console.log('\n' + JSON.stringify(['ERROR', 'MAIN', msg, data])) }
+
+const objMap = (obj, func) => Object.keys(obj).reduce((newObj, key) => { newObj[key] = func(obj[key], key); return newObj }, {})
+const objFilter = (obj, func) => Object.keys(obj).reduce((newObj, key) => { if (func(obj[key], key))newObj[key] = obj[key]; return newObj }, {})
+const objReduce = (obj, func, acc) => Object.keys(obj).reduce((acc, key) => func(acc, obj[key], key), acc)
+
+const arrayToObjBy = (array, prop) => array.reduce((newObj, item) => { newObj[item[prop]] = item; return newObj }, {})
+const objByToArray = (obj, prop) => Object.keys(obj).reduce((newArray, key) => { newArray.push(obj[key]); return newArray }, [])
+
+// const objArrayMapBy = (items, keyFrom, filterProp = false) => items.reduce((items, item) => {Object.defineProperty(items, item[keyFrom], filterProp ? item[filterProp] : item)}, {})
+const arrayUnique = (array) => array.filter((v, i, a) => a.indexOf(v) === i)
+const objArrayExtract = (items, propName) => items.reduce((results, item) => results.push(item[propName]), [])
+
+var rpcDashboardsReadMulti = (ids, meta) => netClient.rpcCall({to: 'dashboards', method: 'readMulti', data: {ids}, meta})
+var dashboardsReadMulti = async(ids, meta) => {
+  var response = await rpcDashboardsReadMulti(ids, meta)
+  return response.results
+}
+var rpcUsersReadMulti = (ids, meta) => netClient.rpcCall({to: 'users', method: 'readMulti', data: {ids}, meta})
+var usersReadMulti = async(ids, meta) => {
+  var response = await rpcUsersReadMulti(ids, meta)
+  return response.results
+}
+
+var itemId = (dashId, userId) => dashId + '_' + userId
+var dashIdUserIdFromItemId = (itemId) => itemId.split('_')
+
+const dashboardsUserCan = async(dashboardsById, userId, permissionsToCheck) => {
+  try {
+    var subscriptionsIds = Object.keys(dashboardsById).map(dashId => itemId(dashId, userId))
+    log('dashboardsUserCan', {dashboardsById, userId, permissionsToCheck, subscriptionsIds})
+    var userSubscriptions = await getViews(subscriptionsIds, '*', true)
+    log('dashboardsUserCan userSubscriptions', {subscriptionsIds, userSubscriptions, dashboardsById})
+    return userSubscriptions.reduce((checkedSubscriptions, userSubscription) => {
+      checkedSubscriptions[userSubscription.dashId] = permissionsToCheck.reduce((checkedPermissions, permission) => {
+        checkedPermissions[permission] = roleCan(dashboardsById[userSubscription.dashId].roles[userSubscription.roleId], permission)
+        return checkedPermissions
+      }, {})
+      return checkedSubscriptions
+    }, {})
+  } catch (error) { throw new Error('problems during dashboardsUserCan ' + error) }
+}
+const roleCan = (role, permissionToCheck) => (role.permissions.indexOf(permissionToCheck) !== -1)
+const updateViews = async function (mutations, views) {
+  try {
+    if (!views) {
+      var ids = mutations.map((mutation) => mutation.objId)
+      views = await getViews(ids)
+    }
+    views = views.map((view) => view || {})
+    var viewsById = arrayToObjBy(views, 'id')
+    var viewsToUpdate = []
+    log('-- updateViews', { views, mutations })
+    mutations.forEach((mutation, index) => {
+      var view = viewsById[mutation.objId] || {}
+      view.meta = view.meta || {}
+      view.meta.updated = Date.now()
+      view.meta.created = view.meta.created || Date.now()
+      viewsById[mutation.objId] = mutationsPack.applyMutations(view, [mutation])
+      viewsToUpdate.push(viewsById[mutation.objId])
+    })
+    return await DB.upsertMulti('subscriptionsViews', viewsToUpdate)
+  } catch (error) { throw new Error('problems during updateViews ' + error) }
+}
+const mutateAndUpdate = async function (mutation, dataToResolve, meta, views) {
+  try {
+    log('mutateAndUpdate', {mutation, dataToResolve, views})
+    var mutations = dataToResolve.map((mutationAndData) => mutationsPack.mutate({data: mutationAndData.data, objId: mutationAndData.id, mutation, meta}))
+
+    DB.upsertMulti('subscriptionsMutations', mutations)
+    return await updateViews(mutations, views)
+  } catch (error) { throw new Error('problems during mutateAndUpdate ' + error) }
+}
+
+const getViews = async (ids, select = '*', guest = false) => {
+  if (typeof ids !== 'object') { ids = [ids]; var single = true }
+  var views = await DB.getMulti('subscriptionsViews', ids)
+  if (guest)views = views.map((view, index) => view || guestSubscription(ids[index]))
+  if (single) return views[0]
+  else return views
+}
+
+var guestSubscription = (subscriptionId) => {
+  var dashIdUserId = dashIdUserIdFromItemId(subscriptionId)
+  log('guestSubscription', {subscriptionId, dashId: dashIdUserId[0], userId: dashIdUserId[1]})
+  return {id: subscriptionId, roleId: 'guest', dashId: dashIdUserId[0], userId: dashIdUserId[1], meta: {confirmed: true}, permissions: []}
+}
+var resultsError = (id, msg) => { return {id: id, __RESULT_TYPE__: 'error', error: msg} }
+
+var queueObj = () => {
+  var resultsQueue = []
+  var errorsIndex = []
+  var dataToResolve = []
+
+  return {
+    dataToResolve,
+    add: (id, data) => {
+      var dataToResolveIndex = dataToResolve.push({ id, data }) - 1
+      resultsQueue.push({id, __RESULT_TYPE__: 'resultsToResolve', index: dataToResolveIndex})
+    },
+    addError: (id, data, error) => {
+      log('addError', data)
+      errorsIndex.push(resultsQueue.length)
+      resultsQueue.push(resultsError(id, error))
+    },
+    resolve: async (func) => {
+      if (dataToResolve.length) {
+        var resolvedResults = await func(dataToResolve)
+        resultsQueue = resultsQueue.map((data) => data.__RESULT_TYPE__ === 'resultsToResolve' ? resolvedResults[data.index] : data)
+      }
+    },
+    returnValue: () => {
+      var returnValue = {results: resultsQueue}
+      if (errorsIndex.length)returnValue.errors = errorsIndex
+      return returnValue
+    }
+  }
+}
+
+var linkedDashboards = async function (idsOrItems, meta, userId, permissionsToCheck) {
+  if (!Array.isArray(idsOrItems)) { idsOrItems = [idsOrItems]; var single = true }
+  var ids = idsOrItems.map(item => typeof ids[0] === 'object' ? item.dashId : item).filter((v, i, a) => a.indexOf(v) === i)
+  var dashboards = await dashboardsReadMulti(ids, meta)
+  var byId = arrayToObjBy(dashboards, 'id')
+  var permissions = await dashboardsUserCan(byId, userId, permissionsToCheck)
+  return single ? { id: ids[0], dashboard: dashboards[0], permissions: permissions[dashboards[0].id] } : { ids, dashboards, permissions, byId }
+}
+var linkedUsers = async function (idsOrItems, meta) {
+  var ids = idsOrItems.map(item => typeof ids[0] === 'object' ? item.dashId : item).filter((v, i, a) => a.indexOf(v) === i)
+  var users = await usersReadMulti(ids, meta)
+  var byId = arrayToObjBy(users, 'id')
+  return { ids, users, byId }
+}
+var basicMutationRequest = async function ({ids, dataArray, mutation, extend, meta, permissions, func}) {
+  log('basicMutationRequest', {ids, dataArray, mutation, extend, meta, permissions})
+  var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
+  if (extend)dataArray = dataArray.map(data => Object.assign(data, extend))
+  var currentStates = await getViews(ids, '*', false)
+  log('basicMutationRequest currentStates', {currentStates, userId, permissions})
+  var dashboardsAndPermissions = await linkedDashboards(currentStates, meta, userId, permissions)
+  var resultsQueue = queueObj()
+  ids.forEach((id, index) => {
+    var data = dataArray[index] || {id}
+    var currentState = currentStates[index]
+    var permissions = dashboardsAndPermissions.permissions[currentState.dashId || data.dashId]
+    func(resultsQueue, data, currentState, userId, dashboardsAndPermissions[currentState.dashId || data.dashId], permissions)
+  })
+  await resultsQueue.resolve((dataToResolve) => mutateAndUpdate(mutation, dataToResolve, meta, currentStates))
+  return resultsQueue.returnValue()
+}
+
 module.exports = {
+  deleteMulti: async function (reqData, meta, getStream) {
+    var func = (resultsQueue, data, currentState, userId, dashboard, permissions) => {
+      if (!currentState) return resultsQueue.addError(data.id, data, 'Subscriptions not exists')
+      if (!permissions['subscriptionsWrite']) {
+        return resultsQueue.addError(data.id, data, 'User cant write subcriptions')
+      }
+      resultsQueue.add(data.id, data)
+    }
+    return basicMutationRequest({ids: reqData.ids, extend: reqData.extend, dataArray: [], meta, mutation: 'delete', permissions: ['subscriptionsWrite'], func})
+  },
   init: async function (setNetClient) {
     netClient = setNetClient
     await DB.init(CONFIG.couchbase.url, CONFIG.couchbase.username, CONFIG.couchbase.password)
     await DB.createIndex('subscriptionsViews', ['dashId', 'userId'])
     await DB.createIndex('subscriptionsViews', ['userId'])
   },
-  getByDashIdAndUserId,
-  can,
-  createRaw,
-  confirm,
-  create,
-  read,
-  readByDashIdAndUserId,
-  update,
-  remove,
-  getExtendedByUserId,
-  listLast,
-  listByDashIdTagsRoles,
-  listByDashId
+  rawMutateMulti: async function (reqData, meta, getStream) {
+    if (reqData.extend)reqData.items = reqData.items.map(item => Object.assign(item.data, reqData.extend))
+    var results = mutateAndUpdate(reqData.mutation, reqData.items, meta)
+    return {results}
+  },
+  createMulti: async function (reqData, meta, getStream) {
+    var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
+    if (reqData.extend)reqData.items = reqData.items.map(item => Object.assign(item, reqData.extend))
+
+    var ids = reqData.items.map(item => itemId(item.dashId, item.userId))
+    var currentStates = await getViews(ids, '*', false)
+    var dashboardsAndPermissions = await linkedDashboards(reqData.items, meta, userId, ['subscriptionsSubscribe', 'subscriptionsWrite', 'subscriptionsSubscribeWithConfimation'])
+    var resultsQueue = queueObj()
+
+    reqData.items.forEach((item, index) => {
+      if (currentStates[index]) return resultsQueue.addError(item.id, currentStates[index], 'Subscription exists')
+      item = Object.assign({id: itemId(item.dashId, item.userId), roleId: 'subscriber'}, item)
+      var permissions = dashboardsAndPermissions.permissions[item.dashId]
+      var role = dashboardsAndPermissions.byId[item.dashId].roles[item.roleId]
+      if (!role) return resultsQueue.addError(item.id, item, 'Role not exists or is not active')
+      if (!permissions['subscriptionsWrite']) {
+        if (!role.public) return resultsQueue.addError(item.id, item, item.dashId + ' ' + userId + ' can\'t write role ' + item.roleId + '  subscriptions')
+        if (item.userId === userId) {
+          if (permissions['subscriptionsSubscribe'])item.meta.confirmed = 1
+          else if (!permissions['subscriptionsSubscribeWithConfimation']) return resultsQueue.addError(item, item.dashId + ' ' + userId + ' can\'t subscribe')
+        } else return resultsQueue.addError(item.id, item, item.dashId + ' ' + userId + ' can\'t create other users subscriptions')
+      }
+      resultsQueue.add(item.id, item)
+    })
+
+    await resultsQueue.resolve((dataToResolve) => mutateAndUpdate('create', dataToResolve, meta, currentStates))
+    return resultsQueue.returnValue()
+  },
+  readMulti: async function (reqData, meta, getStream) {
+    var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
+    var currentStates = await getViews(reqData.ids, reqData.select || '*', false)
+    var dashboardsAndPermissions = await linkedDashboards(currentStates, meta, userId, ['subscriptionsRead', 'subscriptionsReadHidden'])
+    if (reqData.linkedViews && reqData.linkedViews.indexOf('user') !== -1) {
+      var users = await linkedUsers(currentStates, meta)
+    }
+    log('readMulti', {dashboardsAndPermissions, currentStates, users})
+    var results = currentStates.map((currentState, index) => {
+      if (!currentState) return resultsError(reqData.ids[index], 'Subscription not exists')
+      if (!dashboardsAndPermissions.permissions[currentState.dashId]['subscriptionsReadHidden'] && currentState.userId !== userId && (currentState.meta.deleted || !currentState.meta.confirmed)) return resultsError(currentState.id, 'User cant read hidden subscriptions')
+      if (reqData.linkedViews && reqData.linkedViews.indexOf('role') !== -1) currentState.role = dashboardsAndPermissions.byId[currentState.dashId].roles[currentState.roleId]
+      if (reqData.linkedViews && reqData.linkedViews.indexOf('dashboard') !== -1) currentState.role = dashboardsAndPermissions.byId[currentState.dashId]
+      if (reqData.linkedViews && reqData.linkedViews.indexOf('user') !== -1) currentState.user = users.byId[currentState.userId]
+      return currentState
+    })
+    return {results}
+  },
+  updateMulti: async function (reqData, meta, getStream) {
+    var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
+    if (reqData.extend)reqData.items = reqData.items.map(item => Object.assign(item, reqData.extend))
+    var ids = reqData.items.map(item => item.id)
+    var currentStates = await getViews(ids, '*', false)
+    var dashboardsAndPermissions = await linkedDashboards(currentStates, meta, userId, ['subscriptionsWrite'])
+    var resultsQueue = queueObj()
+    log('updateMulti', {dashboardsAndPermissions, currentStates})
+    reqData.items.forEach((item, index) => {
+      var currentState = currentStates[index]
+      var permissions = dashboardsAndPermissions.permissions[currentState.dashId]
+      if (!currentState) return resultsQueue.addError(item.id, item, 'Subscriptions not exists')
+      if (!permissions['subscriptionsWrite']) return resultsQueue.addError(item.id, item, 'User cant write subcriptions')
+      resultsQueue.add(item.id, item)
+    })
+    await resultsQueue.resolve((dataToResolve) => mutateAndUpdate('update', dataToResolve, meta, currentStates))
+    return resultsQueue.returnValue()
+  },
+  list: async function (reqData, meta, getStream) {
+    var dashId = reqData.dashId
+    var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
+    var dashboard = await linkedDashboards(dashId, meta, userId, ['subscriptionsRead', 'subscriptionsReadHidden'])
+    if (!dashboard.permissions['subscriptionsRead']) { throw new Error('Cant read subscriptions from dashboard ' + dashId) }
+    var results
+    var limit = reqData.to || 20 - reqData.from || 0
+    var offset = reqData.from
+    if (dashboard.permissions['subscriptionsReadHidden']) results = await DB.query('subscriptionsViews', 'SELECT item.* FROM subscriptionsViews item WHERE dashId=$1 ORDER BY item.meta.updated DESC LIMIT $2 OFFSET $3', [dashId, limit, offset])
+    else results = await DB.query('subscriptionsViews', 'SELECT item.* FROM subscriptionsViews item WHERE dashId=$1 AND (item.userId=$4 OR (item.meta.deleted!=true AND item.meta.confirmed=true)) ORDER BY item.meta.updated DESC LIMIT $2  OFFSET $3', [dashId, limit, offset, userId])
+    return results
+  },
+  confirm: async function (reqData, meta, getStream) {
+    var id = reqData.id
+    var currentState = await getView(id)
+    var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
+    await can(currentState.dashId, userId, 'confirmSubscriptions')
+    var mutation = await mutate({data: reqData, objId: id, mutation: 'postsConfirm', meta})
+    var view = await updateView(id, [mutation])
+    return {success: ` Dashboard Subscriptions - confirmed`}
+  },
+  can: async function (reqData, meta, getStream) {
+    return can(subscription, permissionToCheck)
+  }
+  // getRawByDashIdAndUserId,
+  // can,
+  // createRaw,
+  // confirm,
+  // readByDashIdAndUserId,
+  // getExtendedByUserId,
+  // listLast,
+  // listByDashIdTagsRoles: (reqData = {}, meta, getStream) => listRawByDashIdTagsRoles(reqData.dashId, reqData.tags, reqData.roles, reqData.select),
+  // listByDashId: listRawByDashId,
+  // listRawByDashId
 }
