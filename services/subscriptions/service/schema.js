@@ -27,8 +27,8 @@ var jsRes = {
     method: { type: 'string' },
     type: { type: 'string' },
     id: { type: 'string' }
-  },
-  'additionalProperties': true
+  }
+  // 'additionalProperties': true
 }
 
 var jsItemBySubscriptionId = { properties: { id: subscriptionId }, required: ['id'] }
@@ -38,7 +38,7 @@ var meta = {
   updated: { type: 'number' },
   created: { type: 'number' }
 }
-var jsProp = { id: subscriptionId, dashId: dashId, roleId, tags: jsFields.tags, userId: jsFields.id, meta, notifications: { type: 'array' }, role: { type: 'object' } }
+var jsProp = { id: subscriptionId, dashId: dashId, roleId, tags: jsFields.tags, userId: { type: 'string' }, meta, notifications: { type: 'array' }, role: { type: 'object' } }
 var jsUpdateProp = { id: subscriptionId, roleId, tags: jsFields.tags, meta }
 
 module.exports = {
@@ -74,6 +74,15 @@ module.exports = {
       },
       responseSchema: {properties: {results: {type: 'array', items: jsRes}, errors: {type: 'array'}}}
     },
+    'rawMutateMulti': {
+      public: true,
+      responseType: 'response',
+      requestSchema: {
+        properties: {mutation: {type: 'string'}, items: {type: 'array', items: {type: 'object', properties: {data: jsProp, id: { type: 'string' }}}}, extend: jsProp},
+        required: [ 'items', 'mutation' ]
+      },
+      responseSchema: {properties: {results: {type: 'array', items: jsRes}, errors: {type: 'array'}}}
+    },
     'updateMulti': {
       public: true,
       responseType: 'response',
@@ -90,7 +99,7 @@ module.exports = {
         properties: { ids: { type: 'array', items: { type: 'string' } } },
         required: [ 'ids' ]
       },
-      responseSchema: {properties: {results: {type: 'array', items: jsRes}, errors: {type: 'array'}}}
+      responseSchema: {properties: {results: {type: 'array', items: jsProp}, errors: {type: 'array'}}}
     },
     'deleteMulti': {
       public: true,
@@ -99,7 +108,13 @@ module.exports = {
         properties: { ids: { type: 'array', items: { type: 'string' } } },
         required: [ 'ids' ]
       },
-        responseSchema: {properties: {results: {type: 'array', items: jsRes}, errors: {type: 'array'}}}
+      responseSchema: {properties: {results: {type: 'array', items: jsRes}, errors: {type: 'array'}}}
+    },
+    'list': {
+      public: true,
+      responseType: 'response',
+      requestSchema: { required: ['dashId'], properties: { dashId, from: { type: 'integer' }, to: { type: 'integer' } } },
+      responseSchema: {properties: {results: {type: 'array', items: jsProp}, errors: {type: 'array'}}}
     },
     'create': {
       public: true,
@@ -145,7 +160,7 @@ module.exports = {
     'readByDashIdAndUserId': {
       public: false,
       responseType: 'response',
-      requestSchema: { required: ['dashId'], properties: { dashId, userId: jsFields.id } },
+      requestSchema: { required: ['dashId'], properties: { dashId, userId: { type: 'string' } } },
       responseSchema: {
         properties: jsProp
       }

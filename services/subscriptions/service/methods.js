@@ -6,50 +6,20 @@ const auth = require('sint-bit-utils/utils/auth')
 var netClient
 
 const log = (msg, data) => { console.log('\n' + JSON.stringify(['LOG', 'MAIN', msg, data])) }
-const debug = (msg, data) => { console.log('\n' + JSON.stringify(['WARN', 'MAIN', msg, data])) }
-const error = (msg, data) => { console.log('\n' + JSON.stringify(['ERROR', 'MAIN', msg, data])) }
-
-const objMap = (obj, func) => Object.keys(obj).reduce((newObj, key) => { newObj[key] = func(obj[key], key); return newObj }, {})
-const objFilter = (obj, func) => Object.keys(obj).reduce((newObj, key) => { if (func(obj[key], key))newObj[key] = obj[key]; return newObj }, {})
-const objReduce = (obj, func, acc) => Object.keys(obj).reduce((acc, key) => func(acc, obj[key], key), acc)
+const debug = (msg, data) => { console.log('\n' + JSON.stringify(['DEBUG', 'MAIN', msg, data])) }
+const error = (msg, data) => { console.log('\n' + JSON.stringify(['ERROR', 'MAIN', msg, data])); console.error(data) }
 
 const arrayToObjBy = (array, prop) => array.reduce((newObj, item) => { newObj[item[prop]] = item; return newObj }, {})
-const objByToArray = (obj, prop) => Object.keys(obj).reduce((newArray, key) => { newArray.push(obj[key]); return newArray }, [])
-
-// const objArrayMapBy = (items, keyFrom, filterProp = false) => items.reduce((items, item) => {Object.defineProperty(items, item[keyFrom], filterProp ? item[filterProp] : item)}, {})
-const arrayUnique = (array) => array.filter((v, i, a) => a.indexOf(v) === i)
-const objArrayExtract = (items, propName) => items.reduce((results, item) => results.push(item[propName]), [])
-
-var rpcDashboardsReadMulti = (ids, meta) => netClient.rpcCall({to: 'dashboards', method: 'readMulti', data: {ids}, meta})
-var dashboardsReadMulti = async(ids, meta) => {
-  var response = await rpcDashboardsReadMulti(ids, meta)
-  return response.results
-}
-var rpcUsersReadMulti = (ids, meta) => netClient.rpcCall({to: 'users', method: 'readMulti', data: {ids}, meta})
-var usersReadMulti = async(ids, meta) => {
-  var response = await rpcUsersReadMulti(ids, meta)
-  return response.results
-}
 
 var itemId = (dashId, userId) => dashId + '_' + userId
 var dashIdUserIdFromItemId = (itemId) => itemId.split('_')
-
-const dashboardsUserCan = async(dashboardsById, userId, permissionsToCheck) => {
-  try {
-    var subscriptionsIds = Object.keys(dashboardsById).map(dashId => itemId(dashId, userId))
-    log('dashboardsUserCan', {dashboardsById, userId, permissionsToCheck, subscriptionsIds})
-    var userSubscriptions = await getViews(subscriptionsIds, '*', true)
-    log('dashboardsUserCan userSubscriptions', {subscriptionsIds, userSubscriptions, dashboardsById})
-    return userSubscriptions.reduce((checkedSubscriptions, userSubscription) => {
-      checkedSubscriptions[userSubscription.dashId] = permissionsToCheck.reduce((checkedPermissions, permission) => {
-        checkedPermissions[permission] = roleCan(dashboardsById[userSubscription.dashId].roles[userSubscription.roleId], permission)
-        return checkedPermissions
-      }, {})
-      return checkedSubscriptions
-    }, {})
-  } catch (error) { throw new Error('problems during dashboardsUserCan ' + error) }
+var guestSubscription = (subscriptionId) => {
+  var dashIdUserId = dashIdUserIdFromItemId(subscriptionId)
+  debug('guestSubscription', {subscriptionId, dashId: dashIdUserId[0], userId: dashIdUserId[1]})
+  return {id: subscriptionId, roleId: 'guest', dashId: dashIdUserId[0], userId: dashIdUserId[1], meta: {confirmed: true}, permissions: []}
 }
-const roleCan = (role, permissionToCheck) => (role.permissions.indexOf(permissionToCheck) !== -1)
+var resultsError = (id, msg) => { return {id: id, __RESULT_TYPE__: 'error', error: msg} }
+
 const updateViews = async function (mutations, views) {
   try {
     if (!views) {
@@ -59,7 +29,7 @@ const updateViews = async function (mutations, views) {
     views = views.map((view) => view || {})
     var viewsById = arrayToObjBy(views, 'id')
     var viewsToUpdate = []
-    log('-- updateViews', { views, mutations })
+    debug('updateViews', { views, mutations })
     mutations.forEach((mutation, index) => {
       var view = viewsById[mutation.objId] || {}
       view.meta = view.meta || {}
@@ -73,9 +43,8 @@ const updateViews = async function (mutations, views) {
 }
 const mutateAndUpdate = async function (mutation, dataToResolve, meta, views) {
   try {
-    log('mutateAndUpdate', {mutation, dataToResolve, views})
+    debug('mutateAndUpdate', {mutation, dataToResolve, views})
     var mutations = dataToResolve.map((mutationAndData) => mutationsPack.mutate({data: mutationAndData.data, objId: mutationAndData.id, mutation, meta}))
-
     DB.upsertMulti('subscriptionsMutations', mutations)
     return await updateViews(mutations, views)
   } catch (error) { throw new Error('problems during mutateAndUpdate ' + error) }
@@ -89,18 +58,10 @@ const getViews = async (ids, select = '*', guest = false) => {
   else return views
 }
 
-var guestSubscription = (subscriptionId) => {
-  var dashIdUserId = dashIdUserIdFromItemId(subscriptionId)
-  log('guestSubscription', {subscriptionId, dashId: dashIdUserId[0], userId: dashIdUserId[1]})
-  return {id: subscriptionId, roleId: 'guest', dashId: dashIdUserId[0], userId: dashIdUserId[1], meta: {confirmed: true}, permissions: []}
-}
-var resultsError = (id, msg) => { return {id: id, __RESULT_TYPE__: 'error', error: msg} }
-
 var queueObj = () => {
   var resultsQueue = []
   var errorsIndex = []
   var dataToResolve = []
-
   return {
     dataToResolve,
     add: (id, data) => {
@@ -108,7 +69,6 @@ var queueObj = () => {
       resultsQueue.push({id, __RESULT_TYPE__: 'resultsToResolve', index: dataToResolveIndex})
     },
     addError: (id, data, error) => {
-      log('addError', data)
       errorsIndex.push(resultsQueue.length)
       resultsQueue.push(resultsError(id, error))
     },
@@ -125,27 +85,42 @@ var queueObj = () => {
     }
   }
 }
-
+var rpcDashboardsReadMulti = (ids, meta) => netClient.rpcCall({to: 'dashboards', method: 'readMulti', data: {ids}, meta})
+var dashboardsReadMulti = async(ids, meta) => {
+  var response = await rpcDashboardsReadMulti(ids, meta)
+  return response.results
+}
 var linkedDashboards = async function (idsOrItems, meta, userId, permissionsToCheck) {
   if (!Array.isArray(idsOrItems)) { idsOrItems = [idsOrItems]; var single = true }
-  var ids = idsOrItems.map(item => typeof ids[0] === 'object' ? item.dashId : item).filter((v, i, a) => a.indexOf(v) === i)
+  var ids = idsOrItems.map(item => typeof item === 'object' ? item.dashId : item).filter((v, i, a) => a.indexOf(v) === i)
   var dashboards = await dashboardsReadMulti(ids, meta)
   var byId = arrayToObjBy(dashboards, 'id')
-  var permissions = await dashboardsUserCan(byId, userId, permissionsToCheck)
+  var userSubscriptionsIds = dashboards.map(dashboard => itemId(dashboard.id, userId))
+  var userSubscriptions = await getViews(userSubscriptionsIds, '*', true)
+  var userSubscriptionsByDashId = arrayToObjBy(userSubscriptions, 'dashId')
+  var permissions = {}
+  dashboards.forEach(dashboard => {
+    permissions[dashboard.id] = dashboard.roles[userSubscriptionsByDashId[dashboard.id].roleId].permissions.reduce((acc, value) => Object.assign(acc, {[value]: true}), {})
+  })
   return single ? { id: ids[0], dashboard: dashboards[0], permissions: permissions[dashboards[0].id] } : { ids, dashboards, permissions, byId }
 }
+var rpcUsersReadMulti = (ids, meta) => netClient.rpcCall({to: 'users', method: 'readMulti', data: {ids}, meta})
+var usersReadMulti = async(ids, meta) => {
+  var response = await rpcUsersReadMulti(ids, meta)
+  return response.results
+}
 var linkedUsers = async function (idsOrItems, meta) {
-  var ids = idsOrItems.map(item => typeof ids[0] === 'object' ? item.dashId : item).filter((v, i, a) => a.indexOf(v) === i)
+  var ids = idsOrItems.map(item => typeof item === 'object' ? item.dashId : item).filter((v, i, a) => a.indexOf(v) === i)
   var users = await usersReadMulti(ids, meta)
   var byId = arrayToObjBy(users, 'id')
   return { ids, users, byId }
 }
 var basicMutationRequest = async function ({ids, dataArray, mutation, extend, meta, permissions, func}) {
-  log('basicMutationRequest', {ids, dataArray, mutation, extend, meta, permissions})
+  debug('basicMutationRequest', {ids, dataArray, mutation, extend, meta, permissions})
   var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
   if (extend)dataArray = dataArray.map(data => Object.assign(data, extend))
   var currentStates = await getViews(ids, '*', false)
-  log('basicMutationRequest currentStates', {currentStates, userId, permissions})
+  debug('basicMutationRequest currentStates', {currentStates, userId, permissions})
   var dashboardsAndPermissions = await linkedDashboards(currentStates, meta, userId, permissions)
   var resultsQueue = queueObj()
   ids.forEach((id, index) => {
@@ -176,8 +151,10 @@ module.exports = {
     await DB.createIndex('subscriptionsViews', ['userId'])
   },
   rawMutateMulti: async function (reqData, meta, getStream) {
-    if (reqData.extend)reqData.items = reqData.items.map(item => Object.assign(item.data, reqData.extend))
-    var results = mutateAndUpdate(reqData.mutation, reqData.items, meta)
+    if (reqData.extend)reqData.items.forEach(item => Object.assign(item.data, reqData.extend))
+    reqData.items.forEach(item => { if (!item.id && item.data.dashId && item.data.userId)item.id = item.data.id = itemId(item.data.dashId, item.data.userId) })
+    var results = await mutateAndUpdate(reqData.mutation, reqData.items, meta)
+    debug('rawMutateMulti', results)
     return {results}
   },
   createMulti: async function (reqData, meta, getStream) {
@@ -215,7 +192,7 @@ module.exports = {
     if (reqData.linkedViews && reqData.linkedViews.indexOf('user') !== -1) {
       var users = await linkedUsers(currentStates, meta)
     }
-    log('readMulti', {dashboardsAndPermissions, currentStates, users})
+    debug('readMulti', {dashboardsAndPermissions, currentStates, users})
     var results = currentStates.map((currentState, index) => {
       if (!currentState) return resultsError(reqData.ids[index], 'Subscription not exists')
       if (!dashboardsAndPermissions.permissions[currentState.dashId]['subscriptionsReadHidden'] && currentState.userId !== userId && (currentState.meta.deleted || !currentState.meta.confirmed)) return resultsError(currentState.id, 'User cant read hidden subscriptions')
@@ -233,7 +210,7 @@ module.exports = {
     var currentStates = await getViews(ids, '*', false)
     var dashboardsAndPermissions = await linkedDashboards(currentStates, meta, userId, ['subscriptionsWrite'])
     var resultsQueue = queueObj()
-    log('updateMulti', {dashboardsAndPermissions, currentStates})
+    debug('updateMulti', {dashboardsAndPermissions, currentStates})
     reqData.items.forEach((item, index) => {
       var currentState = currentStates[index]
       var permissions = dashboardsAndPermissions.permissions[currentState.dashId]
@@ -250,11 +227,12 @@ module.exports = {
     var dashboard = await linkedDashboards(dashId, meta, userId, ['subscriptionsRead', 'subscriptionsReadHidden'])
     if (!dashboard.permissions['subscriptionsRead']) { throw new Error('Cant read subscriptions from dashboard ' + dashId) }
     var results
-    var limit = reqData.to || 20 - reqData.from || 0
-    var offset = reqData.from
+    var offset = reqData.from || 0
+    var limit = reqData.to || 20 - offset
     if (dashboard.permissions['subscriptionsReadHidden']) results = await DB.query('subscriptionsViews', 'SELECT item.* FROM subscriptionsViews item WHERE dashId=$1 ORDER BY item.meta.updated DESC LIMIT $2 OFFSET $3', [dashId, limit, offset])
     else results = await DB.query('subscriptionsViews', 'SELECT item.* FROM subscriptionsViews item WHERE dashId=$1 AND (item.userId=$4 OR (item.meta.deleted!=true AND item.meta.confirmed=true)) ORDER BY item.meta.updated DESC LIMIT $2  OFFSET $3', [dashId, limit, offset, userId])
-    return results
+    debug('list results', results)
+    return {results}
   },
   confirm: async function (reqData, meta, getStream) {
     var id = reqData.id

@@ -47,10 +47,7 @@ var startTest = async function (netClient) {
           roles: {
             guest: puppetGuestRole,
             subscriber: puppetSubscriberRole,
-            admin: {
-              public: 1,
-              permissions: ['subscriptionsWrite']
-            }
+            admin: puppetAdminRole
           }
         }
       ]
@@ -77,12 +74,16 @@ var startTest = async function (netClient) {
   }
 
   var puppetGuestRole = {
-    permissions: ['subscriptionsSubscribeWithConfimation'],
+    permissions: ['subscriptionsSubscribeWithConfimation', 'subscriptionsRead'],
     public: 1
   }
   var puppetSubscriberRole = {
     public: 1,
-    permissions: ['subscriptionsSubscribe', 'subscriptionsSubscribeWithConfimation', 'subscriptionsWrite']
+    permissions: ['subscriptionsSubscribe', 'subscriptionsSubscribeWithConfimation', 'subscriptionsWrite', 'subscriptionsRead']
+  }
+  var puppetAdminRole = {
+    public: 1,
+    permissions: ['subscriptionsSubscribe', 'subscriptionsSubscribeWithConfimation', 'subscriptionsWrite', 'subscriptionsRead']
   }
 
   const DB = require('sint-bit-utils/utils/dbCouchbaseV2')
@@ -90,7 +91,21 @@ var startTest = async function (netClient) {
   // mainTest.consoleResume()
   mainTest.consoleResume()
   log('createMulti DB delete', await DB.remove('subscriptionsViews', 'testDash1_token1'))
+  // mainTest.consoleMute()
+  var rawSubscriptions = {
+    items: [{id: undefined, data: { dashId: 'testDash1', userId: 'token1' }}],
+    extend: {
+      roleId: 'subscriber',
+      tags: ['testTag'],
+      notifications: ['email', 'sms', 'fb']
+    }
+  }
+  var rawCreateMulti = await netClient.testLocalMethod('rawMutateMulti', Object.assign({}, rawSubscriptions, {mutation: 'create'}), {token: token1})
+  mainTest.consoleResume()
+  log('rawCreateMulti', rawCreateMulti)
+  log('rawCreateMulti DB read', await DB.get('subscriptionsViews', 'testDash1_token1'))
   mainTest.consoleMute()
+
   var createMulti = await netClient.testLocalMethod('createMulti', subscriptions, {token: token1})
   microTest(createMulti, {results: 'object'}, 'createMulti', TYPE_OF)
   mainTest.consoleResume()
@@ -116,6 +131,12 @@ var startTest = async function (netClient) {
   mainTest.consoleResume()
   log('updateMulti', updateMulti)
   log('updateMulti DB read', await DB.get('subscriptionsViews', 'testDash1_token1'))
+  mainTest.consoleMute()
+
+  var list = await netClient.testLocalMethod('list', { dashId: 'testDash1' }, {token: token1})
+  microTest(list, {results: 'object'}, 'list', TYPE_OF)
+  mainTest.consoleResume()
+  log('list', list)
   mainTest.consoleMute()
 
   // mainTest.consoleResume()
