@@ -110,72 +110,44 @@ module.exports = {
       },
       responseSchema: {properties: {results: {type: 'array', items: jsRes}, errors: {type: 'array'}}}
     },
+    'confirmMulti': {
+      public: true,
+      responseType: 'response',
+      requestSchema: {
+        properties: { ids: { type: 'array', items: { type: 'string' } } },
+        required: [ 'ids' ]
+      },
+      responseSchema: {properties: {results: {type: 'array', items: jsRes}, errors: {type: 'array'}}}
+    },
+    'addTagsMulti': {
+      public: true,
+      responseType: 'response',
+      requestSchema: {
+        properties: {items: {type: 'array', items: jsProp}, extend: jsProp},
+        required: [ 'items' ]
+      },
+      responseSchema: {properties: {results: {type: 'array', items: jsRes}, errors: {type: 'array'}}}
+    },
+    'removeTagsMulti': {
+      public: true,
+      responseType: 'response',
+      requestSchema: {
+        properties: {items: {type: 'array', items: jsProp}, extend: jsProp},
+        required: [ 'items' ]
+      },
+      responseSchema: {properties: {results: {type: 'array', items: jsRes}, errors: {type: 'array'}}}
+    },
     'list': {
       public: true,
       responseType: 'response',
       requestSchema: { required: ['dashId'], properties: { dashId, from: { type: 'integer' }, to: { type: 'integer' } } },
       responseSchema: {properties: {results: {type: 'array', items: jsProp}, errors: {type: 'array'}}}
     },
-    'create': {
-      public: true,
-      responseType: 'response',
-      requestSchema: {
-        properties: jsProp,
-        required: [ 'dashId' ]
-      },
-      responseSchema: jsRes
-    },
-    'read': {
-      public: true,
-      responseType: 'response',
-      requestSchema: jsItemBySubscriptionId,
-      responseSchema: {
-        properties: jsProp
-      }
-    },
-    'confirm': {
-      public: true,
-      responseType: 'response',
-      requestSchema: jsItemBySubscriptionId,
-      responseSchema: jsRes
-    },
-    'update': {
-      public: true,
-      responseType: 'response',
-      requestSchema: { properties: jsUpdateProp, required: [ 'id' ] },
-      responseSchema: jsRes
-    },
-    'remove': {
-      public: true,
-      responseType: 'response',
-      requestSchema: jsItemBySubscriptionId,
-      responseSchema: jsRes
-    },
-    'getExtendedByUserId': {
-      public: true,
-      responseType: 'response',
-      requestSchema: { properties: {} },
-      responseSchema: { type: 'array' }
-    },
-    'readByDashIdAndUserId': {
-      public: false,
-      responseType: 'response',
-      requestSchema: { required: ['dashId'], properties: { dashId, userId: { type: 'string' } } },
-      responseSchema: {
-        properties: jsProp
-      }
-    },
-    'listLast': {
-      public: true,
-      responseType: 'response',
-      requestSchema: { required: ['from', 'dashId'], properties: { dashId, from: { type: 'integer' }, to: { type: 'integer' } } },
-      responseSchema: { type: 'array', items: { properties: jsProp } }
-    },
     'listByDashIdTagsRoles': {
       public: true,
       responseType: 'response',
       requestSchema: { required: ['dashId'], properties: { dashId, roles: { type: 'array' }, tags: { type: 'array' } } },
-      responseSchema: { type: 'array' }
+      responseSchema: {properties: {results: {type: 'array', items: jsProp}, errors: {type: 'array'}}}
     }
   }
 }

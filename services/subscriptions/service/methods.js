@@ -92,7 +92,7 @@ var dashboardsReadMulti = async(ids, meta) => {
 }
 var linkedDashboards = async function (idsOrItems, meta, userId, permissionsToCheck) {
   if (!Array.isArray(idsOrItems)) { idsOrItems = [idsOrItems]; var single = true }
-  var ids = idsOrItems.map(item => typeof item === 'object' ? item.dashId : item).filter((v, i, a) => a.indexOf(v) === i)
+  var ids = idsOrItems.filter(value => value).map(item => typeof item === 'object' ? item.dashId : item).filter((v, i, a) => a.indexOf(v) === i)
   var dashboards = await dashboardsReadMulti(ids, meta)
   var byId = arrayToObjBy(dashboards, 'id')
   var userSubscriptionsIds = dashboards.map(dashboard => itemId(dashboard.id, userId))
@@ -110,7 +110,7 @@ var usersReadMulti = async(ids, meta) => {
   return response.results
 }
 var linkedUsers = async function (idsOrItems, meta) {
-  var ids = idsOrItems.map(item => typeof item === 'object' ? item.dashId : item).filter((v, i, a) => a.indexOf(v) === i)
+  var ids = idsOrItems.filter(value => value).map(item => typeof item === 'object' ? item.dashId : item).filter((v, i, a) => a.indexOf(v) === i)
   var users = await usersReadMulti(ids, meta)
   var byId = arrayToObjBy(users, 'id')
   return { ids, users, byId }
@@ -137,12 +137,45 @@ module.exports = {
   deleteMulti: async function (reqData, meta, getStream) {
     var func = (resultsQueue, data, currentState, userId, dashboard, permissions) => {
       if (!currentState) return resultsQueue.addError(data.id, data, 'Subscriptions not exists')
-      if (!permissions['subscriptionsWrite']) {
+      if (currentState.userId !== userId && !permissions['subscriptionsWrite']) {
         return resultsQueue.addError(data.id, data, 'User cant write subcriptions')
       }
       resultsQueue.add(data.id, data)
     }
     return basicMutationRequest({ids: reqData.ids, extend: reqData.extend, dataArray: [], meta, mutation: 'delete', permissions: ['subscriptionsWrite'], func})
+  },
+  confirmMulti: async function (reqData, meta, getStream) {
+    var func = (resultsQueue, data, currentState, userId, dashboard, permissions) => {
+      if (!currentState) return resultsQueue.addError(data.id, data, 'Subscriptions not exists')
+      debug('confirmMulti userId, permissions', { userId, permissions })
+      if (!permissions['subscriptionsConfirm'] && !permissions['subscriptionsWrite']) {
+        return resultsQueue.addError(data.id, data, 'User cant write subcriptions')
+      }
+      resultsQueue.add(data.id, data)
+    }
+    return basicMutationRequest({ids: reqData.ids, extend: reqData.extend, dataArray: [], meta, mutation: 'confirm', permissions: ['subscriptionsWrite', 'subscriptionsConfirm'], func})
+  },
+  addTagsMulti: async function (reqData, meta, getStream) {
+    var ids = reqData.items.map(item => item.id)
+    var func = (resultsQueue, data, currentState, userId, dashboard, permissions) => {
+      if (!currentState) return resultsQueue.addError(data.id, data, 'Subscriptions not exists')
+      if (currentState.userId !== userId && !permissions['subscriptionsWrite']) {
+        return resultsQueue.addError(data.id, data, 'User cant write subcriptions')
+      }
+      resultsQueue.add(data.id, data)
+    }
+    return basicMutationRequest({ids, extend: reqData.extend, dataArray: reqData.items, meta, mutation: 'addTags', permissions: ['subscriptionsWrite'], func})
+  },
+  removeTagsMulti: async function (reqData, meta, getStream) {
+    var ids = reqData.items.map(item => item.id)
+    var func = (resultsQueue, data, currentState, userId, dashboard, permissions) => {
+      if (!currentState) return resultsQueue.addError(data.id, data, 'Subscriptions not exists')
+      if (currentState.userId !== userId && !permissions['subscriptionsWrite']) {
+        return resultsQueue.addError(data.id, data, 'User cant write subcriptions')
+      }
+      resultsQueue.add(data.id, data)
+    }
+    return basicMutationRequest({ids, extend: reqData.extend, dataArray: reqData.items, meta, mutation: 'removeTags', permissions: ['subscriptionsWrite'], func})
   },
   init: async function (setNetClient) {
     netClient = setNetClient
@@ -201,7 +234,8 @@ module.exports = {
       if (reqData.linkedViews && reqData.linkedViews.indexOf('user') !== -1) currentState.user = users.byId[currentState.userId]
       return currentState
     })
-    return {results}
+    var errors = results.filter(value => value.__RESULT_TYPE__ === 'error').map((currentState, index) => index)
+    return {results, errors: errors.length ? errors : undefined}
   },
   updateMulti: async function (reqData, meta, getStream) {
     var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
@@ -213,47 +247,61 @@ module.exports = {
     debug('updateMulti', {dashboardsAndPermissions, currentStates})
     reqData.items.forEach((item, index) => {
       var currentState = currentStates[index]
-      var permissions = dashboardsAndPermissions.permissions[currentState.dashId]
       if (!currentState) return resultsQueue.addError(item.id, item, 'Subscriptions not exists')
-      if (!permissions['subscriptionsWrite']) return resultsQueue.addError(item.id, item, 'User cant write subcriptions')
+      var permissions = dashboardsAndPermissions.permissions[currentState.dashId]
+      debug('updateMulti items.forEach', {userId, permissions, currentState})
+      if (currentState.userId !== userId && !permissions['subscriptionsWrite']) return resultsQueue.addError(item.id, item, `User ${userId} cant write subcriptions for ${currentState.userId}`)
       resultsQueue.add(item.id, item)
     })
     await resultsQueue.resolve((dataToResolve) => mutateAndUpdate('update', dataToResolve, meta, currentStates))
     return resultsQueue.returnValue()
   },
+  // list: async function (reqData, meta, getStream) {
+  //   var dashId = reqData.dashId
+  //   var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
+  //   var dashboard = await linkedDashboards(dashId, meta, userId, ['subscriptionsRead', 'subscriptionsReadHidden'])
+  //   if (!dashboard.permissions['subscriptionsRead']) { throw new Error('Cant read subscriptions from dashboard ' + dashId) }
+  //   var results
+  //   var offset = reqData.from || 0
+  //   var limit = reqData.to || 20 - offset
+  //   var select = reqData.select || false
+  //   if (dashboard.permissions['subscriptionsReadHidden']) results = await DB.query('subscriptionsViews', 'SELECT item.* FROM subscriptionsViews item WHERE dashId=$1 ORDER BY item.meta.updated DESC LIMIT $2 OFFSET $3', [dashId, limit, offset])
+  //   else results = await DB.query('subscriptionsViews', 'SELECT item.* FROM subscriptionsViews item WHERE dashId=$1 AND (item.userId=$4 OR (item.meta.deleted!=true AND item.meta.confirmed=true)) ORDER BY item.meta.updated DESC LIMIT $2  OFFSET $3', [dashId, limit, offset, userId])
+  //   debug('list results', results)
+  //   return {results}
+  // },
   list: async function (reqData, meta, getStream) {
     var dashId = reqData.dashId
     var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
     var dashboard = await linkedDashboards(dashId, meta, userId, ['subscriptionsRead', 'subscriptionsReadHidden'])
     if (!dashboard.permissions['subscriptionsRead']) { throw new Error('Cant read subscriptions from dashboard ' + dashId) }
-    var results
+    var select = reqData.select || false
     var offset = reqData.from || 0
     var limit = reqData.to || 20 - offset
-    if (dashboard.permissions['subscriptionsReadHidden']) results = await DB.query('subscriptionsViews', 'SELECT item.* FROM subscriptionsViews item WHERE dashId=$1 ORDER BY item.meta.updated DESC LIMIT $2 OFFSET $3', [dashId, limit, offset])
-    else results = await DB.query('subscriptionsViews', 'SELECT item.* FROM subscriptionsViews item WHERE dashId=$1 AND (item.userId=$4 OR (item.meta.deleted!=true AND item.meta.confirmed=true)) ORDER BY item.meta.updated DESC LIMIT $2  OFFSET $3', [dashId, limit, offset, userId])
+    var querySelect = select ? ' SELECT ' + select.join(',') + ' FROM subscriptionsViews ' : ' SELECT item.* FROM subscriptionsViews item '
+    var queryWhere = ' WHERE dashId=$1 '
+    if (!dashboard.permissions['subscriptionsReadHidden'])queryWhere += ' AND (item.userId=$2 OR ((item.meta.deleted IS MISSING OR item.meta.deleted=false) AND item.meta.confirmed=true)) '
+    var queryOrderAndLimit = ' ORDER BY item.meta.updated DESC LIMIT $3  OFFSET $4 '
+    var results = await DB.query('subscriptionsViews', querySelect + queryWhere + queryOrderAndLimit, [dashId, userId, limit, offset])
     debug('list results', results)
     return {results}
   },
-  confirm: async function (reqData, meta, getStream) {
-    var id = reqData.id
-    var currentState = await getView(id)
+  listByDashIdTagsRoles: async function (reqData, meta, getStream) {
+    var dashId = reqData.dashId
     var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
-    await can(currentState.dashId, userId, 'confirmSubscriptions')
-    var mutation = await mutate({data: reqData, objId: id, mutation: 'postsConfirm', meta})
-    var view = await updateView(id, [mutation])
-    return {success: ` Dashboard Subscriptions - confirmed`}
-  },
-  can: async function (reqData, meta, getStream) {
-    return can(subscription, permissionToCheck)
+    var dashboard = await linkedDashboards(dashId, meta, userId, ['subscriptionsRead', 'subscriptionsReadHidden'])
+    if (!dashboard.permissions['subscriptionsRead']) { throw new Error('Cant read subscriptions from dashboard ' + dashId) }
+    var select = reqData.select || false
+    var offset = reqData.from || 0
+    var limit = reqData.to || 20 - offset
+    var tags = reqData.tags || []
+    var roles = reqData.roles || []
+    var querySelect = select ? ' SELECT ' + select.join(',') + ' FROM subscriptionsViews ' : ' SELECT item.* FROM subscriptionsViews item '
+    var queryWhere = ' WHERE (dashId=$1 AND (ARRAY_LENGTH(ARRAY_INTERSECT(tags,$2)) > 0 OR roleId IN $3 )) '
+    if (!dashboard.permissions['subscriptionsReadHidden'])queryWhere += ' AND (item.userId=$4 OR ((item.meta.deleted IS MISSING OR item.meta.deleted=false) AND item.meta.confirmed=true)) '
+    var queryOrderAndLimit = ' ORDER BY item.meta.updated DESC LIMIT $5  OFFSET $6 '
+    var results = await DB.query('subscriptionsViews', querySelect + queryWhere + queryOrderAndLimit, [dashId, tags, roles, userId, limit, offset])
+    debug('listByDashIdTagsRoles results', results)
+    return {results}
   }
-  // getRawByDashIdAndUserId,
-  // can,
-  // createRaw,
-  // confirm,
-  // readByDashIdAndUserId,
-  // getExtendedByUserId,
-  // listLast,
-  // listByDashIdTagsRoles: (reqData = {}, meta, getStream) => listRawByDashIdTagsRoles(reqData.dashId, reqData.tags, reqData.roles, reqData.select),
-  // listByDashId: listRawByDashId,
-  // listRawByDashId
 }
