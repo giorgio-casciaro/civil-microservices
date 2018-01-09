@@ -1,21 +1,25 @@
-version:                   '3.3'
+version:               '3.3'
 
 services:
    subscriptions:
-     image:                giorgiocasciaro/ubuntu-node:v3
+     image:            giorgiocasciaro/ubuntu-node:v3
     #  logging:
-    #    driver:           none
-     working_dir:          /microservice
-     command:              sh -c "npm run watch_test"
+    #    driver:       none
+     working_dir:      /microservice
+     command:          sh -c "npm run watch_test"
      environment:
-       uploadPath:         /uploads/
-       schemaHost:         'http://schema:10000'
-       serviceName:        subscriptions
-       netHost:            subscriptions
+       # debugJesus:     1
+       # debugCouchbase: 1
+       # debugSchema:    1
+       # debugMain:      1
+       uploadPath:     /uploads/
+       schemaHost:     'http://schema:10000'
+       serviceName:    subscriptions
+       netHost:        subscriptions
       #  netHostHttpPublicPort: 10080
-       netCors:            http://localhost:82,http://127.0.0.1:82,http://localhost:8080,http://127.0.0.1:8080,http://localhost:10080,http://127.0.0.1:10080
-       NODE_ENV:           development
-       sendEmails:         'true'
+       netCors:        http://localhost:82,http://127.0.0.1:82,http://localhost:8080,http://127.0.0.1:8080,http://localhost:10080,http://127.0.0.1:10080
+       NODE_ENV:       development
+       sendEmails:     'true'
        smtpConfigJson: '{ "host": "fakesmtp", "port": 1025, "secure": false }'
      volumes:
        - ../../subscriptions:/microservice
@@ -34,4 +38,4 @@ services:
 
 networks:
   microservicesNet:
-    driver:                bridge
+    driver:            bridge

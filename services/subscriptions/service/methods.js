@@ -6,10 +6,13 @@ const auth = require('sint-bit-utils/utils/auth')
 var netClient
 
 const log = (msg, data) => { console.log('\n' + JSON.stringify(['LOG', 'MAIN', msg, data])) }
-const debug = (msg, data) => { console.log('\n' + JSON.stringify(['DEBUG', 'MAIN', msg, data])) }
+const debug = (msg, data) => { if (process.env.debugMain)console.log('\n' + JSON.stringify(['DEBUG', 'MAIN', msg, data])) }
 const error = (msg, data) => { console.log('\n' + JSON.stringify(['ERROR', 'MAIN', msg, data])); console.error(data) }
 
 const arrayToObjBy = (array, prop) => array.reduce((newObj, item) => { newObj[item[prop]] = item; return newObj }, {})
+
+var resultsError = (id, msg) => { return {id: id, __RESULT_TYPE__: 'error', error: msg} }
+var queueObj = require('sint-bit-utils/utils/queueObj')(resultsError)
 
 var itemId = (dashId, userId) => dashId + '_' + userId
 var dashIdUserIdFromItemId = (itemId) => itemId.split('_')
@@ -18,7 +21,6 @@ var guestSubscription = (subscriptionId) => {
   debug('guestSubscription', {subscriptionId, dashId: dashIdUserId[0], userId: dashIdUserId[1]})
   return {id: subscriptionId, roleId: 'guest', dashId: dashIdUserId[0], userId: dashIdUserId[1], meta: {confirmed: true}, permissions: []}
 }
-var resultsError = (id, msg) => { return {id: id, __RESULT_TYPE__: 'error', error: msg} }
 
 const updateViews = async function (mutations, views) {
   try {
@@ -58,36 +60,11 @@ const getViews = async (ids, select = '*', guest = false) => {
   else return views
 }
 
-var queueObj = () => {
-  var resultsQueue = []
-  var errorsIndex = []
-  var dataToResolve = []
-  return {
-    dataToResolve,
-    add: (id, data) => {
-      var dataToResolveIndex = dataToResolve.push({ id, data }) - 1
-      resultsQueue.push({id, __RESULT_TYPE__: 'resultsToResolve', index: dataToResolveIndex})
-    },
-    addError: (id, data, error) => {
-      errorsIndex.push(resultsQueue.length)
-      resultsQueue.push(resultsError(id, error))
-    },
-    resolve: async (func) => {
-      if (dataToResolve.length) {
-        var resolvedResults = await func(dataToResolve)
-        resultsQueue = resultsQueue.map((data) => data.__RESULT_TYPE__ === 'resultsToResolve' ? resolvedResults[data.index] : data)
-      }
-    },
-    returnValue: () => {
-      var returnValue = {results: resultsQueue}
-      if (errorsIndex.length)returnValue.errors = errorsIndex
-      return returnValue
-    }
-  }
-}
 var rpcDashboardsReadMulti = (ids, meta) => netClient.rpcCall({to: 'dashboards', method: 'readMulti', data: {ids}, meta})
 var dashboardsReadMulti = async(ids, meta) => {
   var response = await rpcDashboardsReadMulti(ids, meta)
+  if (response.error) throw new Error('dashboardsReadMulti => ' + response.error)
+  log('dashboardsReadMulti', response)
   return response.results
 }
 var linkedDashboards = async function (idsOrItems, meta, userId, permissionsToCheck) {
@@ -116,11 +93,11 @@ var linkedUsers = async function (idsOrItems, meta) {
   return { ids, users, byId }
 }
 var basicMutationRequest = async function ({ids, dataArray, mutation, extend, meta, permissions, func}) {
-  debug('basicMutationRequest', {ids, dataArray, mutation, extend, meta, permissions})
+  debug('basicMutationRequest', {ids, dataArray, mutation, extend, meta})
   var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
   if (extend)dataArray = dataArray.map(data => Object.assign(data, extend))
   var currentStates = await getViews(ids, '*', false)
-  debug('basicMutationRequest currentStates', {currentStates, userId, permissions})
+  debug('basicMutationRequest currentStates', {currentStates, userId})
   var dashboardsAndPermissions = await linkedDashboards(currentStates, meta, userId, permissions)
   var resultsQueue = queueObj()
   ids.forEach((id, index) => {
@@ -138,7 +115,7 @@ module.exports = {
     var func = (resultsQueue, data, currentState, userId, dashboard, permissions) => {
       if (!currentState) return resultsQueue.addError(data.id, data, 'Subscriptions not exists')
       if (currentState.userId !== userId && !permissions['subscriptionsWrite']) {
-        return resultsQueue.addError(data.id, data, 'User cant write subcriptions')
+        return resultsQueue.addError(data.id, data, `User ${userId} cant write subcriptions`)
       }
       resultsQueue.add(data.id, data)
     }
@@ -149,7 +126,7 @@ module.exports = {
       if (!currentState) return resultsQueue.addError(data.id, data, 'Subscriptions not exists')
       debug('confirmMulti userId, permissions', { userId, permissions })
       if (!permissions['subscriptionsConfirm'] && !permissions['subscriptionsWrite']) {
-        return resultsQueue.addError(data.id, data, 'User cant write subcriptions')
+        return resultsQueue.addError(data.id, data, `User ${userId} cant write subcriptions`)
       }
       resultsQueue.add(data.id, data)
     }
@@ -160,7 +137,7 @@ module.exports = {
     var func = (resultsQueue, data, currentState, userId, dashboard, permissions) => {
       if (!currentState) return resultsQueue.addError(data.id, data, 'Subscriptions not exists')
       if (currentState.userId !== userId && !permissions['subscriptionsWrite']) {
-        return resultsQueue.addError(data.id, data, 'User cant write subcriptions')
+        return resultsQueue.addError(data.id, data, `User ${userId} cant write subcriptions`)
       }
       resultsQueue.add(data.id, data)
     }
@@ -171,7 +148,7 @@ module.exports = {
     var func = (resultsQueue, data, currentState, userId, dashboard, permissions) => {
       if (!currentState) return resultsQueue.addError(data.id, data, 'Subscriptions not exists')
       if (currentState.userId !== userId && !permissions['subscriptionsWrite']) {
-        return resultsQueue.addError(data.id, data, 'User cant write subcriptions')
+        return resultsQueue.addError(data.id, data, `User ${userId} cant write subcriptions`)
       }
       resultsQueue.add(data.id, data)
     }
@@ -256,20 +233,6 @@ module.exports = {
     await resultsQueue.resolve((dataToResolve) => mutateAndUpdate('update', dataToResolve, meta, currentStates))
     return resultsQueue.returnValue()
   },
-  // list: async function (reqData, meta, getStream) {
-  //   var dashId = reqData.dashId
-  //   var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
-  //   var dashboard = await linkedDashboards(dashId, meta, userId, ['subscriptionsRead', 'subscriptionsReadHidden'])
-  //   if (!dashboard.permissions['subscriptionsRead']) { throw new Error('Cant read subscriptions from dashboard ' + dashId) }
-  //   var results
-  //   var offset = reqData.from || 0
-  //   var limit = reqData.to || 20 - offset
-  //   var select = reqData.select || false
-  //   if (dashboard.permissions['subscriptionsReadHidden']) results = await DB.query('subscriptionsViews', 'SELECT item.* FROM subscriptionsViews item WHERE dashId=$1 ORDER BY item.meta.updated DESC LIMIT $2 OFFSET $3', [dashId, limit, offset])
-  //   else results = await DB.query('subscriptionsViews', 'SELECT item.* FROM subscriptionsViews item WHERE dashId=$1 AND (item.userId=$4 OR (item.meta.deleted!=true AND item.meta.confirmed=true)) ORDER BY item.meta.updated DESC LIMIT $2  OFFSET $3', [dashId, limit, offset, userId])
-  //   debug('list results', results)
-  //   return {results}
-  // },
   list: async function (reqData, meta, getStream) {
     var dashId = reqData.dashId
     var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)

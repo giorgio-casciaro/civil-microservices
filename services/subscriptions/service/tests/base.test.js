@@ -6,249 +6,273 @@ const log = (msg, data) => { console.log('\n' + JSON.stringify(['LOG', 'TEST', m
 const warn = (msg, data) => { console.log('\n' + JSON.stringify(['WARN', 'TEST', msg, data])) }
 const error = (msg, data) => { console.log('\n' + JSON.stringify(['ERROR', 'TEST', msg, data])) }
 
+process.env.debugMain = false
+process.env.debugCouchbase = false
+process.env.debugMain = false
+process.env.debugCouchbase = false
+
 var startTest = async function (netClient) {
   await new Promise((resolve) => setTimeout(resolve, 1000))
   var CONFIG = require('../config')
   const auth = require('sint-bit-utils/utils/auth')
   var mainTest = require('sint-bit-utils/utils/microTest')('test Microservice local methods and db connections', 0)
-  var microTest = mainTest.test
-  var microTestSection = mainTest.sectionHead
-  var microTestRaw = mainTest.testRaw
-  var finishTest = mainTest.finish
-
-  const TYPE_OF = (actual, expected) => {
-    if (typeof (expected) !== 'object') {
-      var type = typeof (actual)
-      if (Array.isArray(actual))type = 'array'
-      return type
+  function getPuppetDashboard (substitutions) {
+    var defaultDashboard = {
+      id: 'testDash',
+      roles: {
+        guest: { public: 1, permissions: ['subscriptionsSubscribeWithConfimation', 'subscriptionsRead'] },
+        subscriber: { public: 1, permissions: [ 'subscriptionsRead' ] },
+        admin: { public: 0, permissions: [ 'subscriptionsWrite', 'subscriptionsRead', 'subscriptionsReadHidden' ] }
+      }
     }
-    var filtered = {}
-    Object.keys(expected).forEach((key) => { filtered[key] = typeof actual[key] })
-    return filtered
+    var func = function ({data}) { return { results: [defaultDashboard] } }
+    return func
   }
-  const FILTER_BY_KEYS = (actual, expected) => {
-    var filtered = {}
-    Object.keys(expected).forEach((key) => { filtered[key] = actual[key] })
-    return filtered
-  }
-  const COUNT = (actual, expected) => actual.length
-
-  var subscriberUser = await auth.createToken('subscriberUser', ['premission'], {test: true}, CONFIG.jwt)
-  var adminUser = await auth.createToken('adminUser', ['premission'], {test: true}, CONFIG.jwt)
-
-  netClient.testPuppets.dashboards_info = ({data}) => {
-    log('testPuppets dashboards_info', data)
-  }
-
-  netClient.testPuppets.dashboards_readMulti = ({data}) => {
-    log('testPuppets dashboards_readMulti', data)
+  async function setContext (contextData) {
+    var i
+    var tokens = {}
+    for (i in contextData.users)tokens[i] = await auth.createToken(i, contextData.users[i].permissions || [], contextData.users[i], CONFIG.jwt)
+    for (i in contextData.entities) await DB.put('subscriptionsViews', Object.assign({ id: 'testDash_testUser', meta: {confirmed: true, created: Date.now(), updated: Date.now()}, dashId: 'testDash', roleId: 'subscriber', userId: 'testUser' }, contextData.entities[i]))
+    Object.assign(netClient.testPuppets, contextData.testPuppets || {})
+    log('setContext', { keys: Object.keys(netClient.testPuppets), func: netClient.testPuppets.dashboards_readMulti.toString() })
     return {
-      results: [
-        {
-          id: 'testDash1',
-          roles: {
-            guest: puppetGuestRole,
-            subscriber: puppetSubscriberRole,
-            admin: puppetAdminRole
-          }
+      tokens,
+      data: contextData.data,
+      updateData: (substitutions) => {
+        var value
+        for (var k in substitutions) {
+          value = contextData.data
+          k.split('/').forEach(addr => (value = value[addr]))
+          value = substitutions[k]
         }
-      ]
+      },
+      updatePuppets: (testPuppets) => Object.assign(netClient.testPuppets, testPuppets || {}),
+      destroy: async() => {
+        for (i in contextData.entities) await DB.remove('subscriptionsViews', contextData.entities[i].id)
+      }
     }
   }
-  netClient.testPuppets.users_readMulti = (args) => {
-    log('testPuppets users_info', args)
-    return {
-      results: [
-        {
-          id: 'subscriberUser',
-          name: 'Test User 1'
-        }
-      ]
-    }
-  }
-
-  var puppetGuestRole = {
-    permissions: ['subscriptionsSubscribeWithConfimation', 'subscriptionsRead'],
-    public: 1
-  }
-  var puppetSubscriberRole = {
-    public: 1,
-    permissions: ['subscriptionsSubscribe', 'subscriptionsSubscribeWithConfimation', 'subscriptionsRead']
-  }
-  var puppetAdminRole = {
-    public: 1,
-    permissions: ['subscriptionsSubscribe', 'subscriptionsSubscribeWithConfimation', 'subscriptionsWrite', 'subscriptionsRead']
-  }
-
   const DB = require('sint-bit-utils/utils/dbCouchbaseV2')
+  const dbGet = (id = 'testDash_userTest', bucket = 'subscriptionsViews') => DB.get(bucket, id)
+  const dbRemove = (id = 'testDash_userTest', bucket = 'subscriptionsViews') => DB.remove(bucket, id)
 
-  microTestSection('RAW CREATE')
+  mainTest.sectionHead('RAW CREATE')
 
-  await DB.remove('subscriptionsViews', 'testDash1_subscriberUser')
-  var test = await netClient.testLocalMethod('rawMutateMulti', {
-    mutation: 'create',
-    items: [{id: undefined, data: { dashId: 'testDash1', userId: 'subscriberUser' }}],
-    extend: {
-      roleId: 'subscriber',
-      tags: ['testTag'],
-      notifications: ['email', 'sms', 'fb']
-    }
-  }, {token: subscriberUser})
-  microTestRaw('rawMutateMulti create', test, (data) => data.results instanceof Array && data.results.length === 1)
-  var dbCheck = await DB.get('subscriptionsViews', 'testDash1_subscriberUser')
-  microTestRaw('rawMutateMulti create dbCheck', dbCheck, (data) => data.roleId === 'subscriber')
-  await DB.remove('subscriptionsViews', 'testDash1_subscriberUser')
+  var context = await setContext({
+    data: { mutation: 'create', items: [{id: undefined, data: { dashId: 'testDash', userId: 'userTest', roleId: 'subscriber', tags: ['testTag'], notifications: ['email', 'sms', 'fb'] }}], extend: { } },
+    users: { userTest: {} },
+    entities: [],
+    testPuppets: { dashboards_readMulti: getPuppetDashboard() }
+  })
+  var test = await netClient.testLocalMethod('rawMutateMulti', context.data, {token: context.tokens.userTest})
+  mainTest.testRaw('rawMutateMulti create', test, (data) => data.results instanceof Array && data.results.length === 1)
+  mainTest.testRaw('rawMutateMulti create dbCheck', await dbGet('testDash_userTest'), (data) => data.roleId === 'subscriber')
+  await dbRemove('testDash_userTest')
+  await context.destroy()
 
-  microTestSection('CREATE')
+  mainTest.sectionHead('CREATE')
 
-  var subscriptions = {
-    items: [{ dashId: 'testDash1', userId: 'subscriberUser' }],
-    extend: {
-      roleId: 'subscriber',
-      tags: ['testTag'],
-      notifications: ['email', 'sms', 'fb']
-    }
-  }
-  test = await netClient.testLocalMethod('createMulti', subscriptions, {token: subscriberUser})
-  microTestRaw('createMulti', test, (data) => data.results instanceof Array && data.results.length === 1)
-  dbCheck = await DB.get('subscriptionsViews', 'testDash1_subscriberUser')
-  microTestRaw('createMulti dbCheck', dbCheck, (data) => data.roleId === 'subscriber')
+  context = await setContext({
+    data: { items: [{ dashId: 'testDash', userId: 'userTest', roleId: 'subscriber', tags: ['testTag'], notifications: ['email', 'sms', 'fb'] }] },
+    users: { userTest: {} },
+    entities: [],
+    testPuppets: { dashboards_readMulti: getPuppetDashboard({'roles/admin/public': 1}) }
+  })
+  test = await netClient.testLocalMethod('createMulti', context.data, {token: context.tokens.userTest})
+  mainTest.testRaw('createMulti', test, (data) => data.results instanceof Array && data.results.length === 1)
+  mainTest.testRaw('createMulti dbCheck', await dbGet('testDash_userTest'), (data) => data.roleId === 'subscriber')
 
-  test = await netClient.testLocalMethod('createMulti', subscriptions, {token: subscriberUser})
-  microTestRaw('createMulti checkError  Subscription exists', test, (data) => data.errors instanceof Array)
-  await DB.remove('subscriptionsViews', 'testDash1_subscriberUser')
+  test = await netClient.testLocalMethod('createMulti', context.data, {token: context.tokens.userTest})
+  mainTest.testRaw('createMulti checkError  Subscription exists', test, (data) => data.errors instanceof Array)
+  await dbRemove('testDash_userTest')
 
-  subscriptions.extend.roleId = 'test'
-  test = await netClient.testLocalMethod('createMulti', subscriptions, {token: subscriberUser})
-  microTestRaw('createMulti checkError  Role not exists or is not active', test, (data) => data.errors instanceof Array)
+  context.data.items[0].roleId = 'test'
+  mainTest.log('context.data', context.data)
+  test = await netClient.testLocalMethod('createMulti', context.data, {token: context.tokens.userTest})
+  mainTest.testRaw('createMulti checkError  Role not exists or is not active', test, (data) => data.errors instanceof Array)
 
-  puppetAdminRole.public = 0
-  subscriptions.extend.roleId = 'admin'
-  test = await netClient.testLocalMethod('createMulti', subscriptions, {token: subscriberUser})
-  microTestRaw('createMulti checkError  Role is not public', test, (data) => data.errors instanceof Array)
+  context.data.items[0].roleId = 'admin'
+  context.updatePuppets({'dashboards_readMulti': getPuppetDashboard({'roles/admin/public': 0})})
 
-  subscriptions.items[0].userId = 'adminUser'
-  test = await netClient.testLocalMethod('createMulti', subscriptions, {token: subscriberUser})
-  microTestRaw('createMulti checkError  Can\'t create other users subscriptions', test, (data) => data.errors instanceof Array)
+  test = await netClient.testLocalMethod('createMulti', context.data, {token: context.tokens.userTest})
+  mainTest.testRaw('createMulti checkError  Role is not public', test, (data) => data.errors instanceof Array)
 
-  puppetSubscriberRole.permissions = []
-  test = await netClient.testLocalMethod('createMulti', subscriptions, {token: subscriberUser})
-  microTestRaw('createMulti checkError  Can\'t subscribe', test, (data) => data.errors instanceof Array)
+  context.data.items[0].userId = 'userAdminTest'
+  test = await netClient.testLocalMethod('createMulti', context.data, {token: context.tokens.userTest})
+  mainTest.testRaw('createMulti checkError  Can\'t create other users subscriptions', test, (data) => data.errors instanceof Array)
 
-  subscriptions.extend.roleId = 'subscriber'
-  subscriptions.items[0].userId = 'subscriberUser'
-  puppetSubscriberRole.permissions = ['subscriptionsSubscribe', 'subscriptionsSubscribeWithConfimation', 'subscriptionsRead']
-  await netClient.testLocalMethod('createMulti', subscriptions, {token: subscriberUser})
+  context.data.items[0].roleId = 'test'
+  context.updatePuppets({'dashboards_readMulti': getPuppetDashboard({'roles/subscriber/permissions': []})})
 
-  subscriptions.extend.roleId = 'admin'
-  subscriptions.items[0].userId = 'adminUser'
-  await netClient.testLocalMethod('createMulti', subscriptions, {token: adminUser})
-  // var resp = await netClient.testLocalMethod('createMulti', subscriptions, {token: subscriberUser})
-  // mainTest.consoleResume()
-  // console.log('createMultiResp', resp)
-  // mainTest.consoleMute()
+  test = await netClient.testLocalMethod('createMulti', context.data, {token: context.tokens.userTest})
+  mainTest.testRaw('createMulti checkError  Can\'t subscribe', test, (data) => data.errors instanceof Array)
 
-  microTestSection('READ')
+  await context.destroy()
 
-  test = await netClient.testLocalMethod('readMulti', { ids: ['testDash1_subscriberUser'] }, {token: subscriberUser})
-  microTestRaw('readMulti', test, (data) => !data.errors && data.results instanceof Array && data.results.length === 1)
+  mainTest.sectionHead('READ')
 
-  test = await netClient.testLocalMethod('readMulti', { ids: ['fakeid'] }, {token: subscriberUser})
-  microTestRaw('readMulti checkError  Subscription not exists', test, (data) => data.errors instanceof Array)
+  context = await setContext({
+    data: {},
+    users: { userTest: {}, userAdminTest: {} },
+    entities: [
+      {id: 'testDash_userTest', userId: 'userTest', dashId: 'testDash'},
+      {id: 'testDash_userAdminTest', userId: 'userAdminTest', dashId: 'testDash'}
+    ],
+    testPuppets: { dashboards_readMulti: getPuppetDashboard() }
+  })
+  test = await netClient.testLocalMethod('readMulti', { ids: ['testDash_userTest'] }, {token: context.tokens.userTest})
+  mainTest.testRaw('readMulti', test, (data) => !data.errors && data.results instanceof Array && data.results.length === 1)
 
-  microTestSection('UPDATE')
+  test = await netClient.testLocalMethod('readMulti', { ids: ['fakeid'] }, {token: context.tokens.userTest})
+  mainTest.testRaw('readMulti checkError  Subscription not exists', test, (data) => data.errors instanceof Array)
 
-  test = await netClient.testLocalMethod('updateMulti', { items: [{id: 'testDash1_subscriberUser', tags: ['testUpdate']}] }, {token: subscriberUser})
-  microTestRaw('updateMulti', test, (data) => !data.errors && data.results instanceof Array && data.results.length === 1)
-  dbCheck = await DB.get('subscriptionsViews', 'testDash1_subscriberUser')
-  microTestRaw('updateMulti dbCheck', dbCheck, (data) => data.tags[0] === 'testUpdate')
+  await context.destroy()
 
-  test = await netClient.testLocalMethod('updateMulti', { items: [{id: 'fake', tags: ['test']}] }, {token: subscriberUser})
-  microTestRaw('updateMulti checkError  Subscription not exists', test, (data) => data.errors instanceof Array)
+  mainTest.sectionHead('UPDATE')
 
-  test = await netClient.testLocalMethod('updateMulti', { items: [{id: 'testDash1_adminUser', tags: ['test']}] }, {token: subscriberUser})
-  microTestRaw('updateMulti checkError  Cant update other users subscription', test, (data) => data.errors instanceof Array)
+  context = await setContext({
+    data: {},
+    users: { userTest: {}, userAdminTest: {} },
+    entities: [
+        {id: 'testDash_userTest', userId: 'userTest', dashId: 'testDash', roleId: 'subscriber'},
+        {id: 'testDash_userAdminTest', userId: 'userAdminTest', dashId: 'testDash', roleId: 'admin'}
+    ],
+    testPuppets: { dashboards_readMulti: getPuppetDashboard() }
+  })
 
-  test = await netClient.testLocalMethod('updateMulti', { items: [{id: 'testDash1_subscriberUser', tags: ['test']}] }, {token: adminUser})
-  microTestRaw('updateMulti checkError  Admin can update other users subscription', test, (data) => !data.errors)
+  test = await netClient.testLocalMethod('updateMulti', { items: [{id: 'testDash_userTest', tags: ['testUpdate']}] }, {token: context.tokens.userTest})
+  mainTest.testRaw('updateMulti', test, (data) => !data.errors && data.results instanceof Array && data.results.length === 1)
+  // dbCheck = await DB.get('subscriptionsViews', 'testDash_userTest')
+  mainTest.testRaw('updateMulti dbCheck', await dbGet('testDash_userTest'), (data) => data.tags[0] === 'testUpdate')
 
-  microTestSection('DELETE')
+  test = await netClient.testLocalMethod('updateMulti', { items: [{id: 'fake', tags: ['test']}] }, {token: context.tokens.userTest})
+  mainTest.testRaw('updateMulti checkError  Subscription not exists', test, (data) => data.errors instanceof Array)
 
-  test = await netClient.testLocalMethod('deleteMulti', { ids: ['testDash1_subscriberUser'] }, {token: subscriberUser})
-  microTestRaw('deleteMulti', test, (data) => !data.errors && data.results instanceof Array && data.results.length === 1)
-  dbCheck = await DB.get('subscriptionsViews', 'testDash1_subscriberUser')
-  microTestRaw('deleteMulti dbCheck', dbCheck, (data) => data.meta.deleted === true)
+  test = await netClient.testLocalMethod('updateMulti', { items: [{id: 'testDash_userAdminTest', tags: ['test']}] }, {token: context.tokens.userTest})
+  mainTest.testRaw('updateMulti checkError  Cant update other users subscription', test, (data) => data.errors instanceof Array)
 
-  puppetAdminRole.permissions = ['subscriptionsSubscribe', 'subscriptionsSubscribeWithConfimation', 'subscriptionsRead']
-  test = await netClient.testLocalMethod('readMulti', { ids: ['testDash1_subscriberUser'] }, {token: adminUser})
-  microTestRaw('readMulti checkError Subscription deleted', test, (data) => data.errors instanceof Array)
+  test = await netClient.testLocalMethod('updateMulti', { items: [{id: 'testDash_userTest', tags: ['test']}] }, {token: context.tokens.userAdminTest})
+  mainTest.testRaw('updateMulti checkError  Admin can update other users subscription', test, (data) => !data.errors)
 
-  puppetSubscriberRole.permissions = ['subscriptionsSubscribe', 'subscriptionsRead']
-  test = await netClient.testLocalMethod('readMulti', { ids: ['testDash1_subscriberUser'] }, {token: subscriberUser})
-  microTestRaw('readMulti check Subscription deleted but readable by owner', test, (data) => !data.errors)
+  await context.destroy()
 
-  puppetAdminRole.permissions = ['subscriptionsRead', 'subscriptionsReadHidden']
-  test = await netClient.testLocalMethod('readMulti', { ids: ['testDash1_subscriberUser'] }, {token: adminUser})
-  microTestRaw('readMulti check  Subscription deleted but readable by admins', test, (data) => !data.errors)
+  mainTest.sectionHead('DELETE')
 
-  microTestSection('CONFIRMATIONS')
+  context = await setContext({
+    data: {},
+    users: { userTest: {}, userTest2: {}, userAdminTest: {} },
+    entities: [
+      {id: 'testDash_userTest', userId: 'userTest', dashId: 'testDash', roleId: 'subscriber'},
+      {id: 'testDash_userTest2', userId: 'userTest2', dashId: 'testDash', roleId: 'subscriber'},
+      {id: 'testDash_userAdminTest', userId: 'userAdminTest', dashId: 'testDash', roleId: 'admin'}
+    ],
+    testPuppets: { dashboards_readMulti: getPuppetDashboard() }
+  })
 
-  puppetSubscriberRole.permissions = ['subscriptionsSubscribeWithConfimation', 'subscriptionsRead']
-  await DB.remove('subscriptionsViews', 'testDash1_subscriberUser')
-  await netClient.testLocalMethod('createMulti', { items: [{ dashId: 'testDash1', roleId: 'subscriber', userId: 'subscriberUser' }] }, {token: subscriberUser})
-  dbCheck = await DB.get('subscriptionsViews', 'testDash1_subscriberUser')
-  microTestRaw('createMulti with confirmation', test, (data) => !data.errors && data.results instanceof Array && data.results.length === 1)
-  microTestRaw('createMulti with confirmation dbCheck', dbCheck, (data) => !data.meta.confirmed)
+  test = await netClient.testLocalMethod('deleteMulti', { ids: ['testDash_userTest'] }, {token: context.tokens.userTest})
+  mainTest.testRaw('deleteMulti', test, (data) => !data.errors && data.results instanceof Array && data.results.length === 1)
+  mainTest.testRaw('deleteMulti dbCheck', await dbGet('testDash_userTest'), (data) => data.meta.deleted === true)
 
-  puppetAdminRole.permissions = ['subscriptionsSubscribe', 'subscriptionsWrite', 'subscriptionsRead']
-  // mainTest.consoleResume()
-  await DB.put('subscriptionsViews', { id: 'testDash1_adminUser', meta: {confirmed: true}, dashId: 'testDash1', roleId: 'admin', userId: 'adminUser' })
-  test = await netClient.testLocalMethod('confirmMulti', { ids: ['testDash1_subscriberUser'] }, {token: adminUser})
-  microTestRaw('confirmMulti by admin user', test, (data) => !data.errors && data.results instanceof Array && data.results.length === 1)
-  dbCheck = await DB.get('subscriptionsViews', 'testDash1_subscriberUser')
-  microTestRaw('confirmMulti dbCheck', dbCheck, (data) => data.meta.confirmed === true)
+  test = await netClient.testLocalMethod('readMulti', { ids: ['testDash_userTest'] }, {token: context.tokens.userTest2})
+  mainTest.testRaw('readMulti checkError Subscription deleted', test, (data) => data.errors instanceof Array)
 
-  microTestSection('TAGS')
+  test = await netClient.testLocalMethod('readMulti', { ids: ['testDash_userTest'] }, {token: context.tokens.userTest})
+  mainTest.testRaw('readMulti check Subscription deleted but readable by owner', test, (data) => !data.errors)
 
-  puppetSubscriberRole.permissions = ['subscriptionsSubscribe', 'subscriptionsRead']
-  puppetAdminRole.permissions = ['subscriptionsSubscribe', 'subscriptionsWrite', 'subscriptionsRead']
-  await DB.put('subscriptionsViews', { id: 'testDash1_subscriberUser', meta: {confirmed: true}, dashId: 'testDash1', roleId: 'subscriber', userId: 'subscriberUser' })
-  await DB.put('subscriptionsViews', { id: 'testDash1_adminUser', meta: {confirmed: true}, dashId: 'testDash1', roleId: 'admin', userId: 'adminUser' })
-  test = await netClient.testLocalMethod('addTagsMulti', { items: [{id: 'testDash1_subscriberUser', tags: ['tag_by_subscriber', 'tag_by_subscriber2']}] }, {token: subscriberUser})
-  microTestRaw('addTagsMulti by subcritpion owner', test, (data) => !data.errors && data.results instanceof Array && data.results.length === 1)
-  dbCheck = await DB.get('subscriptionsViews', 'testDash1_subscriberUser')
-  microTestRaw('addTagsMulti by subcritpion owner dbCheck', dbCheck, (data) => data.tags.indexOf('tag_by_subscriber') > -1)
-  test = await netClient.testLocalMethod('addTagsMulti', { items: [{id: 'testDash1_subscriberUser', tags: ['tag_by_admin', 'tag_by_admin2']}] }, {token: adminUser})
-  microTestRaw('addTagsMulti by admin', test, (data) => !data.errors && data.results instanceof Array && data.results.length === 1)
-  dbCheck = await DB.get('subscriptionsViews', 'testDash1_subscriberUser')
-  microTestRaw('addTagsMulti by subcritpion owner dbCheck', dbCheck, (data) => data.tags.indexOf('tag_by_admin') > -1)
+  test = await netClient.testLocalMethod('readMulti', { ids: ['testDash_userTest'] }, {token: context.tokens.userAdminTest})
+  mainTest.testRaw('readMulti check  Subscription deleted but readable by admins', test, (data) => !data.errors)
 
-  microTestSection('LIST BY ROLES AND TAGS')
+  await context.destroy()
 
-  puppetSubscriberRole.permissions = ['subscriptionsSubscribe', 'subscriptionsRead']
-  puppetAdminRole.permissions = ['subscriptionsSubscribe', 'subscriptionsWrite', 'subscriptionsRead']
-  await DB.put('subscriptionsViews', { id: 'testDash1_subscriberUser', meta: {confirmed: true}, dashId: 'testDash1', roleId: 'subscriber', userId: 'subscriberUser', tags: ['tag1', 'tag2'] })
-  await DB.put('subscriptionsViews', { id: 'testDash1_adminUser', meta: {confirmed: true}, dashId: 'testDash1', roleId: 'admin', userId: 'adminUser', tags: ['tag1', 'tag3'] })
-  test = await netClient.testLocalMethod('listByDashIdTagsRoles', { dashId: 'testDash1', tags: ['tag1'] }, {token: subscriberUser})
-  microTestRaw('listByDashIdTagsRoles tags:tag1', test, (data) => !data.errors && data.results instanceof Array && data.results.length === 2)
-  test = await netClient.testLocalMethod('listByDashIdTagsRoles', { dashId: 'testDash1', tags: ['tag2'] }, {token: subscriberUser})
-  microTestRaw('listByDashIdTagsRoles tags:tag2', test, (data) => !data.errors && data.results instanceof Array && data.results.length === 1)
-  test = await netClient.testLocalMethod('listByDashIdTagsRoles', { dashId: 'testDash1', roles: ['subscriber'] }, {token: subscriberUser})
-  microTestRaw('listByDashIdTagsRoles  roles:subscriber ', test, (data) => !data.errors && data.results instanceof Array && data.results.length === 1)
+  mainTest.sectionHead('CONFIRMATIONS')
 
-  microTestSection('LIST')
+  // context = await setContext({
+  //   data: {},
+  //   users: { userTest: {}, userAdminTest: {} },
+  //   entities: [
+  //     {id: 'testDash_userTest', userId: 'userTest', dashId: 'testDash', roleId: 'subscriber'},
+  //     {id: 'testDash_userTest2', userId: 'userTest2', dashId: 'testDash', roleId: 'subscriber'},
+  //     {id: 'testDash_userAdminTest', userId: 'userAdminTest', dashId: 'testDash', roleId: 'admin'}
+  //   ],
+  //   testPuppets: { dashboards_readMulti: getPuppetDashboard() }
+  // })
+  context = await setContext({
+    data: {},
+    users: { userTest: {}, userAdminTest: {} },
+    entities: [{id: 'testDash_userAdminTest', userId: 'userAdminTest', dashId: 'testDash', roleId: 'admin'}],
+    testPuppets: { dashboards_readMulti: getPuppetDashboard() }
+  })
 
-  netClient.testPuppets.dashboards_readMulti = ({data}) => ({ results: [{ id: 'testDashListTest', roles: { guest: puppetGuestRole, subscriber: puppetSubscriberRole, admin: puppetAdminRole } }] })
-  var userListTest = await auth.createToken('userListTest', ['premission'], {test: true}, CONFIG.jwt)
-  await DB.put('subscriptionsViews', { id: 'testDashListTest_userListTest', meta: {confirmed: true}, dashId: 'testDashListTest', roleId: 'subscriber', userId: 'userListTest' })
-  await DB.put('subscriptionsViews', { id: 'testDashListTest_userListTest2', meta: {confirmed: true}, dashId: 'testDashListTest', roleId: 'subscriber', userId: 'userListTest2' })
+  test = await netClient.testLocalMethod('createMulti', { items: [{ dashId: 'testDash', roleId: 'subscriber', userId: 'userTest' }] }, {token: context.tokens.userTest})
+  mainTest.testRaw('createMulti with confirmation', test, (data) => !data.errors && data.results instanceof Array && data.results.length === 1)
+  mainTest.testRaw('createMulti with confirmation dbCheck', await dbGet('testDash_userTest'), (data) => !data.meta.confirmed)
+
+  test = await netClient.testLocalMethod('confirmMulti', { ids: ['testDash_userTest'] }, {token: context.tokens.userAdminTest})
+  mainTest.testRaw('confirmMulti by admin user', test, (data) => !data.errors && data.results instanceof Array && data.results.length === 1)
+  mainTest.testRaw('confirmMulti dbCheck', await dbGet('testDash_userTest'), (data) => data.meta.confirmed === true)
+  await context.destroy()
+
+  mainTest.sectionHead('TAGS')
+
+  context = await setContext({
+    data: {},
+    users: { userTest: {}, userAdminTest: {} },
+    entities: [
+          {id: 'testDash_userTest', userId: 'userTest', dashId: 'testDash', roleId: 'subscriber'},
+          {id: 'testDash_userAdminTest', userId: 'userAdminTest', dashId: 'testDash', roleId: 'admin'}
+    ],
+    testPuppets: { dashboards_readMulti: getPuppetDashboard() }
+  })
+
+  test = await netClient.testLocalMethod('addTagsMulti', { items: [{id: 'testDash_userTest', tags: ['tag_by_subscriber', 'tag_by_subscriber2']}] }, {token: context.tokens.userTest})
+  mainTest.testRaw('addTagsMulti by subcritpion owner', test, (data) => !data.errors && data.results instanceof Array && data.results.length === 1)
+  mainTest.testRaw('addTagsMulti by subcritpion owner dbCheck', await dbGet('testDash_userTest'), (data) => data.tags.indexOf('tag_by_subscriber') > -1)
+
+  test = await netClient.testLocalMethod('addTagsMulti', { items: [{id: 'testDash_userTest', tags: ['tag_by_admin', 'tag_by_admin2']}] }, {token: context.tokens.userAdminTest})
+  mainTest.testRaw('addTagsMulti by admin', test, (data) => !data.errors && data.results instanceof Array && data.results.length === 1)
+  mainTest.testRaw('addTagsMulti by admin  dbCheck', await dbGet('testDash_userTest'), (data) => data.tags.indexOf('tag_by_admin') > -1)
+
+  await context.destroy()
+
+  mainTest.sectionHead('LIST BY ROLES AND TAGS')
+
+  context = await setContext({
+    data: {},
+    users: { userTest: {}, userAdminTest: {} },
+    entities: [
+          {id: 'testDash_userTest', userId: 'userTest', dashId: 'testDash', roleId: 'subscriber', tags: ['tag1']},
+          {id: 'testDash_userAdminTest', userId: 'userAdminTest', dashId: 'testDash', roleId: 'admin', tags: ['tag1', 'tag2']}
+    ],
+    testPuppets: { dashboards_readMulti: getPuppetDashboard() }
+  })
   await new Promise((resolve) => setTimeout(resolve, 1000)) // DB INDEX UPDATE
-  test = await netClient.testLocalMethod('list', { dashId: 'testDashListTest' }, {token: userListTest})
-  microTestRaw('list', test, (data) => !data.errors && data.results instanceof Array && data.results.length === 2)
-  await DB.remove('subscriptionsViews', 'testDashListTest_userListTest')
-  await DB.remove('subscriptionsViews', 'testDashListTest_userListTest2')
+
+  test = await netClient.testLocalMethod('listByDashIdTagsRoles', { dashId: 'testDash', tags: ['tag1'] }, {token: context.tokens.userTest})
+  mainTest.testRaw('listByDashIdTagsRoles tags:tag1', test, (data) => !data.errors && data.results instanceof Array && data.results.length === 2)
+  test = await netClient.testLocalMethod('listByDashIdTagsRoles', { dashId: 'testDash', tags: ['tag2'] }, {token: context.tokens.userTest})
+  mainTest.testRaw('listByDashIdTagsRoles tags:tag2', test, (data) => !data.errors && data.results instanceof Array && data.results.length === 1)
+  test = await netClient.testLocalMethod('listByDashIdTagsRoles', { dashId: 'testDash', roles: ['subscriber'] }, {token: context.tokens.userTest})
+  mainTest.testRaw('listByDashIdTagsRoles  roles:subscriber ', test, (data) => !data.errors && data.results instanceof Array && data.results.length === 1)
+
+  await context.destroy()
+
+  mainTest.sectionHead('LIST')
+
+  context = await setContext({
+    data: {},
+    users: { userTest: {}, userAdminTest: {} },
+    entities: [
+          {id: 'testDash_userTest', userId: 'userTest', dashId: 'testDash', roleId: 'subscriber'},
+          {id: 'testDash_userAdminTest', userId: 'userAdminTest', dashId: 'testDash', roleId: 'admin'}
+    ],
+    testPuppets: { dashboards_readMulti: getPuppetDashboard() }
+  })
+  await new Promise((resolve) => setTimeout(resolve, 1000)) // DB INDEX UPDATE
+  test = await netClient.testLocalMethod('list', { dashId: 'testDash' }, {token: context.tokens.userTest})
+  mainTest.testRaw('list', test, (data) => !data.errors && data.results instanceof Array && data.results.length === 2)
+  await context.destroy()
 
   await new Promise((resolve) => setTimeout(resolve, 1000))
-  return finishTest()
+  return mainTest.finish()
 }
 module.exports = startTest
