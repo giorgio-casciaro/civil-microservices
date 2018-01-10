@@ -5,20 +5,13 @@ var toBool = (string, defaultVal = false) => {
   return false
 }
 var jsFields = require('sint-bit-utils/utils/JSchemaFields')
-var subscriptionId = {
-  type: 'string',
-  description: 'dash number + _ + subscription number '
-  // pattern: '^[0-9]*_[0-9]*$'
-}
-var dashId = {
-  type: 'string',
-  description: 'dash string'
-}
-var roleId = {
-  type: 'string',
-  description: 'Role slug as id',
-  'minLength': 3
-}
+var postId = { type: 'string' }
+var dashId = { type: 'string' }
+var roleId = { type: 'string' }
+var userId = { type: 'string' }
+var location = { type: 'array', items: { type: 'object', properties: { lat: {type: 'number'}, lng: {type: 'number'} }, required: ['lat', 'lng'] } }
+var pics = { type: 'array', items: { type: 'string' } }
+
 var jsRes = {
   properties: {
     success: { type: 'boolean' },
@@ -37,7 +30,8 @@ var meta = {
   updated: { type: 'number' },
   created: { type: 'number' }
 }
-var jsProp = { id: subscriptionId, dashId: dashId, roleId, tags: jsFields.tags, userId: { type: 'string' }, meta, notifications: { type: 'array' }, role: { type: 'object' } }
+// var jsProp = { id: postId, dashId: dashId, roleId, tags: jsFields.tags, userId: { type: 'string' }, meta, notifications: { type: 'array' }, role: { type: 'object' } }
+var jsProp = { id: postId, name: { type: 'string' }, userId, subscription: { type: 'object' }, dashId, public: { type: 'boolean' }, body: { type: 'string' }, location, tags: jsFields.tags, toTags: { type: 'array', items: { type: 'string' } }, toRoles: { type: 'array', items: { type: 'string' } }, pics, meta, user: { type: 'object' }, readedByUser: { type: 'boolean' }, notifications: { type: 'array' } }
 
 module.exports = {
   net: {
@@ -67,7 +61,7 @@ module.exports = {
       public: true,
       responseType: 'response',
       requestSchema: {
-        properties: {items: {type: 'array', items: {type: 'object', properties: jsProp, required: [ 'dashId' ]}}, extend: jsProp},
+        properties: {items: {type: 'array', items: {type: 'object', properties: jsProp, required: [ 'body' ]}}, extend: jsProp},
         required: [ 'items' ]
       },
       responseSchema: {properties: {results: {type: 'array', items: jsRes}, errors: {type: 'array'}}}

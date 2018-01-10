@@ -11,7 +11,8 @@ const error = (msg, data) => { console.log('\n' + JSON.stringify(['ERROR', 'MAIN
 
 const arrayToObjBy = (array, prop) => array.reduce((newObj, item) => { newObj[item[prop]] = item; return newObj }, {})
 
-var resultsError = (id, msg) => { return {id: id, __RESULT_TYPE__: 'error', error: msg} }
+// var resultsError = (id, msg) => { return {id: id, __RESULT_TYPE__: 'error', error: msg} }
+var resultsError = (item, msg) => { return {id: item.id || 'unknow', __RESULT_TYPE__: 'error', error: msg} }
 var queueObj = require('sint-bit-utils/utils/queueObj')(resultsError)
 
 var itemId = (dashId, userId) => dashId + '_' + userId
