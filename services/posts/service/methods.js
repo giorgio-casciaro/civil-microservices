@@ -16,12 +16,6 @@ var resultsError = (item, msg) => { return {id: item.id || 'unknow', __RESULT_TY
 var queueObj = require('sint-bit-utils/utils/queueObj')(resultsError)
 
 var itemId = (item) => uuidv4()
-var dashIdUserIdFromItemId = (itemId) => itemId.split('_')
-var guestPost = (postId) => {
-  var dashIdUserId = dashIdUserIdFromItemId(postId)
-  debug('guestPost', {postId, dashId: dashIdUserId[0], userId: dashIdUserId[1]})
-  return {id: postId, roleId: 'guest', dashId: dashIdUserId[0], userId: dashIdUserId[1], meta: {confirmed: true}, permissions: []}
-}
 
 const updateViews = async function (mutations, views) {
   try {
@@ -56,7 +50,6 @@ const mutateAndUpdate = async function (mutation, dataToResolve, meta, views) {
 const getViews = async (ids, select = '*', guest = false) => {
   if (typeof ids !== 'object') { ids = [ids]; var single = true }
   var views = await DB.getMulti('postsViews', ids)
-  if (guest)views = views.map((view, index) => view || guestPost(ids[index]))
   if (single) return views[0]
   else return views
 }

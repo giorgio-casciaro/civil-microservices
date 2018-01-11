@@ -114,9 +114,9 @@ var basicMutationRequest = async function ({ids, dataArray, mutation, extend, me
 module.exports = {
   deleteMulti: async function (reqData, meta, getStream) {
     var func = (resultsQueue, data, currentState, userId, dashboard, permissions) => {
-      if (!currentState) return resultsQueue.addError(data.id, data, 'Subscriptions not exists')
+      if (!currentState) return resultsQueue.addError(data, 'Subscriptions not exists')
       if (currentState.userId !== userId && !permissions['subscriptionsWrite']) {
-        return resultsQueue.addError(data.id, data, `User ${userId} cant write subcriptions`)
+        return resultsQueue.addError(data, `User ${userId} cant write subcriptions`)
       }
       resultsQueue.add(data.id, data)
     }
@@ -124,10 +124,10 @@ module.exports = {
   },
   confirmMulti: async function (reqData, meta, getStream) {
     var func = (resultsQueue, data, currentState, userId, dashboard, permissions) => {
-      if (!currentState) return resultsQueue.addError(data.id, data, 'Subscriptions not exists')
+      if (!currentState) return resultsQueue.addError(data, 'Subscriptions not exists')
       debug('confirmMulti userId, permissions', { userId, permissions })
       if (!permissions['subscriptionsConfirm'] && !permissions['subscriptionsWrite']) {
-        return resultsQueue.addError(data.id, data, `User ${userId} cant write subcriptions`)
+        return resultsQueue.addError(data, `User ${userId} cant write subcriptions`)
       }
       resultsQueue.add(data.id, data)
     }
@@ -136,9 +136,9 @@ module.exports = {
   addTagsMulti: async function (reqData, meta, getStream) {
     var ids = reqData.items.map(item => item.id)
     var func = (resultsQueue, data, currentState, userId, dashboard, permissions) => {
-      if (!currentState) return resultsQueue.addError(data.id, data, 'Subscriptions not exists')
+      if (!currentState) return resultsQueue.addError(data, 'Subscriptions not exists')
       if (currentState.userId !== userId && !permissions['subscriptionsWrite']) {
-        return resultsQueue.addError(data.id, data, `User ${userId} cant write subcriptions`)
+        return resultsQueue.addError(data, `User ${userId} cant write subcriptions`)
       }
       resultsQueue.add(data.id, data)
     }
@@ -147,9 +147,9 @@ module.exports = {
   removeTagsMulti: async function (reqData, meta, getStream) {
     var ids = reqData.items.map(item => item.id)
     var func = (resultsQueue, data, currentState, userId, dashboard, permissions) => {
-      if (!currentState) return resultsQueue.addError(data.id, data, 'Subscriptions not exists')
+      if (!currentState) return resultsQueue.addError(data, 'Subscriptions not exists')
       if (currentState.userId !== userId && !permissions['subscriptionsWrite']) {
-        return resultsQueue.addError(data.id, data, `User ${userId} cant write subcriptions`)
+        return resultsQueue.addError(data, `User ${userId} cant write subcriptions`)
       }
       resultsQueue.add(data.id, data)
     }
@@ -178,17 +178,17 @@ module.exports = {
     var resultsQueue = queueObj()
 
     reqData.items.forEach((item, index) => {
-      if (currentStates[index]) return resultsQueue.addError(item.id, currentStates[index], 'Subscription exists')
+      if (currentStates[index]) return resultsQueue.addError(currentStates[index], 'Subscription exists')
       item = Object.assign({id: itemId(item.dashId, item.userId), roleId: 'subscriber'}, item)
       var permissions = dashboardsAndPermissions.permissions[item.dashId]
       var role = dashboardsAndPermissions.byId[item.dashId].roles[item.roleId]
-      if (!role) return resultsQueue.addError(item.id, item, 'Role not exists or is not active')
+      if (!role) return resultsQueue.addError(item, 'Role not exists or is not active')
       if (!permissions['subscriptionsWrite']) {
-        if (!role.public) return resultsQueue.addError(item.id, item, item.dashId + ' ' + userId + ' can\'t write role ' + item.roleId + '  subscriptions')
+        if (!role.public) return resultsQueue.addError(item, item.dashId + ' ' + userId + ' can\'t write role ' + item.roleId + '  subscriptions')
         if (item.userId === userId) {
           if (permissions['subscriptionsSubscribe'])item.meta.confirmed = 1
           else if (!permissions['subscriptionsSubscribeWithConfimation']) return resultsQueue.addError(item, item.dashId + ' ' + userId + ' can\'t subscribe')
-        } else return resultsQueue.addError(item.id, item, item.dashId + ' ' + userId + ' can\'t create other users subscriptions')
+        } else return resultsQueue.addError(item, item.dashId + ' ' + userId + ' can\'t create other users subscriptions')
       }
       resultsQueue.add(item.id, item)
     })
@@ -225,10 +225,10 @@ module.exports = {
     debug('updateMulti', {dashboardsAndPermissions, currentStates})
     reqData.items.forEach((item, index) => {
       var currentState = currentStates[index]
-      if (!currentState) return resultsQueue.addError(item.id, item, 'Subscriptions not exists')
+      if (!currentState) return resultsQueue.addError(item, 'Subscriptions not exists')
       var permissions = dashboardsAndPermissions.permissions[currentState.dashId]
       debug('updateMulti items.forEach', {userId, permissions, currentState})
-      if (currentState.userId !== userId && !permissions['subscriptionsWrite']) return resultsQueue.addError(item.id, item, `User ${userId} cant write subcriptions for ${currentState.userId}`)
+      if (currentState.userId !== userId && !permissions['subscriptionsWrite']) return resultsQueue.addError(item, `User ${userId} cant write subcriptions for ${currentState.userId}`)
       resultsQueue.add(item.id, item)
     })
     await resultsQueue.resolve((dataToResolve) => mutateAndUpdate('update', dataToResolve, meta, currentStates))

@@ -9,7 +9,7 @@ module.exports = async function service () {
   // SERVICES DEPENDECIES
   const wait = require('sint-bit-utils/utils/wait')
   console.log('PREINIT SCHEMA')
-  await wait.aerospike(CONFIG.aerospike)
+  await wait.service('http://couchbase_nodes:8091/')
   console.log('INIT SCHEMA')
 
   // EXPRESS
@@ -21,20 +21,21 @@ module.exports = async function service () {
   app.use(bodyParser.urlencoded({ extended: true }))
   // DB
   console.log('INIT SCHEMA')
-  const kvDb = require('sint-bit-utils/utils/kvDb')
-  var kvDbClient = await kvDb.getClient(CONFIG.aerospike)
+  const DB = require('sint-bit-utils/utils/dbCouchbaseV2')
+  await DB.init(CONFIG.couchbase.url, CONFIG.couchbase.username, CONFIG.couchbase.password)
+
   const loadSchema = async () => {
-    var rawSchema = await kvDb.get(kvDbClient, 'schema')
-    if (rawSchema && rawSchema.schema) return JSON.parse(rawSchema.schema)
-    return {}
+    var rawSchema = await DB.get('schema', 'schema')
+    console.log('rawSchema', rawSchema)
+    return rawSchema || { id: 'schema', services: {} }
   }
   const saveSchema = async (specificSchema) => {
     if (specificSchema)SCHEMA = specificSchema
-    var result = await kvDb.put(kvDbClient, 'schema', {schema: JSON.stringify(SCHEMA)})
+    var result = await DB.put('schema', SCHEMA)
     CONSOLE.hl('saveSchema', result)
     return result
   }
-  var SCHEMA = {}
+  var SCHEMA = { id: 'schema', services: {} }
   try { SCHEMA = await loadSchema() } catch (error) { await saveSchema() }
   console.log('SCHEMA', SCHEMA)
 
@@ -49,19 +50,19 @@ module.exports = async function service () {
     var serviceName
     for (serviceName in SCHEMA) {
       if (!liveSignals[serviceName]) {
-        delete SCHEMA[serviceName]
+        delete SCHEMA.services[serviceName]
         schemaUpdated = true
         CONSOLE.log('service removed', serviceName)
-        if (SCHEMA[serviceName])CONSOLE.log('error service not removed', SCHEMA[serviceName])
+        if (SCHEMA.services[serviceName])CONSOLE.log('error service not removed', SCHEMA.services[serviceName])
       }
     }
     for (serviceName in liveSignals) {
       if (liveSignals[serviceName] < currentTime - liveSignalTime) {
-        delete SCHEMA[serviceName]
+        delete SCHEMA.services[serviceName]
         delete liveSignals[serviceName]
         schemaUpdated = true
         CONSOLE.log('service removed', serviceName)
-        if (SCHEMA[serviceName])CONSOLE.log('error service not removed', SCHEMA[serviceName])
+        if (SCHEMA.services[serviceName])CONSOLE.log('error service not removed', SCHEMA.services[serviceName])
       }
     }
     if (schemaUpdated) await saveSchema(SCHEMA)
@@ -71,7 +72,7 @@ module.exports = async function service () {
     CONSOLE.log('liveSignal', service, Date.now())
     if (service) {
       liveSignals[service] = Date.now()
-      if (!SCHEMA[service]) return {status: 2, msg: 'service not registered'}
+      if (!SCHEMA.services[service]) return {status: 2, msg: 'service not registered'}
       return {status: 1, msg: 'liveSignal updated'}
     }
     return {status: 0, msg: 'service not defined'}
@@ -87,11 +88,11 @@ module.exports = async function service () {
     SCHEMA = await loadSchema()
     var publicSchema = {}
     for (var serviceName in SCHEMA) {
-      if (SCHEMA[serviceName].exportToPublicApi) {
-        publicSchema[serviceName] = {}
-        for (var methodName in SCHEMA[serviceName].methods) {
-          if (SCHEMA[serviceName].methods[methodName].public) {
-            publicSchema[serviceName][methodName] = SCHEMA[serviceName].methods[methodName].requestSchema
+      if (SCHEMA.services[serviceName].exportToPublicApi) {
+        publicSCHEMA.services[serviceName] = {}
+        for (var methodName in SCHEMA.services[serviceName].methods) {
+          if (SCHEMA.services[serviceName].methods[methodName].public) {
+            publicSCHEMA.services[serviceName][methodName] = SCHEMA.services[serviceName].methods[methodName].requestSchema
           }
         }
       }
@@ -106,7 +107,7 @@ module.exports = async function service () {
   app.post('/setServiceSchema', async function (req, res) {
     CONSOLE.hl('setServiceSchema', req.body.service)
     SCHEMA = await loadSchema()
-    SCHEMA[req.body.service] = JSON.parse(req.body.schema)
+    SCHEMA.services[req.body.service] = JSON.parse(req.body.schema)
     liveSignal(req.body.service)
     await saveSchema()
     res.setHeader('Content-Type', 'application/json')
@@ -116,7 +117,7 @@ module.exports = async function service () {
     try {
       CONSOLE.log('removeServiceSchema', req.body, SCHEMA)
       SCHEMA = await loadSchema()
-      delete SCHEMA[req.body.service]
+      delete SCHEMA.services[req.body.service]
       CONSOLE.log('removeServiceSchema', req.body, SCHEMA)
       await saveSchema()
     } catch (error) {

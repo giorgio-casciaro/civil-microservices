@@ -7,10 +7,6 @@ var request = require('request-promise-native')
 
 var startTest = async function () {
   var config = require('../config')
-  var aerospike = require('../config').aerospike
-  aerospike.set = 'schema_test_set'
-  aerospike.mutationsSet = 'schema_test_mutations_set'
-  aerospike.viewsSet = 'schema_test_views_set'
 
   // PREPARE DB
   var mainTest = require('sint-bit-utils/utils/microTest')('test Microservice local methods and db conenctions', -1)
@@ -36,15 +32,14 @@ var startTest = async function () {
   microTest(JSON.parse(setServiceSchema2), {success: 'schema received'}, 'setServiceSchema')
 
   var getSchema = await request.get(`http://${config.httpHost}:${config.httpPort}/getSchema`)
-  microTest(JSON.parse(getSchema), {test: { test_field: 'test' },test2: { test_field: 'test2' }}, 'getSchema')
+  microTest(JSON.parse(getSchema), { id: 'schema', 'services': {test: { test_field: 'test' }, test2: { test_field: 'test2' }} }, 'getSchema')
 
   var removeServiceSchema = await request.post(`http://${config.httpHost}:${config.httpPort}/removeServiceSchema`, { form: { service: 'test' } })
   microTest(JSON.parse(removeServiceSchema), {success: 'schema removed'}, 'removeServiceSchema')
 
   var getSchema2 = await request.get(`http://${config.httpHost}:${config.httpPort}/getSchema`)
-  microTest(JSON.parse(getSchema2), {test2: { test_field: 'test2' }}, 'getSchema Removed ')
+  microTest(JSON.parse(getSchema2), { id: 'schema', 'services': {test2: { test_field: 'test2' }} }, 'getSchema Removed ')
 
   return finishTest()
-
 }
 module.exports = startTest

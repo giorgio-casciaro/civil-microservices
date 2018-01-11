@@ -29,10 +29,6 @@ services:
        - ../../../NPM/sint-bit-utils:/microservice/service/node_modules/sint-bit-utils
        - ../../../FS/:/uploads/
 
-     depends_on:
-       - dashboards
-       - schema
-       - users
      networks:
        - microservicesNet
 

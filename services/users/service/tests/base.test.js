@@ -2,181 +2,237 @@ process.on('unhandledRejection', function (reason) {
   console.error('oops', reason)
   process.exit(1)
 })
-var path = require('path')
+const log = (msg, data) => { console.log('\n' + JSON.stringify(['LOG', 'TEST', msg, data])) }
+const warn = (msg, data) => { console.log('\n' + JSON.stringify(['WARN', 'TEST', msg, data])) }
+const error = (msg, data) => { console.log('\n' + JSON.stringify(['ERROR', 'TEST', msg, data])) }
+
+process.env.debugMain = true
+process.env.debugCouchbase = true
+process.env.debugJesus = true
+process.env.debugSchema = true
 
 var startTest = async function (netClient) {
-  // PREPARE DB
-  var microRandom = Math.floor(Math.random() * 100000)
-  var mainTest = require('sint-bit-utils/utils/microTest')('test Microservice local methods and db conenctions', 0)
-  var microTest = mainTest.test
-  var finishTest = mainTest.finish
-
-  var fs = require('fs')
-  fs.createReadStream(path.join(__dirname, '/test.png')).pipe(fs.createWriteStream(path.join(__dirname, '/test_send.png')))
   await new Promise((resolve) => setTimeout(resolve, 1000))
+  var CONFIG = require('../config')
+  const auth = require('sint-bit-utils/utils/auth')
+  var mainTest = require('sint-bit-utils/utils/microTest')('test Microservice local methods and db connections', 0)
 
-  var fields = {
-    publicName: `sir test_user ${microRandom}. junior`,
-    pic: {
-      mimetype: 'image/png',
-      path: path.join(__dirname, '/test_send.png')
-    },
-    email: `test${microRandom}@test${microRandom}.com`,
-    password: `t$@es${microRandom}Tt$te1st_com`,
-    newPassword: `new_t$@es${microRandom}Tt$te1st_com`,
-    firstName: `t$@es${microRandom}Tt$te1st_com`,
-    lastName: `t$@es${microRandom}Tt$te1st_com`
+  function getPuppetSubscriptionsGetPermissions (substitutions = {}) {
+    var defaultSubscription = Object.assign({
+      id: 'testSubscription',
+      permissions: ['usersWrite', 'usersRead', 'usersConfirm', 'usersWriteOtherUsers', 'usersReadHidden'],
+      dashId: 'testDash',
+      userId: 'testUser'
+    }, substitutions)
+    // mainTest.log('getPuppetSubscriptionsGetPermissions', {substitutions, defaultSubscription})
+    var func = function ({data}) { return { results: [defaultSubscription] } }
+    return func
   }
-  console.log('fields', fields)
 
-  var basicMeta = {}
-  // var createReq = {
-  //   password: `${microRandom}`,
-  //   confirm: `${microRandom}`
-  // }
-  // var wrongPasswordReq = Object.assign({}, basicUser, {
-  //   password: `${microRandom}`,
-  //   confirm: `${microRandom}`
-  // })
-  const TYPE_OF = (actual, expected) => {
-    var filtered = {}
-    Object.keys(expected).forEach((key) => { filtered[key] = typeof actual[key] })
-    return filtered
+  async function setContext (contextData) {
+    var i
+    var tokens = {}
+    for (i in contextData.users)tokens[i] = await auth.createToken(i, contextData.users[i].permissions || [], contextData.users[i], CONFIG.jwt)
+    for (i in contextData.entities) await DB.put('usersViews', Object.assign({ id: 'testDash_testUser', meta: {confirmed: true, created: Date.now(), updated: Date.now()}, dashId: 'testDash', roleId: 'subscriber', userId: 'testUser' }, contextData.entities[i]))
+    Object.assign(netClient.testPuppets, contextData.testPuppets || {})
+    log('setContext', { keys: Object.keys(netClient.testPuppets), func: netClient.testPuppets.subscriptions_getPermissions.toString() })
+    return {
+      tokens,
+      data: contextData.data,
+      updateData: (substitutions) => {
+        var value
+        for (var k in substitutions) {
+          value = contextData.data
+          k.split('/').forEach(addr => (value = value[addr]))
+          value = substitutions[k]
+        }
+      },
+      updatePuppets: (testPuppets) => Object.assign(netClient.testPuppets, testPuppets || {}),
+      destroy: async() => {
+        for (i in contextData.entities) await DB.remove('usersViews', contextData.entities[i].id)
+      }
+    }
   }
-  const FILTER_BY_KEYS = (actual, expected) => {
-    var filtered = {}
-    Object.keys(expected).forEach((key) => { filtered[key] = actual[key] })
-    return filtered
-  }
-  const COUNT = (actual, expected) => actual.length
+  const DB = require('sint-bit-utils/utils/dbCouchbaseV2')
+  const dbGet = (id = 'testUser', bucket = 'usersViews') => DB.get(bucket, id)
+  const dbRemove = (id = 'testUser', bucket = 'usersViews') => DB.remove(bucket, id)
 
-  var createWrongMail = await netClient.testLocalMethod('create', { email: `${microRandom}` }, basicMeta)
-  microTest(createWrongMail, {error: 'string'}, 'wrong request: email not valid', TYPE_OF)
+  mainTest.sectionHead('RAW CREATE')
 
-  var create = await netClient.testLocalMethod('create', { email: fields.email }, basicMeta)
-  microTest(create, { success: 'User created' }, 'User Create', FILTER_BY_KEYS)
+  var context = await setContext({
+    data: { mutation: 'create', items: [{id: undefined, data: { dashId: 'testDash', userId: 'userTest', body: 'test', tags: ['testTag'], toTags: ['testTag'], toRoles: ['subscriber'] }}], extend: { } },
+    users: { userTest: {} },
+    entities: [],
+    testPuppets: { subscriptions_getPermissions: getPuppetSubscriptionsGetPermissions() }
+  })
+  var test = await netClient.testLocalMethod('rawMutateMulti', context.data, {token: context.tokens.userTest})
+  mainTest.testRaw('rawMutateMulti create', test, (data) => data.results instanceof Array && data.results.length === 1)
+  mainTest.testRaw('rawMutateMulti create dbCheck', await dbGet(test.results[0].id), (data) => data.body === 'test')
+  await dbRemove(test.results[0].id)
+  await context.destroy()
 
-  var wrongRecreate = await netClient.testLocalMethod('create', { email: fields.email }, basicMeta)
-  microTest(wrongRecreate, { error: 'User exists' }, 'wrong request: User exists', FILTER_BY_KEYS)
+  mainTest.sectionHead('CREATE')
 
-  var readEmailConfirmationCode = await netClient.testLocalMethod('readEmailConfirmationCode', {id: create.id}, basicMeta)
-  microTest(readEmailConfirmationCode, {emailConfirmationCode: 'string'}, 'read Email Confirmation Code', TYPE_OF)
+  context = await setContext({
+    data: { items: [{ dashId: 'testDash', userId: 'userTest', body: 'test', tags: ['testTag'], toTags: ['testTag'], toRoles: ['subscriber'] }] },
+    users: { userTest: {} },
+    entities: [],
+    testPuppets: { subscriptions_getPermissions: getPuppetSubscriptionsGetPermissions() }
+  })
+  test = await netClient.testLocalMethod('createMulti', context.data, {token: context.tokens.userTest})
+  mainTest.testRaw('createMulti', test, (data) => data.results instanceof Array && data.results.length === 1)
+  mainTest.testRaw('createMulti dbCheck', await dbGet(test.results[0].id), (data) => data.body === 'test' && !!data.meta.confirmed)
+  await dbRemove(test.results[0].id)
 
-  var confirmEmail = await netClient.testLocalMethod('confirmEmail', { email: fields.email, emailConfirmationCode: readEmailConfirmationCode.emailConfirmationCode }, basicMeta)
-  microTest(confirmEmail, { success: 'Email confirmed' }, 'Email confirmed', FILTER_BY_KEYS)
+  context.updatePuppets({subscriptions_getPermissions: getPuppetSubscriptionsGetPermissions({'permissions': []})})
+  test = await netClient.testLocalMethod('createMulti', context.data, {token: context.tokens.userTest})
+  mainTest.testRaw('createMulti checkError No permission to write users', test, (data) => data.errors instanceof Array)
+  await dbRemove(test.results[0].id)
 
-  var assignPassword = await netClient.testLocalMethod('assignPassword', {email: fields.email, password: fields.password, confirmPassword: fields.password}, basicMeta)
-  microTest(assignPassword, { success: 'string' }, 'assignPassword', TYPE_OF)
+  context.updatePuppets({subscriptions_getPermissions: getPuppetSubscriptionsGetPermissions({'permissions': ['usersWrite']})})
+  test = await netClient.testLocalMethod('createMulti', context.data, {token: context.tokens.userTest})
+  mainTest.testRaw('createMulti with no confimation', test, (data) => data.results instanceof Array && data.results.length === 1)
+  mainTest.testRaw('createMulti  with no confimation dbCheck', await dbGet(test.results[0].id), (data) => !data.meta.confirmed)
+  await dbRemove(test.results[0].id)
 
-  var login = await netClient.testLocalMethod('login', {email: fields.email, password: fields.password}, basicMeta)
-  microTest(login, { success: 'string', token: 'string' }, 'login', TYPE_OF)
+  await context.destroy()
 
-  basicMeta.token = login.token
+  mainTest.sectionHead('READ')
 
-  var readPrivate = await netClient.testLocalMethod('readPrivate', {id: create.id}, basicMeta)
-  microTest(readPrivate, {email: fields.email}, 'readPrivate', FILTER_BY_KEYS)
-  microTest(readPrivate, {emailConfirmationCode: 'undefined'}, 'readPrivate', TYPE_OF)
+  context = await setContext({
+    data: {},
+    users: { userTest: {} },
+    entities: [
+      { id: 'testUser', dashId: 'testDash', userId: 'userTest', body: 'test', tags: ['testTag'], toTags: ['testTag'], toRoles: ['subscriber'] },
+      { id: 'testUser1', dashId: 'testDash', userId: 'userTest', body: 'test', tags: ['testTag'], toTags: ['testTag'], toRoles: ['subscriber'] }
+    ],
+    testPuppets: { subscriptions_getPermissions: getPuppetSubscriptionsGetPermissions() }
+  })
+  test = await netClient.testLocalMethod('readMulti', { ids: ['testUser'] }, {token: context.tokens.userTest})
+  mainTest.testRaw('readMulti', test, (data) => !data.errors && data.results instanceof Array && data.results.length === 1)
 
-  var updatePublicName = await netClient.testLocalMethod('updatePublicName', {id: create.id, publicName: fields.publicName}, basicMeta)
-  microTest(updatePublicName, { success: 'string' }, 'updatePublicName', TYPE_OF)
-  var readPublicName = await netClient.testLocalMethod('read', {id: create.id}, basicMeta)
-  microTest(readPublicName, {publicName: fields.publicName}, 'readPublicName', FILTER_BY_KEYS)
+  test = await netClient.testLocalMethod('readMulti', { ids: ['fakeid'] }, {token: context.tokens.userTest})
+  mainTest.testRaw('readMulti checkError  User not exists', test, (data) => data.errors instanceof Array)
 
-  var refreshToken = await netClient.testLocalMethod('refreshToken', {}, basicMeta)
-  microTest(refreshToken, { success: 'string', token: 'string' }, 'refreshToken', TYPE_OF)
+  await context.destroy()
 
-  basicMeta.token = refreshToken.token
+  mainTest.sectionHead('UPDATE')
 
-  var readPrivate2 = await netClient.testLocalMethod('readPrivate', {id: create.id}, basicMeta)
-  microTest(readPrivate2, {email: fields.email}, 'readPrivate', FILTER_BY_KEYS)
-  microTest(readPrivate2, {emailConfirmationCode: 'undefined'}, 'readPrivate', TYPE_OF)
+  context = await setContext({
+    data: {},
+    users: { userTest: {}, userTest1: {} },
+    entities: [
+      { id: 'testUser', dashId: 'testDash', userId: 'userTest', body: 'test', tags: ['testTag'], toTags: ['testTag'], toRoles: ['subscriber'] },
+      { id: 'testUser1', dashId: 'testDash', userId: 'userTest1', body: 'test', tags: ['testTag'], toTags: ['testTag'], toRoles: ['subscriber'] }
+    ],
+    testPuppets: { subscriptions_getPermissions: getPuppetSubscriptionsGetPermissions({'permissions': ['usersWrite', 'usersRead']}) }
+  })
 
-  var updatePic = await netClient.testLocalMethod('updatePic', {id: create.id, pic: fields.pic}, basicMeta)
-  microTest(updatePic, { success: 'string' }, 'updatePic', TYPE_OF)
-  var getPic = await netClient.testLocalMethod('getPic', {id: create.id}, basicMeta)
-  microTest(typeof getPic, 'string', 'getPic')
+  test = await netClient.testLocalMethod('updateMulti', { items: [{id: 'testUser', tags: ['testUpdate']}] }, {token: context.tokens.userTest})
+  mainTest.testRaw('updateMulti', test, (data) => !data.errors && data.results instanceof Array && data.results.length === 1)
+  // dbCheck = await DB.get('usersViews', 'testUser')
+  mainTest.testRaw('updateMulti dbCheck', await dbGet('testUser'), (data) => data.tags[0] === 'testUpdate')
 
-  var updatePersonalInfo = await netClient.testLocalMethod('updatePersonalInfo', {id: create.id, firstName: fields.firstName, lastName: fields.lastName, birth: fields.birth}, basicMeta)
-  microTest(updatePersonalInfo, { success: 'string' }, 'updatePersonalInfo', TYPE_OF)
-  var readPersonalInfo = await netClient.testLocalMethod('readPersonalInfo', {id: create.id}, basicMeta)
-  microTest(readPersonalInfo, {firstName: fields.firstName}, 'readPersonalInfo', FILTER_BY_KEYS)
+  test = await netClient.testLocalMethod('updateMulti', { items: [{id: 'fake', tags: ['test']}] }, {token: context.tokens.userTest})
+  mainTest.testRaw('updateMulti checkError  User not exists', test, (data) => data.errors instanceof Array)
 
-  var updatePassword = await netClient.testLocalMethod('updatePassword', {id: create.id, password: fields.newPassword, confirmPassword: fields.newPassword, oldPassword: fields.password}, basicMeta)
-  microTest(updatePassword, { success: 'string' }, 'updatePassword', TYPE_OF)
+  test = await netClient.testLocalMethod('updateMulti', { items: [{id: 'testUser1', tags: ['test']}] }, {token: context.tokens.userTest})
+  mainTest.testRaw('updateMulti checkError  Cant update other users user', test, (data) => data.errors instanceof Array)
 
-  // NOTIFICATIONS
-  var notificationsCreate = await netClient.testLocalMethod('notificationsCreate', { users: [{userId: create.id, notifications: ['sms', 'fb', 'email']}], type: 'test', data: {title: 'Long text', body: 'Long text', dashId: null} }, basicMeta)
-  microTest(notificationsCreate, {success: 'Notifications created'}, 'notificationsCreate', FILTER_BY_KEYS)
-  mainTest.consoleResume()
-  console.log('notificationsCreate', notificationsCreate)
-  mainTest.consoleMute()
+  context.updatePuppets({subscriptions_getPermissions: getPuppetSubscriptionsGetPermissions({'permissions': ['usersWrite', 'usersRead', 'usersWriteOtherUsers']})})
+  test = await netClient.testLocalMethod('updateMulti', { items: [{id: 'testUser1', tags: ['test']}] }, {token: context.tokens.userAdminTest})
+  mainTest.testRaw('updateMulti checkError  usersWrite can update other users user', test, (data) => !data.errors)
 
-  var notificationsRead = await netClient.testLocalMethod('notificationsRead', { id: notificationsCreate.ids[0] }, basicMeta)
-  microTest(notificationsRead, {type: 'test'}, 'notificationsRead', FILTER_BY_KEYS)
+  await context.destroy()
 
-  var notificationsReaded = await netClient.testLocalMethod('notificationsReaded', { id: notificationsCreate.ids[0] }, basicMeta)
-  microTest(notificationsReaded, {success: 'Notifications readed'}, 'notificationsReaded', FILTER_BY_KEYS)
+  mainTest.sectionHead('DELETE')
 
-  var notificationsReadReaded = await netClient.testLocalMethod('notificationsRead', { id: notificationsCreate.ids[0] }, basicMeta)
-  microTest(notificationsReadReaded, {readed: 'number'}, 'notificationsRead', TYPE_OF)
+  context = await setContext({
+    data: {},
+    users: { userTest: {} },
+    entities: [
+      { id: 'testUser', dashId: 'testDash', userId: 'userTest', body: 'test', tags: ['testTag'], toTags: ['testTag'], toRoles: ['subscriber'] },
+      { id: 'testUser1', meta: {deleted: true}, dashId: 'testDash', userId: 'userTest1', body: 'test', tags: ['testTag'], toTags: ['testTag'], toRoles: ['subscriber'] }
+    ],
+    testPuppets: { subscriptions_getPermissions: getPuppetSubscriptionsGetPermissions({'permissions': ['usersWrite', 'usersRead']}) }
+  })
 
-  var notificationsCreateObjectId = await netClient.testLocalMethod('notificationsCreate', { users: [{userId: create.id, notifications: ['sms', 'fb', 'email']}], objectId: 'testObjectId', type: 'test', data: {title: 'Long text', body: 'Long text', dashId: null} }, basicMeta)
-  microTest(notificationsCreateObjectId, {success: 'Notifications created'}, 'notificationsCreateObjectId', FILTER_BY_KEYS)
+  test = await netClient.testLocalMethod('deleteMulti', { ids: ['testUser'] }, {token: context.tokens.userTest})
+  // mainTest.log('test', test)
+  mainTest.testRaw('deleteMulti', test, (data) => !data.errors && data.results instanceof Array && data.results.length === 1)
+  mainTest.testRaw('deleteMulti dbCheck', await dbGet('testUser'), (data) => data.meta.deleted === true)
 
-  var notificationsReadedByObjectId = await netClient.testLocalMethod('notificationsReadedByObjectId', { objectId: 'testObjectId' }, basicMeta)
-  microTest(notificationsReadedByObjectId, {success: 'Notifications readed'}, 'notificationsReadedByObjectId', FILTER_BY_KEYS)
+  test = await netClient.testLocalMethod('readMulti', { ids: ['testUser1'] }, {token: context.tokens.userTest})
+  mainTest.testRaw('readMulti checkError readMulti User deleted', test, (data) => data.errors instanceof Array)
 
-  var notificationsReadReadedByObjectId = await netClient.testLocalMethod('notificationsRead', { id: notificationsCreateObjectId.ids[0] }, basicMeta)
-  microTest(notificationsReadReadedByObjectId, {readed: 'number'}, 'notificationsReadReadedByObjectId', TYPE_OF, 1)
+  test = await netClient.testLocalMethod('readMulti', { ids: ['testUser'] }, {token: context.tokens.userTest})
+  mainTest.testRaw('readMulti check User deleted but readable by owner', test, (data) => !data.errors)
 
-  var notificationsLastsByUserId = await netClient.testLocalMethod('notificationsLastsByUserId', { }, basicMeta)
-  microTest(notificationsLastsByUserId, 2, 'notificationsLastsByUserId', COUNT)
-  mainTest.consoleResume()
-  var notificationsEventCreatePost = await netClient.emit('POST_CREATED', { view: {body: 'Test Post', id: 'testPostId' }, users: [{userId: create.id, notifications: ['sms', 'fb', 'email']}] }, basicMeta)
-  // microTest(notificationsRead, {type: 'test'}, 'notificationsRead', FILTER_BY_KEYS)
+  context.updatePuppets({subscriptions_getPermissions: getPuppetSubscriptionsGetPermissions({'permissions': ['usersWrite', 'usersRead', 'usersReadHidden', 'usersWriteOtherUsers']})})
+  test = await netClient.testLocalMethod('readMulti', { ids: ['testUser1'] }, {token: context.tokens.userTest})
+  mainTest.testRaw('readMulti check  User deleted but readable by admins', test, (data) => !data.errors)
 
-  console.log('notificationsEventCreatePost', notificationsEventCreatePost)
-  mainTest.consoleMute()
+  await context.destroy()
 
-  var remove = await netClient.testLocalMethod('remove', { id: create.id }, basicMeta)
-  microTest(remove, {success: 'User removed'}, 'remove')
-  var readRemove = await netClient.testLocalMethod('read', { id: create.id }, basicMeta)
-  microTest(readRemove, { error: 'string' }, 'readRemove', TYPE_OF)
+  mainTest.sectionHead('CONFIRMATIONS')
 
-  var rpcCreateUserN = (n) => netClient.testLocalMethod('create', { email: n + '_' + fields.email }, basicMeta)
+  context = await setContext({
+    data: {},
+    users: { userTest: {}, userAdminTest: {} },
+    entities: [
+    ],
+    testPuppets: { subscriptions_getPermissions: getPuppetSubscriptionsGetPermissions({'permissions': ['usersWrite', 'usersRead']}) }
+  })
 
-  var testTimestamp1 = Date.now()
-  await rpcCreateUserN(1)
-  await rpcCreateUserN(2)
-  await rpcCreateUserN(3)
-  await new Promise((resolve) => setTimeout(resolve, 100))
-  var testTimestamp2 = Date.now()
-  await rpcCreateUserN(4)
-  await rpcCreateUserN(5)
-  await rpcCreateUserN(6)
+  test = await netClient.testLocalMethod('createMulti', { items: [{ dashId: 'testDash', userId: 'userTest', body: 'test', tags: ['testTag'], toTags: ['testTag'], toRoles: ['subscriber'] }] }, {token: context.tokens.userTest})
+  mainTest.testRaw('createMulti with confirmation', test, (data) => !data.errors && data.results instanceof Array && data.results.length === 1)
+  mainTest.testRaw('createMulti with confirmation dbCheck', await dbGet(test.results[0].id), (data) => !data.meta.confirmed)
+  var tempId = test.results[0].id
+  test = await netClient.testLocalMethod('confirmMulti', { ids: [test.results[0].id] }, {token: context.tokens.userAdminTest})
+  mainTest.testRaw('confirmMulti by admin user', test, (data) => !data.errors && data.results instanceof Array && data.results.length === 1)
+  mainTest.testRaw('confirmMulti dbCheck', await dbGet(test.results[0].id), (data) => data.meta.confirmed === true)
+  await dbRemove(tempId)
+  await context.destroy()
 
-  var queryResponse = await netClient.testLocalMethod('queryByTimestamp', {from: testTimestamp1}, basicMeta)
-  microTest(queryResponse, 6, 'queryResponse insert and query 6 items from testTimestamp1', COUNT)
-  var queryResponse2 = await netClient.testLocalMethod('queryByTimestamp', {from: testTimestamp2}, basicMeta)
-  microTest(queryResponse2, 3, 'queryResponse insert and query 3 items  from testTimestamp2', COUNT)
+  mainTest.sectionHead('TAGS')
 
-  var guest = {
-    email: `test${microRandom}${microRandom}@test${microRandom}.com`,
-    password: `t$@es${microRandom}Tt$te1st_com`,
-    name: `name ${microRandom} Tt$te1st_com`,
-    info: {ip: '123.213.123.213'}
-  }
-  var createGuest = await netClient.testLocalMethod('createGuest', {name: guest.name, email: guest.email, password: guest.password, info: guest.info}, {})
-  microTest(createGuest, { success: 'string', token: 'string' }, 'createGuest', TYPE_OF)
+  context = await setContext({
+    data: {},
+    users: { userTest: {}, userAdminTest: {} },
+    entities: [
+      { id: 'testUser', dashId: 'testDash', userId: 'userTest', body: 'test', tags: ['testTag'], toTags: ['testTag'], toRoles: ['subscriber'] },
+      { id: 'testUser1', meta: {deleted: true}, dashId: 'testDash', userId: 'userTest1', body: 'test', tags: ['testTag'], toTags: ['testTag'], toRoles: ['subscriber'] }
+    ],
+    testPuppets: { subscriptions_getPermissions: getPuppetSubscriptionsGetPermissions() }
+  })
 
-  var readGuestPrivate = await netClient.testLocalMethod('readPrivate', {id: createGuest.id}, createGuest)
-  microTest(readGuestPrivate, {email: guest.email}, 'readPrivate', FILTER_BY_KEYS)
-  microTest(readGuestPrivate, {emailConfirmationCode: 'undefined'}, 'readPrivate', TYPE_OF)
+  test = await netClient.testLocalMethod('addTagsMulti', { items: [{id: 'testUser', tags: ['tag_by_subscriber', 'tag_by_subscriber2']}] }, {token: context.tokens.userTest})
+  mainTest.testRaw('addTagsMulti by subcritpion owner', test, (data) => !data.errors && data.results instanceof Array && data.results.length === 1)
+  mainTest.testRaw('addTagsMulti by subcritpion owner dbCheck', await dbGet('testUser'), (data) => data.tags.indexOf('tag_by_subscriber') > -1)
 
-  // finishTest()
-  // SERVICE.netServer.stop()
+  test = await netClient.testLocalMethod('addTagsMulti', { items: [{id: 'testUser', tags: ['tag_by_admin', 'tag_by_admin2']}] }, {token: context.tokens.userAdminTest})
+  mainTest.testRaw('addTagsMulti by admin', test, (data) => !data.errors && data.results instanceof Array && data.results.length === 1)
+  mainTest.testRaw('addTagsMulti by admin  dbCheck', await dbGet('testUser'), (data) => data.tags.indexOf('tag_by_admin') > -1)
+
+  await context.destroy()
+
+  mainTest.sectionHead('LIST')
+
+  context = await setContext({
+    data: {},
+    users: { userTest: {}, userAdminTest: {} },
+    entities: [
+      { id: 'testUser', dashId: 'testDash', userId: 'userTest', body: 'test', tags: ['testTag'], toTags: ['testTag'], toRoles: ['subscriber'] },
+      { id: 'testUser1', meta: {deleted: true}, dashId: 'testDash', userId: 'userTest1', body: 'test', tags: ['testTag'], toTags: ['testTag'], toRoles: ['subscriber'] }
+    ],
+    testPuppets: { subscriptions_getPermissions: getPuppetSubscriptionsGetPermissions() }
+  })
+  await new Promise((resolve) => setTimeout(resolve, 1000)) // DB INDEX UPDATE
+  test = await netClient.testLocalMethod('list', { dashId: 'testDash' }, {token: context.tokens.userTest})
+  mainTest.testRaw('list', test, (data) => !data.errors && data.results instanceof Array && data.results.length === 2)
+  await context.destroy()
+
   await new Promise((resolve) => setTimeout(resolve, 1000))
-  // process.exit()
-  return finishTest()
+  return mainTest.finish()
 }
 module.exports = startTest

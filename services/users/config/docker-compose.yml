@@ -1,44 +1,37 @@
-version:                '3.3'
+version:               '3.3'
 
 services:
    users:
-     image:             giorgiocasciaro/civil-microservices-users:12
-     logging:
-       driver:           none
-     working_dir:          /microservice
-    #  command:              sh -c "npm run watch_test"
-    #  environment:
-    #    aerospikeNamespace: cc_tests
-     command:              sh -c "npm run start"
+     image:            giorgiocasciaro/ubuntu-node:v3
+    #  logging:
+    #    driver:       none
+     working_dir:      /microservice
+     command:          sh -c "npm run watch_test"
      environment:
-       uploadPath:      /uploads/
-       schemaHost:      'http://schema:10000'
-       confirmEmailUrl: http://localhost:8080/#/registration/ConfirmEmail/
-       serviceName:     users
-       netHost:         users
+       # debugJesus:     1
+       # debugCouchbase: 1
+       # debugSchema:    1
+       # debugMain:      1
+       uploadPath:     /uploads/
+       schemaHost:     'http://schema:10000'
+       serviceName:    users
+       netHost:        users
       #  netHostHttpPublicPort: 10080
-       netCors:         http://localhost:82,http://127.0.0.1:82,http://localhost:8080,http://127.0.0.1:8080,http://localhost:10080,http://127.0.0.1:10080
-      #  elasticsearchHost: elasticsearch:9200
-       aerospikeHosts:  aerospike:3000
-       aerospikeTimeout: 600000
-       NODE_ENV:        development
-       sendEmails:      'true'
+       netCors:        http://localhost:82,http://127.0.0.1:82,http://localhost:8080,http://127.0.0.1:8080,http://localhost:10080,http://127.0.0.1:10080
+       NODE_ENV:       development
+       sendEmails:     'true'
        smtpConfigJson: '{ "host": "fakesmtp", "port": 1025, "secure": false }'
      volumes:
        - ../../users:/microservice
-       - ../../../../civil_microservices_shared_modules/:/microservice/node_modules
+       # - ../../../../civil_microservices_shared_modules/:/microservice/node_modules
        - ../../../NPM/jesus:/microservice/service/node_modules/sint-bit-jesus
        - ../../../NPM/cqrs:/microservice/service/node_modules/sint-bit-cqrs
        - ../../../NPM/sint-bit-utils:/microservice/service/node_modules/sint-bit-utils
        - ../../../FS/:/uploads/
-     depends_on:
-       - aerospike
+
      networks:
        - microservicesNet
-       - aerospike
 
 networks:
   microservicesNet:
-    driver:             bridge
-  aerospike:
-    driver:             bridge
+    driver:            bridge

@@ -1,353 +1,213 @@
-// var MongoClient = require('mongodb').MongoClient
-process.on('unhandledRejection', (err, p) => {
-  console.log('An unhandledRejection occurred')
-  console.log(`Rejected Promise: ${p}`)
-  console.log(`Rejection: ${err}`)
-})
-
 const path = require('path')
-const uuid = require('uuid/v4')
-
-const Aerospike = require('aerospike')
-const Key = Aerospike.Key
-const kvDb = require('sint-bit-utils/utils/kvDb')
-const pic = require('sint-bit-utils/utils/pic')
-
-const nodemailer = require('nodemailer')
-const vm = require('vm')
-const fs = require('fs')
-
-var methods
+const uuidv4 = require('uuid/v4')
+const DB = require('sint-bit-utils/utils/dbCouchbaseV2')
+var CONFIG = require('./config')
+var mutationsPack = require('sint-bit-cqrs/mutations')({ mutationsPath: path.join(__dirname, '/mutations') })
 const auth = require('sint-bit-utils/utils/auth')
-const notifications = require('./notifications')
+var netClient
 
-var service = async function getMethods (CONSOLE, netClient, CONFIG = require('./config')) {
+const log = (msg, data) => { console.log('\n' + JSON.stringify(['LOG', 'MAIN', msg, data])) }
+const debug = (msg, data) => { if (process.env.debugMain)console.log('\n' + JSON.stringify(['DEBUG', 'MAIN', msg, data])) }
+const error = (msg, data) => { console.log('\n' + JSON.stringify(['ERROR', 'MAIN', msg, data])); console.error(data) }
+
+const arrayToObjBy = (array, prop) => array.reduce((newObj, item) => { newObj[item[prop]] = item; return newObj }, {})
+
+var resultsError = (item, msg) => { return {id: item.id || 'unknow', __RESULT_TYPE__: 'error', error: msg} }
+var queueObj = require('sint-bit-utils/utils/queueObj')(resultsError)
+
+var itemId = (item) => uuidv4()
+
+const updateViews = async function (mutations, views) {
   try {
-    // CONSOLE.debug('CONFIG', CONFIG)
-    // console.log('CONFIG', CONFIG)
-    var aerospikeConfig = CONFIG.aerospike
-    var kvDbClient = await kvDb.getClient(aerospikeConfig)
-    // SMTP
-    var smtpTrans = nodemailer.createTransport(CONFIG.smtp)
-    const getMailTemplate = async (template, sandbox = { title: 'title', header: 'header', body: 'body', footer: 'footer' }, ext = '.html') => {
-      var populate = (content) => vm.runInNewContext('returnVar=`' + content.replace(new RegExp('`', 'g'), '\\`') + '`', sandbox)
-      var result = await new Promise((resolve, reject) => fs.readFile(path.join(__dirname, '/emails/', template + ext), 'utf8', (err, data) => err ? reject(err) : resolve(populate(data))))
-      return result
+    if (!views) {
+      var ids = mutations.map((mutation) => mutation.objId)
+      views = await getViews(ids)
     }
-    const sendMail = async (template = 'userCreated', mailOptions, mailContents) => {
-      mailOptions.html = await getMailTemplate(template, mailContents, '.html')
-      mailOptions.txt = await getMailTemplate(template, mailContents, '.txt')
-      CONSOLE.hl('sendMail', CONFIG.smtp)
-      CONSOLE.hl('sendMail', mailOptions)
-      if (!process.env.sendEmails) return true
-      var returnResult = await new Promise((resolve, reject) => smtpTrans.sendMail(mailOptions, (err, data) => err ? reject(err) : resolve(data)))
-      return returnResult
-    }
-    // MUTATIONS
-    var mutationsPack = require('sint-bit-cqrs/mutations')({ mutationsPath: path.join(__dirname, '/mutations') })
-    const mutate = async function (args) {
-      try {
-        var mutation = mutationsPack.mutate(args)
-        CONSOLE.debug('mutate', mutation)
-        var key = new Key(aerospikeConfig.namespace, aerospikeConfig.mutationsSet, mutation.id)
-        await kvDb.put(kvDbClient, key, mutation)
-        return mutation
-      } catch (error) {
-        throw new Error('problems during mutate b ' + error)
-      }
-    }
-    // INIT
-    const init = async function () {
-      try {
-        CONSOLE.log('init start')
-        var secondaryIndexEmail = await kvDb.get(kvDbClient, new Key(aerospikeConfig.namespace, aerospikeConfig.metaSet, 'secondaryIndexEmail'))
-        if (!secondaryIndexEmail) {
-          await kvDb.createIndex(kvDbClient, { ns: aerospikeConfig.namespace, set: aerospikeConfig.set, bin: 'email', index: aerospikeConfig.set + '_email', datatype: Aerospike.indexDataType.STRING })
-          await kvDb.put(kvDbClient, new Key(aerospikeConfig.namespace, aerospikeConfig.metaSet, 'secondaryIndexEmail'), {created: Date.now()})
-        }
-        var secondaryIndexUpdated = await kvDb.get(kvDbClient, new Key(aerospikeConfig.namespace, aerospikeConfig.metaSet, 'secondaryIndexUpdated'))
-        if (!secondaryIndexUpdated) {
-          await kvDb.createIndex(kvDbClient, { ns: aerospikeConfig.namespace, set: aerospikeConfig.set, bin: 'updated', index: aerospikeConfig.set + '_updated', datatype: Aerospike.indexDataType.NUMERIC })
-          await kvDb.put(kvDbClient, new Key(aerospikeConfig.namespace, aerospikeConfig.metaSet, 'secondaryIndexUpdated'), {created: Date.now()})
-        }
-        var secondaryIndexCreated = await kvDb.get(kvDbClient, new Key(aerospikeConfig.namespace, aerospikeConfig.metaSet, 'secondaryIndexCreated'))
-        if (!secondaryIndexCreated) {
-          await kvDb.createIndex(kvDbClient, { ns: aerospikeConfig.namespace, set: aerospikeConfig.set, bin: 'created', index: aerospikeConfig.set + '_created', datatype: Aerospike.indexDataType.NUMERIC })
-          await kvDb.put(kvDbClient, new Key(aerospikeConfig.namespace, aerospikeConfig.metaSet, 'secondaryIndexCreated'), {created: Date.now()})
-        }
-        CONSOLE.hl('INIT Secondary Index', {secondaryIndexEmail, secondaryIndexUpdated, secondaryIndexCreated})
-        await notifications.init(netClient, CONSOLE, kvDbClient, methods)
-      } catch (error) {
-        CONSOLE.log('problems during init', error)
-        throw new Error('problems during init')
-      }
-    }
-    // VIEWS
-    // const updateRawView = async function (view) {
-    //   try {
-    //     var key = new Key(aerospikeConfig.namespace, aerospikeConfig.set, view.id)
-    //     await kvDb.put(kvDbClient, key, view)
-    //     return view
-    //   } catch (error) { throw new Error('problems during updateRawView ' + error) }
-    // }
-    const updateView = async function (id, mutations, isNew) {
-      try {
-        var key = new Key(aerospikeConfig.namespace, aerospikeConfig.set, id)
-        var rawView = await getView(id, null, false) || {state: {}}
-        var state = mutationsPack.applyMutations(rawView.state, mutations)
-        var view = {
-          updated: Date.now(),
-          created: rawView.created || Date.now(),
-          email: state.email || '',
-          guest: state.guest || 0,
-          id: state.id,
-          tags: state.tags || [],
-          state: JSON.stringify(state)
-        }
-        await kvDb.put(kvDbClient, key, view)
-        return view
-      } catch (error) { throw new Error('problems during updateView ' + error) }
-    }
-    const getView = async function (id, view = null, stateOnly = true) {
-      try {
-        var key = new Key(aerospikeConfig.namespace, aerospikeConfig.set, id)
-        if (!view) view = await kvDb.get(kvDbClient, key)
-        if (!view) return null
-        if (view.state)view.state = JSON.parse(view.state)
-        if (stateOnly) return view.state
-        return view
-      } catch (error) { throw new Error('problems during getView ' + error) }
-    }
-    const readUser = async function (id, checkValidity = false) {
-      var currentState = await getView(id)
-      CONSOLE.hl('readUser', id, currentState)
-      if (checkValidity) {
-        if (!currentState || currentState.tags.indexOf('removed') >= 0 || currentState.tags.indexOf('emailConfirmed') < 0 || currentState.tags.indexOf('passwordAssigned') < 0) {
-          throw new Error('user not active')
-        }
-      }
-      return currentState
-    }
-    const getUserByMail = async function (email, filterGuest = true) {
-      try {
-        var result = await kvDb.query(kvDbClient, aerospikeConfig.namespace, aerospikeConfig.set, (dbQuery) => {
-          dbQuery.where(Aerospike.filter.equal('email', email))
-        })
-        if (filterGuest) {
-          result = result.filter(value => !value.guest)
-        }
-        CONSOLE.hl('getUserByMail rawResult', result)
-        if (!result[0]) return null
-        return await getView(result[0].id, result[0])
-      } catch (error) { throw new Error('problems during getUserByMail ' + error) }
-    }
-    const addTag = async function (id, tag, meta) {
-      var mutation = await mutate({data: tag, objId: id, mutation: 'addTag', meta})
-      await updateView(id, [mutation])
-    }
-    const removeTag = async function (id, tag, meta) {
-      var mutation = await mutate({data: tag, objId: id, mutation: 'removeTag', meta})
-      await updateView(id, [mutation])
-    }
-
-    const getToken = async function (id, meta, jwt) {
-      var permissions = await netClient.emit('getPermissions', {id}, meta)
-      return await auth.createToken(id, permissions, meta, CONFIG.jwt)
-    }
-
-    const getPicPath = (id, type = 'mini', format = 'jpeg') => path.join(CONFIG.uploadPath, `pic-${type}-${id}.${format}`)
-    await init()
-
-    methods = {
-      async getPermissions (reqData, meta = {directCall: true}, getStream = null) {
-        return { permissions: [ [10, 'user.' + reqData.id + '.*', 1], [5, 'user.*.read', 1]] }
-      },
-      async create (reqData, meta = {directCall: true}, getStream = null) {
-        var mailExists = await getUserByMail(reqData.email)
-        if (mailExists) throw new Error('User exists')
-        var id = uuid()
-        reqData.id = id
-        reqData.emailConfirmationCode = uuid()
-        var mutation = await mutate({data: reqData, objId: id, mutation: 'create', meta})
-        await sendMail('userCreated', {to: reqData.email, from: CONFIG.mailFrom, subject: 'Benvenuto in CivilConnect - conferma la mail'}, Object.assign({CONFIG}, reqData))
-        await updateView(id, [mutation], true)
-        return {success: `User created`, id, email: reqData.email}
-      },
-      async readEmailConfirmationCode (reqData, meta = {directCall: true}, getStream = null) {
-        var id = reqData.id
-        var currentState = await getView(id)
-        return {emailConfirmationCode: currentState.emailConfirmationCode}
-      },
-      async confirmEmail (reqData, meta = {directCall: true}, getStream = null) {
-        var currentState = await getUserByMail(reqData.email, [0])
-        if (!currentState) throw new Error('email is confirmed or user is not registered')
-        if (currentState.emailConfirmationCode !== reqData.emailConfirmationCode) throw new Error('email confirmation code not valid')
-        var id = currentState.id
-        // var mutation = await mutate({ data: {}, objId: id, mutation: 'confirmEmail', meta })
-        // await updateView(id, [mutation])
-        await addTag(id, 'emailConfirmed', meta)
-        return {success: `Email confirmed`, email: reqData.email}
-      },
-      async read (reqData, meta = {directCall: true}, getStream = null) {
-        var id = reqData.id
-        await auth.userCan('user.' + id + '.read', meta, CONFIG.jwt)
-        var user = await readUser(id, true)
-        return user
-      },
-      async readUsers (reqData, meta = {directCall: true}, getStream = null) {
-        var ids = reqData.ids
-        var results = []
-        var id
-        for (id of ids) {
-          try {
-            await auth.userCan('user.' + id + '.read', meta, CONFIG.jwt)
-            results.push(await readUser(id))
-          } catch (error) { }
-        }
-        return results
-      },
-      async readPrivate (reqData, meta = {directCall: true}, getStream = null) {
-        var id = reqData.id
-        console.log('reqData', {jwt: CONFIG.jwt})
-        await auth.userCan('user.' + id + '.private.read', meta, CONFIG.jwt)
-        var currentState = await getView(id)
-        if (!currentState) throw new Error('user not active')
-        return currentState
-      },
-      async updatePublicName (reqData, meta = {directCall: true}, getStream = null) {
-        var id = reqData.id
-        await auth.userCan('user.' + id + '.write', meta, CONFIG.jwt)
-        var mutation = await mutate({data: reqData, objId: id, mutation: 'updatePublicName', meta})
-        await updateView(id, [mutation])
-        return {success: `Public Name updated`}
-      },
-      async updatePic (reqData, meta = {directCall: true}, getStream = null) {
-        var id = reqData.id
-        try {
-          await auth.userCan('user.' + id + '.write', meta, CONFIG.jwt)
-        } catch (error) {
-          await new Promise((resolve, reject) => fs.unlink(reqData.pic.path, (err, data) => err ? resolve(err) : resolve(data)))
-          throw error
-        }
-        return await pic.updatePic(aerospikeConfig, kvDbClient, id, reqData.pic.path, CONFIG.uploadPath, [['mini', 100, 100]])
-      },
-      async getPic (reqData, meta = {directCall: true}, getStream = null) {
-        return await pic.getPic(aerospikeConfig, kvDbClient, reqData.id, reqData.size || 'mini')
-      },
-      async updatePassword (reqData, meta = {directCall: true}, getStream = null) {
-        var id = reqData.id
-        await auth.userCan('user.' + id + '.private.write', meta, CONFIG.jwt)
-        if (reqData.password !== reqData.confirmPassword) throw new Error('Confirm Password not equal')
-        var currentState = await getView(id)
-        if (!currentState || currentState.tags.indexOf('removed') >= 0 || currentState.tags.indexOf('emailConfirmed') < 0 || currentState.tags.indexOf('passwordAssigned') < 0) {
-          throw new Error('user not active')
-        }
-        var bcrypt = require('bcrypt')
-        if (currentState.password && !bcrypt.compareSync(reqData.oldPassword, currentState.password)) throw new Error('Old Password not valid')
-        var data = {password: bcrypt.hashSync(reqData.password, 10)}
-        var mutation = await mutate({data, objId: id, mutation: 'updatePassword', meta})
-        await updateView(id, [mutation])
-        return {success: `Password updated`}
-      },
-      async assignPassword (reqData, meta = {directCall: true}, getStream = null) {
-        if (reqData.password !== reqData.confirmPassword) throw new Error('Confirm Password not equal')
-        var currentState = await getUserByMail(reqData.email, [1])
-        if (!currentState || currentState.tags.indexOf('removed') >= 0 || currentState.tags.indexOf('passwordAssigned') >= 0 || currentState.tags.indexOf('emailConfirmed') < 0) {
-          throw new Error('user not active')
-        }
-        var id = currentState.id
-        var data = {password: require('bcrypt').hashSync(reqData.password, 10)}
-        var mutation = await mutate({data, objId: id, mutation: 'assignPassword', meta})
-        await updateView(id, [mutation])
-        await addTag(id, 'passwordAssigned', meta)
-        return {success: `Password assigned`}
-      },
-
-      async login (reqData, meta = {directCall: true}, getStream = null) {
-        var bcrypt = require('bcrypt')
-        var currentState = await getUserByMail(reqData.email)
-        if (!currentState || currentState.tags.indexOf('removed') >= 0 || currentState.tags.indexOf('passwordAssigned') < 0 || currentState.tags.indexOf('emailConfirmed') < 0) {
-          throw new Error('Wrong username or password')
-        }
-        if (!bcrypt.compareSync(reqData.password, currentState.password)) throw new Error('Wrong username or password')
-        delete reqData.password
-        var id = currentState.id
-        var token = await getToken(id, meta, CONFIG.jwt)
-        var mutation = await mutate({data: {token}, objId: id, mutation: 'login', meta})
-        updateView(id, [mutation])
-        delete currentState.password
-        return { success: `Login`, token, currentState }
-      },
-      async createGuest (reqData, meta = {directCall: true}, getStream = null) {
-        var id = uuid()
-        var mailExists = await getUserByMail(reqData.email)
-        if (mailExists) throw new Error('User mail exists')
-        reqData.id = id
-        reqData.password = require('bcrypt').hashSync(reqData.password, 10)
-        var mutation = await mutate({data: reqData, objId: id, mutation: 'createGuest', meta})
-        await updateView(id, [mutation], true)
-        delete reqData.password
-        var token = await getToken(id, meta, CONFIG.jwt)
-        CONSOLE.hl(`Guest User created`, token, reqData)
-        return { success: `Guest User created`, token, id, currentState: reqData }
-      },
-      async logout (reqData, meta = {directCall: true}, getStream = null) {
-        // var id = reqData.id
-        // var currentState = await getView(id)
-        // if (!currentState || currentState.tags.indexOf('removed') >= 0 || currentState.tags.indexOf('passwordAssigned') < 0 || currentState.tags.indexOf('emailConfirmed') < 0) {
-        //   throw new Error('user not active')
-        // }
-        // if (currentState.email !== reqData.email) throw new Error('Problems durig logout')
-        // return {success: `Logout`, id, email: reqData.email}
-        return {success: `Logout`, id: reqData.id}
-      },
-      async refreshToken (reqData, meta = {directCall: true}, getStream = null) {
-        var token = await auth.refreshToken(meta.token, CONFIG.jwt)
-        return {success: `New token generated`, token}
-      },
-      async updatePersonalInfo (reqData, meta = {directCall: true}, getStream = null) {
-        var id = reqData.id
-        await auth.userCan('user.' + id + '.write', meta, CONFIG.jwt)
-        var mutation = await mutate({data: reqData, objId: id, mutation: 'updatePersonalInfo', meta})
-        await updateView(id, [mutation])
-        return {success: `Personal Info updated`}
-      },
-      async readPersonalInfo (reqData, meta = {directCall: true}, getStream = null) {
-        var id = reqData.id
-        await auth.userCan('user.' + id + '.write', meta, CONFIG.jwt)
-        var currentState = await getView(id)
-        if (!currentState || currentState.tags.indexOf('removed') >= 0 || currentState.tags.indexOf('passwordAssigned') < 0 || currentState.tags.indexOf('emailConfirmed') < 0) {
-          throw new Error('user not active')
-        }
-        return currentState
-      },
-      async remove (reqData, meta = {directCall: true}, getStream = null) {
-        var id = reqData.id
-        await auth.userCan('user.' + id + '.write.' + id, meta, CONFIG.jwt)
-        await addTag(id, 'removed', meta)
-        return {success: `User removed`}
-      },
-      async queryByTimestamp (query = {}, meta = {directCall: true}, getStream = null) {
-        // await auth.userCan('user.read.query', meta, CONFIG.jwt)
-        query = Object.assign({from: 0, to: 100000000000000}, query)
-        var rawResults = await kvDb.query(kvDbClient, aerospikeConfig.namespace, aerospikeConfig.set, (dbQuery) => { dbQuery.where(Aerospike.filter.range('updated', query.from, query.to)) })
-        var results = await Promise.all(rawResults.map((result) => getView(result.id, result)))
-        return results
-      },
-      async test (query = {}, meta = {directCall: true}, getStream = null) {
-        var results = await require('./tests/base.test')(netClient)
-        CONSOLE.log('test results', results)
-        return results
-      }
-    }
-    for (var notificationsMethod in notifications) {
-      methods['notifications' + notificationsMethod[0].toUpperCase() + notificationsMethod.substr(1)] = notifications[notificationsMethod]
-    }
-    return methods
-  } catch (error) {
-    CONSOLE.error('getMethods', error)
-    return { error: 'getMethods error' }
-  }
+    views = views.map((view) => view || {})
+    var viewsById = arrayToObjBy(views, 'id')
+    var viewsToUpdate = []
+    debug('updateViews', { views, mutations })
+    mutations.forEach((mutation, index) => {
+      var view = viewsById[mutation.objId] || {}
+      view.meta = view.meta || {}
+      view.meta.updated = Date.now()
+      view.meta.created = view.meta.created || Date.now()
+      viewsById[mutation.objId] = mutationsPack.applyMutations(view, [mutation])
+      viewsToUpdate.push(viewsById[mutation.objId])
+    })
+    return await DB.upsertMulti('usersViews', viewsToUpdate)
+  } catch (error) { throw new Error('problems during updateViews ' + error) }
+}
+const mutateAndUpdate = async function (mutation, dataToResolve, meta, views) {
+  try {
+    debug('mutateAndUpdate', {mutation, dataToResolve, views})
+    var mutations = dataToResolve.map((mutationAndData) => mutationsPack.mutate({data: mutationAndData.data, objId: mutationAndData.id, mutation, meta}))
+    DB.upsertMulti('usersMutations', mutations)
+    return await updateViews(mutations, views)
+  } catch (error) { throw new Error('problems during mutateAndUpdate ' + error) }
 }
 
-module.exports = service
+const getViews = async (ids, select = '*', guest = false) => {
+  if (typeof ids !== 'object') { ids = [ids]; var single = true }
+  var views = await DB.getMulti('usersViews', ids)
+  if (single) return views[0]
+  else return views
+}
+
+var linkedSubscriptions = async function (idsOrItems, meta, userId, permissionsToCheck) {
+  if (!Array.isArray(idsOrItems)) { idsOrItems = [idsOrItems]; var single = true }
+  var dashIds = idsOrItems.filter(value => value).map(item => typeof item === 'object' ? item.dashId : item).filter((v, i, a) => a.indexOf(v) === i)
+  var items = dashIds.map((dashId) => ({dashId, userId}))
+  var subscriptions = await subscriptionsGetPermissions(items, meta)
+  var byDashId = arrayToObjBy(subscriptions, 'dashId')
+  var permissionsByDashId = {}
+  subscriptions.forEach((subscription) => {
+    // debug('linkedSubscriptions', subscription)
+    permissionsByDashId[subscription.dashId] = {}
+    subscription.permissions.forEach((item) => {
+      permissionsByDashId[subscription.dashId][item] = true
+    })
+  })
+  return single ? { dashId: dashIds[0], subscription: subscriptions[0], permissions: permissionsByDashId[dashIds[0]] } : { dashIds, byDashId, permissionsByDashId }
+}
+var subscriptionsGetPermissions = async (items, meta) => {
+  var response = await rpcSubscriptionsGetPermissions(items, meta)
+  return response.results
+}
+var rpcSubscriptionsGetPermissions = (items, meta) => netClient.rpcCall({to: 'subscriptions', method: 'getPermissions', data: {items}, meta})
+
+var basicMutationRequest = async function ({ids, dataArray, mutation, extend, meta, func}) {
+  debug('basicMutationRequest', {ids, dataArray, mutation, extend, meta})
+  var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
+  if (extend)dataArray = dataArray.map(data => Object.assign(data, extend))
+  var currentStates = await getViews(ids, '*', false)
+  debug('basicMutationRequest currentStates', {currentStates, userId})
+  var subscriptions = await linkedSubscriptions(currentStates, meta, userId)
+  var resultsQueue = queueObj()
+  ids.forEach((id, index) => {
+    var data = dataArray[index] || {id}
+    data.id = id
+    var currentState = currentStates[index]
+    var dashId
+    if (data && data.dashId)dashId = data.dashId
+    if (currentState && currentState.dashId)dashId = currentState.dashId
+    if (!dashId || !subscriptions.permissionsByDashId[dashId])error('Dash Id not defined', {data, currentState})
+    var permissions = subscriptions.permissionsByDashId[dashId]
+    func(resultsQueue, data, currentState, userId, permissions)
+  })
+  await resultsQueue.resolve((dataToResolve) => mutateAndUpdate(mutation, dataToResolve, meta, currentStates))
+  return resultsQueue.returnValue()
+}
+
+module.exports = {
+  deleteMulti: async function (reqData, meta, getStream) {
+    var func = (resultsQueue, data, currentState, userId, permissions) => {
+      if (!currentState) return resultsQueue.addError(data, 'Users not exists')
+      if (currentState.userId !== userId && !permissions['usersWrite']) {
+        return resultsQueue.addError(data, `User ${userId} cant write subcriptions`)
+      }
+      resultsQueue.add(data.id, data)
+    }
+    return basicMutationRequest({ids: reqData.ids, extend: reqData.extend, dataArray: [], meta, mutation: 'delete', func})
+  },
+  confirmMulti: async function (reqData, meta, getStream) {
+    var func = (resultsQueue, data, currentState, userId, permissions) => {
+      if (!currentState) return resultsQueue.addError(data, 'Users not exists')
+      debug('confirmMulti userId, permissions', { userId, permissions })
+      if (!permissions['usersConfirm'] && !permissions['usersWrite']) {
+        return resultsQueue.addError(data, `User ${userId} cant write subcriptions`)
+      }
+      resultsQueue.add(data.id, data)
+    }
+    return basicMutationRequest({ids: reqData.ids, extend: reqData.extend, dataArray: [], meta, mutation: 'confirm', func})
+  },
+  addTagsMulti: async function (reqData, meta, getStream) {
+    var ids = reqData.items.map(item => item.id)
+    var func = (resultsQueue, data, currentState, userId, permissions) => {
+      if (!currentState) return resultsQueue.addError(data, 'Users not exists')
+      if (currentState.userId !== userId && !permissions['usersWrite']) {
+        return resultsQueue.addError(data, `User ${userId} cant write subcriptions`)
+      }
+      resultsQueue.add(data.id, data)
+    }
+    return basicMutationRequest({ids, extend: reqData.extend, dataArray: reqData.items, meta, mutation: 'addTags', func})
+  },
+  removeTagsMulti: async function (reqData, meta, getStream) {
+    var ids = reqData.items.map(item => item.id)
+    var func = (resultsQueue, data, currentState, userId, permissions) => {
+      if (!currentState) return resultsQueue.addError(data, 'Users not exists')
+      if (currentState.userId !== userId && !permissions['usersWrite']) {
+        return resultsQueue.addError(data, `User ${userId} cant write subcriptions`)
+      }
+      resultsQueue.add(data.id, data)
+    }
+    return basicMutationRequest({ids, extend: reqData.extend, dataArray: reqData.items, meta, mutation: 'removeTags', func})
+  },
+  init: async function (setNetClient) {
+    netClient = setNetClient
+    await DB.init(CONFIG.couchbase.url, CONFIG.couchbase.username, CONFIG.couchbase.password)
+    await DB.createIndex('usersViews', ['dashId', 'userId'])
+    await DB.createIndex('usersViews', ['userId'])
+  },
+  rawMutateMulti: async function (reqData, meta, getStream) {
+    if (reqData.extend)reqData.items.forEach(item => Object.assign(item.data, reqData.extend))
+    reqData.items.forEach(item => { if (!item.id)item.id = item.data.id = itemId(item) })
+    var results = await mutateAndUpdate(reqData.mutation, reqData.items, meta)
+    debug('rawMutateMulti', results)
+    return {results}
+  },
+  createMulti: async function (reqData, meta, getStream) {
+    var ids = reqData.items.map(item => itemId(item))
+    var func = (resultsQueue, data, currentState, userId, permissions) => {
+      if (currentState) return resultsQueue.addError(data, 'Users exists')
+      if (!permissions['usersWrite']) return resultsQueue.addError(data, userId + ' can\'t write users')
+      if (data.userId !== userId && !permissions['usersWriteOtherUsers']) return resultsQueue.addError(data, data.dashId + ' ' + userId + ' can\'t write users for other users')
+      if (!data.meta)data.meta = {}
+      if (permissions['usersConfirm'])data.meta.confirmed = 1
+      resultsQueue.add(data.id, data)
+    }
+    return basicMutationRequest({ids, extend: reqData.extend, dataArray: reqData.items, meta, mutation: 'create', func})
+  },
+  readMulti: async function (reqData, meta, getStream) {
+    var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
+    var currentStates = await getViews(reqData.ids, reqData.select || '*', false)
+    var subscriptions = await linkedSubscriptions(currentStates, meta, userId)
+    // var usersAndPermissions = await linkedUsers(currentStates, meta, userId, ['usersRead', 'usersReadHidden'])
+    debug('readMulti', {subscriptions, currentStates})
+    var results = currentStates.map((currentState, index) => {
+      if (!currentState) return resultsError({id: reqData.ids[index]}, 'User not exists')
+      var permissions = subscriptions.permissionsByDashId[currentState.dashId]
+      if (!permissions['usersRead']) return resultsError(currentState, 'User can\'t read users')
+      if ((currentState.meta.deleted || !currentState.meta.confirmed) && !permissions['usersReadHidden'] && currentState.userId !== userId) return resultsError(currentState, 'User cant read hidden users')
+      return currentState
+    })
+    var errors = results.filter(value => value.__RESULT_TYPE__ === 'error').map((currentState, index) => index)
+    return {results, errors: errors.length ? errors : undefined}
+  },
+  updateMulti: async function (reqData, meta, getStream) {
+    var ids = reqData.items.map(item => item.id)
+    var func = (resultsQueue, data, currentState, userId, permissions) => {
+      if (!currentState) return resultsQueue.addError(data, 'Users not exists')
+      if (!permissions['usersWrite']) return resultsQueue.addError(currentState, userId + ' can\'t write users')
+      if (currentState.userId !== userId && !permissions['usersWriteOtherUsers']) return resultsQueue.addError(currentState, currentState.dashId + ' ' + userId + ' can\'t write users for other users')
+      resultsQueue.add(data.id, data)
+    }
+    return basicMutationRequest({ids, extend: reqData.extend, dataArray: reqData.items, meta, mutation: 'update', func})
+  },
+  list: async function (reqData, meta, getStream) {
+    var dashId = reqData.dashId
+    var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
+    var subscription = await linkedSubscriptions(dashId, meta, userId)
+    if (!subscription.permissions['usersRead']) { throw new Error('Cant read users from user ' + dashId) }
+    var select = reqData.select || false
+    var offset = reqData.from || 0
+    var limit = reqData.to || 20 - offset
+    var querySelect = select ? ' SELECT ' + select.join(',') + ' FROM usersViews ' : ' SELECT item.* FROM usersViews item '
+    var queryWhere = ' WHERE dashId=$1 '
+    if (!subscription.permissions['usersReadHidden'])queryWhere += ' AND (item.userId=$2 OR ((item.meta.deleted IS MISSING OR item.meta.deleted=false) AND item.meta.confirmed=true)) '
+    var queryOrderAndLimit = ' ORDER BY item.meta.updated DESC LIMIT $3  OFFSET $4 '
+    var results = await DB.query('usersViews', querySelect + queryWhere + queryOrderAndLimit, [dashId, userId, limit, offset])
+    debug('list results', results)
+    return {results}
+  }
+}

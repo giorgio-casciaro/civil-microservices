@@ -4,7 +4,6 @@ process.on('unhandledRejection', function (reason) {
 })
 
 var startTest = async function () {
-  // await getAerospikeClient(require('../config').aerospike)
   var SERVICE = await require('../service')()
   await require('./base.test')()
   SERVICE.server.connection.close()

@@ -6,19 +6,15 @@
   "scripts": {
     "start": "node ./service/start.js",
     "test": "node ./service/tests/base.launcher.js",
-    "watch_test": "node ./node_modules/sint-bit-utils/utils/watch.js ./service/methods.js,./service/notifications.js,./service/notificationsSchema.js,./service/config.js,./service/tests/base.test.js ./service/tests/base.launcher.js",
-    "watch_start": "node ./node_modules/sint-bit-utils/utils/watch.js ./service/methods.js,./service/notifications.js,./service/notificationsSchema.js,./service/config.js,./service/tests/base.test.js ./service/start.js"
+    "watch_test": "node ./node_modules/sint-bit-utils/utils/watch.js ./service/methods.js,./service/schema.js,./service/config.js,./service/service.js,./service/tests/base.test.js ./service/tests/base.launcher.js",
+    "watch_start": "node ./node_modules/sint-bit-utils/utils/watch.js ./service/methods.js,./service/schema.js,./service/config.js,./service/service.js,./service/tests/base.test.js ./service/start.js"
   },
   "author": "",
   "license": "ISC",
   "devDependencies": {
   },
   "dependencies": {
-    "aerospike": "^2.5.2",
     "bcrypt": "^1.0.2",
-    "sharp": "^0.17.3",
-    "xxhash": "^0.2.4",
-    "elasticsearch": "^13.0.0-rc2",
     "jsonwebtoken": "^7.4.0",
     "mv": "^2.1.1",
     "nodemailer": "^4.0.1",
@@ -27,6 +23,7 @@
     "sint-bit-cqrs": "",
     "sint-bit-jesus": "",
     "sint-bit-utils": "",
+    "couchbase": "^2.4.3",
     "uuid": "^3.0.1"
   }
 }
