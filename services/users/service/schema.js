@@ -6,15 +6,16 @@ var toBool = (string, defaultVal = false) => {
 }
 var jsFields = require('sint-bit-utils/utils/JSchemaFields')
 var userId = { type: 'string' }
-var dashId = { type: 'string' }
-var roleId = { type: 'string' }
-var userId = { type: 'string' }
-var location = { type: 'array', items: { type: 'object', properties: { lat: {type: 'number'}, lng: {type: 'number'} }, required: ['lat', 'lng'] } }
-var pics = { type: 'array', items: { type: 'string' } }
-
+var pic = {
+  type: 'object',
+  properties: { sizes: { type: 'array' }, picId: { type: 'string' } },
+  required: ['picId', 'sizes']
+}
+var pics = { type: 'array', items: pic }
+var picFile = { type: 'object', properties: { mimetype: { type: 'string' }, path: { type: 'string' } }, required: ['path'] }
 var jsRes = {
   properties: {
-    success: { type: 'boolean' },
+    success: { type: 'string' },
     error: { type: 'string' },
     data: { type: 'object' },
     method: { type: 'string' },
@@ -23,7 +24,15 @@ var jsRes = {
   }
   // 'additionalProperties': true
 }
-
+var loginRes = { properties: {
+  success: { type: 'string' },
+  error: { type: 'string' },
+  method: { type: 'string' },
+  type: { type: 'string' },
+  token: { type: 'string' },
+  currentState: { type: 'object' },
+  id: { type: 'string' }
+}}
 var meta = {
   confirmed: { type: 'boolean' },
   deleted: { type: 'boolean' },
@@ -31,7 +40,7 @@ var meta = {
   created: { type: 'number' }
 }
 // var jsProp = { id: userId, dashId: dashId, roleId, tags: jsFields.tags, userId: { type: 'string' }, meta, notifications: { type: 'array' }, role: { type: 'object' } }
-var jsProp = { id: userId, name: { type: 'string' }, userId, subscription: { type: 'object' }, dashId, public: { type: 'boolean' }, body: { type: 'string' }, location, tags: jsFields.tags, toTags: { type: 'array', items: { type: 'string' } }, toRoles: { type: 'array', items: { type: 'string' } }, pics, meta, user: { type: 'object' }, readedByUser: { type: 'boolean' }, notifications: { type: 'array' } }
+var jsProp = { id: userId, name: { type: 'string' }, public: { type: 'boolean' }, email: jsFields.email, tags: jsFields.tags, pics, meta, notifications: { type: 'array' } }
 
 module.exports = {
   net: {
@@ -61,7 +70,7 @@ module.exports = {
       public: true,
       responseType: 'response',
       requestSchema: {
-        properties: {items: {type: 'array', items: {type: 'object', properties: jsProp, required: [ 'body' ]}}, extend: jsProp},
+        properties: {items: {type: 'array', items: {type: 'object', properties: jsProp, required: [ 'email' ]}}, extend: jsProp},
         required: [ 'items' ]
       },
       responseSchema: {properties: {results: {type: 'array', items: jsRes}, errors: {type: 'array'}}}
@@ -132,14 +141,105 @@ module.exports = {
     'list': {
       public: true,
       responseType: 'response',
-      requestSchema: { required: ['dashId'], properties: { dashId, from: { type: 'integer' }, to: { type: 'integer' } } },
+      requestSchema: { properties: { from: { type: 'integer' }, to: { type: 'integer' } } },
       responseSchema: {properties: {results: {type: 'array', items: jsProp}, errors: {type: 'array'}}}
     },
-    'listByDashIdTagsRoles': {
+
+    'readEmailConfirmationCode': {
+      public: false,
+      responseType: 'response',
+      requestSchema: { properties: { id: jsFields.id }, required: ['id'] },
+      responseSchema: { properties: { emailConfirmationCode: jsFields.emailConfirmationCode } }
+    },
+    'confirmEmail': {
       public: true,
       responseType: 'response',
-      requestSchema: { required: ['dashId'], properties: { dashId, roles: { type: 'array' }, tags: { type: 'array' } } },
-      responseSchema: {properties: {results: {type: 'array', items: jsProp}, errors: {type: 'array'}}}
+      requestSchema: {
+        properties: { email: jsFields.email, emailConfirmationCode: jsFields.emailConfirmationCode },
+        required: [ 'email', 'emailConfirmationCode' ]
+      },
+      responseSchema: jsRes
+    },
+    'updatePassword': {
+      public: true,
+      responseType: 'response',
+      requestSchema: {
+        properties: { id: jsFields.id, password: jsFields.password, confirmPassword: jsFields.password, oldPassword: jsFields.password },
+        required: [ 'id', 'password', 'confirmPassword', 'oldPassword' ]
+      },
+      responseSchema: jsRes
+    },
+    'assignPassword': {
+      public: true,
+      responseType: 'response',
+      requestSchema: {
+        properties: { email: jsFields.email, password: jsFields.password, confirmPassword: jsFields.password },
+        required: [ 'email', 'password', 'confirmPassword' ]
+      },
+      responseSchema: jsRes
+    },
+    'login': {
+      public: true,
+      responseType: 'response',
+      requestSchema: {
+        properties: { email: jsFields.email, password: jsFields.password },
+        required: [ 'email', 'password' ]
+      },
+      responseSchema: loginRes
+    },
+    'createGuest': {
+      public: true,
+      responseType: 'response',
+      requestSchema: {
+        properties: { publicName: jsFields.name, email: jsFields.email, info: {type: 'object'} },
+        required: [ 'email', 'publicName' ]
+      },
+      responseSchema: jsRes
+    },
+    'refreshToken': {
+      public: true,
+      responseType: 'response',
+      requestSchema: {},
+      responseSchema: loginRes
+    },
+    'logout': {
+      public: true,
+      responseType: 'response',
+      requestSchema: {
+        properties: { id: jsFields.id, email: jsFields.email },
+        required: [ 'email', 'id' ]
+      },
+      responseSchema: jsRes
+    },
+    'addPic': {
+      public: true,
+      responseType: 'response',
+      requestSchema: {
+        properties: { id: {type: 'string'}, pic: picFile },
+        required: [ 'id', 'pic' ]
+      },
+      responseSchema: false
+    },
+    'getPic': {
+      public: true,
+      responseType: 'response',
+      requestSchema: { properties: { id: {type: 'string'}, size: {type: 'string'} }, required: [ 'id' ] },
+      responseSchema: false
+    },
+    'deletePic': {
+      public: true,
+      responseType: 'response',
+      requestSchema: { properties: { id: {type: 'string'} }, required: [ 'id' ] },
+      responseSchema: false
+    },
+    'updatePersonalInfo': {
+      public: true,
+      responseType: 'response',
+      requestSchema: {
+        properties: { id: jsFields.id, publicName: { type: 'string' }, firstName: jsFields.firstName, lastName: jsFields.lastName, birth: jsFields.birth },
+        required: [ 'id' ]
+      },
+      responseSchema: jsRes
     }
   }
 }

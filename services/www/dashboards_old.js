@@ -230,9 +230,9 @@ var service = function getMethods (CONSOLE, netClient, CONFIG = require('./confi
         await auth.userCan('dashboard.create', meta, CONFIG.jwt)
         if (reqData.tags)reqData.tags = reqData.tags.map((item) => item.replace('#', ''))
         var mutation = await mutate({data: reqData, objId: id, mutation: 'create', meta})
-        var roleAdmin = { id: 'admin', name: 'Admin', public: 0, description: 'Main dashboard administrators', permissions: ['unsubscribe', 'writeDashboard', 'readDashboard', 'writeSubscriptions', 'subscriptionsRead', 'subscriptionsReads', 'subscriptionsReadHidden', 'writeRoles', 'readRoles', 'writePosts', 'postsReads', 'postsConfirms', 'readHiddenPosts', 'writeOtherUsersPosts' ] }
+        var roleAdmin = { id: 'admin', name: 'Admin', public: 0, description: 'Main dashboard administrators', permissions: ['unsubscribe', 'writeDashboard', 'readDashboard', 'writeSubscriptions', 'subscriptionsRead', 'subscriptionsReads', 'subscriptionsReadAll', 'writeRoles', 'readRoles', 'writePosts', 'postsReads', 'postsConfirms', 'readHiddenPosts', 'writeOtherUsersPosts' ] }
         var mutationRoleAdmin = await mutate({data: roleAdmin, objId: id, mutation: 'addRole', meta})
-        var rolePostAdmin = { id: 'postsAdmin', name: 'Posts Admin', public: 0, description: 'Dashboard posts admin', permissions: ['unsubscribe', 'readDashboard', 'writePosts', 'postsReads', 'postsConfirms', 'readHiddenPosts', 'subscriptionsRead', 'subscriptionsReadHidden', 'readRoles', 'writeOtherUsersPosts'] }
+        var rolePostAdmin = { id: 'postsAdmin', name: 'Posts Admin', public: 0, description: 'Dashboard posts admin', permissions: ['unsubscribe', 'readDashboard', 'writePosts', 'postsReads', 'postsConfirms', 'readHiddenPosts', 'subscriptionsRead', 'subscriptionsReadAll', 'readRoles', 'writeOtherUsersPosts'] }
         var mutationRolePostsAdmin = await mutate({data: rolePostAdmin, objId: id, mutation: 'addRole', meta})
         var roleSubscriber = { id: 'subscriber', name: 'Subscriber', public: 1, description: 'Dashboard subscribers', permissions: ['unsubscribe', 'readDashboard', 'postsReads', 'subscriptionsRead', 'readRoles'] }
         var mutationRoleSubscriber = await mutate({data: roleSubscriber, objId: id, mutation: 'addRole', meta})

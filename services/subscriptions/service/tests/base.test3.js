@@ -201,7 +201,7 @@ var startTest = async function (netClient) {
   test = await netClient.testLocalMethod('readMulti', { ids: ['testDash1_subscriberUser'] }, {token: subscriberUser})
   microTestRaw('readMulti check Subscription deleted but readable by owner', test, (data) => !data.errors)
 
-  puppetAdminRole.permissions = ['subscriptionsRead', 'subscriptionsReadHidden']
+  puppetAdminRole.permissions = ['subscriptionsRead', 'subscriptionsReadAll']
   test = await netClient.testLocalMethod('readMulti', { ids: ['testDash1_subscriberUser'] }, {token: adminUser})
   microTestRaw('readMulti check  Subscription deleted but readable by admins', test, (data) => !data.errors)
 

@@ -1,6 +1,6 @@
 const path = require('path')
 const uuidv4 = require('uuid/v4')
-const DB = require('sint-bit-utils/utils/dbCouchbaseV2')
+const DB = require('sint-bit-utils/utils/dbCouchbaseV3')
 var CONFIG = require('./config')
 var mutationsPack = require('sint-bit-cqrs/mutations')({ mutationsPath: path.join(__dirname, '/mutations') })
 const auth = require('sint-bit-utils/utils/auth')
@@ -35,21 +35,21 @@ const updateViews = async function (mutations, views) {
       viewsById[mutation.objId] = mutationsPack.applyMutations(view, [mutation])
       viewsToUpdate.push(viewsById[mutation.objId])
     })
-    return await DB.upsertMulti('postsViews', viewsToUpdate)
+    return await DB.upsertMulti('view', viewsToUpdate)
   } catch (error) { throw new Error('problems during updateViews ' + error) }
 }
 const mutateAndUpdate = async function (mutation, dataToResolve, meta, views) {
   try {
     debug('mutateAndUpdate', {mutation, dataToResolve, views})
     var mutations = dataToResolve.map((mutationAndData) => mutationsPack.mutate({data: mutationAndData.data, objId: mutationAndData.id, mutation, meta}))
-    DB.upsertMulti('postsMutations', mutations)
+    DB.upsertMulti('mutation', mutations)
     return await updateViews(mutations, views)
   } catch (error) { throw new Error('problems during mutateAndUpdate ' + error) }
 }
 
 const getViews = async (ids, select = '*', guest = false) => {
   if (typeof ids !== 'object') { ids = [ids]; var single = true }
-  var views = await DB.getMulti('postsViews', ids)
+  var views = await DB.getMulti(ids)
   if (single) return views[0]
   else return views
 }
@@ -58,7 +58,7 @@ var linkedSubscriptions = async function (idsOrItems, meta, userId, permissionsT
   if (!Array.isArray(idsOrItems)) { idsOrItems = [idsOrItems]; var single = true }
   var dashIds = idsOrItems.filter(value => value).map(item => typeof item === 'object' ? item.dashId : item).filter((v, i, a) => a.indexOf(v) === i)
   var items = dashIds.map((dashId) => ({dashId, userId}))
-  var subscriptions = await subscriptionsGetPermissions(items, meta)
+  var subscriptions = await subscriptionsReadMulti(items, meta)
   var byDashId = arrayToObjBy(subscriptions, 'dashId')
   var permissionsByDashId = {}
   subscriptions.forEach((subscription) => {
@@ -70,11 +70,12 @@ var linkedSubscriptions = async function (idsOrItems, meta, userId, permissionsT
   })
   return single ? { dashId: dashIds[0], subscription: subscriptions[0], permissions: permissionsByDashId[dashIds[0]] } : { dashIds, byDashId, permissionsByDashId }
 }
-var subscriptionsGetPermissions = async (items, meta) => {
-  var response = await rpcSubscriptionsGetPermissions(items, meta)
+var subscriptionsReadMulti = async (items, meta) => {
+  var response = await rpcSubscriptionsReadMulti(items, meta)
+  if (response.errors) throw new Error('subscriptionsReadMulti => ' + response.errors)
   return response.results
 }
-var rpcSubscriptionsGetPermissions = (items, meta) => netClient.rpcCall({to: 'subscriptions', method: 'getPermissions', data: {items}, meta})
+var rpcSubscriptionsReadMulti = (items, meta) => netClient.rpcCall({to: 'subscriptions', method: 'readMulti', data: {items, linkedViews: ['permissions']}, meta})
 
 var basicMutationRequest = async function ({ids, dataArray, mutation, extend, meta, func}) {
   debug('basicMutationRequest', {ids, dataArray, mutation, extend, meta})
@@ -145,9 +146,11 @@ module.exports = {
   },
   init: async function (setNetClient) {
     netClient = setNetClient
-    await DB.init(CONFIG.couchbase.url, CONFIG.couchbase.username, CONFIG.couchbase.password)
-    await DB.createIndex('postsViews', ['dashId', 'userId'])
-    await DB.createIndex('postsViews', ['userId'])
+    await DB.init(CONFIG.couchbase.url, CONFIG.couchbase.username, CONFIG.couchbase.password, CONFIG.couchbase.bucket)
+    await DB.createIndex(['dashId', 'userId'])
+    await DB.createIndex(['userId'])
+    await DB.createIndex(['public'])
+    await DB.createIndex(['DOC_TYPE'])
   },
   rawMutateMulti: async function (reqData, meta, getStream) {
     if (reqData.extend)reqData.items.forEach(item => Object.assign(item.data, reqData.extend))
@@ -172,13 +175,23 @@ module.exports = {
     var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
     var currentStates = await getViews(reqData.ids, reqData.select || '*', false)
     var subscriptions = await linkedSubscriptions(currentStates, meta, userId)
-    // var dashboardsAndPermissions = await linkedDashboards(currentStates, meta, userId, ['postsRead', 'postsReadHidden'])
+    // var dashboardsAndPermissions = await linkedDashboards(currentStates, meta, userId, ['postsRead', 'postsReadAll'])
     debug('readMulti', {subscriptions, currentStates})
     var results = currentStates.map((currentState, index) => {
       if (!currentState) return resultsError({id: reqData.ids[index]}, 'Post not exists')
+      var subscription = subscriptions.byDashId[currentState.dashId]
       var permissions = subscriptions.permissionsByDashId[currentState.dashId]
       if (!permissions['postsRead']) return resultsError(currentState, 'User can\'t read posts')
-      if ((currentState.meta.deleted || !currentState.meta.confirmed) && !permissions['postsReadHidden'] && currentState.userId !== userId) return resultsError(currentState, 'User cant read hidden posts')
+      if (currentState.userId !== userId && !permissions['postsReadAll']) {
+        if ((currentState.meta.deleted || !currentState.meta.confirmed)) return resultsError(currentState, 'User cant read hidden posts')
+        if (!currentState.public) {
+          if (!subscription || (!subscription.tags && !subscription.roleId)) return resultsError(currentState, 'User cant read, tags or roleId empty')
+          var toTagsIntersection = subscription.tags.filter((n) => currentState.toTags.includes(n)).length > 0
+          var toRolesIntersection = currentState.toRoles.includes(subscription.roleId)
+          debug('readMulti tags', {tags: subscription.tags, toTags: currentState.toTags, roleId: subscription.roleId, toRoles: currentState.toRoles, toRolesIntersection, toTagsIntersection})
+          if (!toTagsIntersection && !toRolesIntersection) return resultsError(currentState, 'User cant read, not have role or tag')
+        }
+      }
       return currentState
     })
     var errors = results.filter(value => value.__RESULT_TYPE__ === 'error').map((currentState, index) => index)
@@ -202,11 +215,12 @@ module.exports = {
     var select = reqData.select || false
     var offset = reqData.from || 0
     var limit = reqData.to || 20 - offset
-    var querySelect = select ? ' SELECT ' + select.join(',') + ' FROM postsViews ' : ' SELECT item.* FROM postsViews item '
-    var queryWhere = ' WHERE dashId=$1 '
-    if (!subscription.permissions['postsReadHidden'])queryWhere += ' AND (item.userId=$2 OR ((item.meta.deleted IS MISSING OR item.meta.deleted=false) AND item.meta.confirmed=true)) '
-    var queryOrderAndLimit = ' ORDER BY item.meta.updated DESC LIMIT $3  OFFSET $4 '
-    var results = await DB.query('postsViews', querySelect + queryWhere + queryOrderAndLimit, [dashId, userId, limit, offset])
+    var querySelect = select ? ' SELECT ' + select.join(',') + ' FROM `posts` ' : ' SELECT item.* FROM `posts` item ' // OR ARRAY_LENGTH(ARRAY_INTERSECT(item.toTags,$4)) > 0 OR ARRAY_CONTAINS(item.toRoles,$5)
+    var queryWhere = ' WHERE  DOC_TYPE="view" AND dashId=$3 '
+    if (!subscription.permissions['postsReadAll'])queryWhere += ' AND (item[\'public\']=true OR ARRAY_LENGTH(ARRAY_INTERSECT(item.toTags,$5)) > 0 OR ARRAY_CONTAINS(item.toRoles,$6)) AND (item.userId=$4 OR ((item.meta.deleted IS MISSING OR item.meta.deleted=false) AND item.meta.confirmed=true)) '
+    var queryOrderAndLimit = ' ORDER BY item.meta.updated DESC LIMIT $1 OFFSET $2 '
+    debug('list subscription', subscription.subscription)
+    var results = await DB.query(querySelect + queryWhere + queryOrderAndLimit, [limit, offset, dashId, userId, subscription.subscription.tags, subscription.subscription.roleId])
     debug('list results', results)
     return {results}
   }

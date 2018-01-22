@@ -7,7 +7,7 @@ module.exports = {
   schemaHost: process.env.schemaHost || 'http://127.0.0.1:10000',
   confirmEmailUrl: process.env.confirmEmailUrl || 'http://127.0.0.1:10080/#/confirmEmailUrl',
   sendEmails: process.env.sendEmails || true,
-  mailFrom: process.env.mailFrom || 'notifications@civilconnect.it',
+  mailFrom: process.env.mailFrom || 'dashboards@civilconnect.it',
   uploadPath: process.env.uploadPath || '/upload/',
   smtp: process.env.smtpConfigJson ? JSON.parse(process.env.smtpConfigJson) : {
     host: '127.0.0.1',
@@ -23,8 +23,9 @@ module.exports = {
   },
   couchbase: {
     url: process.env.couchbaseHosts || 'couchbase://couchbase_nodes',
-    username: process.env.couchbaseUser || 'Administrator',
-    password: process.env.couchbasePassword || 'password'
+    dashboardname: process.env.couchbaseDashboard || 'Administrator',
+    password: process.env.couchbasePassword || 'password',
+    bucket: process.env.couchbaseBucket || 'dashboards'
   },
   console: { error: process.env.consoleError || true, debug: process.env.consoleDebug || false, log: process.env.consoleLog || true, warn: process.env.consoleWarn || true }
 }

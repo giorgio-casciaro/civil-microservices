@@ -2,14 +2,13 @@ version:              '3.3'
 
 services:
   schema:
-    # logging:
-    #    driver:        none
+    logging:
+       driver:        none
     image:            giorgiocasciaro/civil-microservices-schema:6
-    command:          sh -c "npm run watch_test"
+    command:          sh -c "npm run watch_start"
     environment:
       netHost:        schema
       netHostPort:    10000
-      aerospikeHosts: aerospike:3000
       NODE_ENV:       development
     volumes:
        - ../../schema:/microservice
@@ -22,10 +21,7 @@ services:
       - 10000:10000
     networks:
       - microservicesNet
-      - aerospike
 
 networks:
   microservicesNet:
-    driver:           bridge
-  aerospike:
     driver:           bridge

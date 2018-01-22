@@ -94,7 +94,7 @@ module.exports = {
       public: true,
       responseType: 'response',
       requestSchema: {
-        properties: { ids: { type: 'array', items: { type: 'string' } } },
+        properties: { ids: { type: 'array', items: { type: 'string' } }, linkedViews: { type: 'array', items: { type: 'string' } } },
         required: [ 'ids' ]
       },
       responseSchema: {properties: {results: {type: 'array', items: jsProp}, errors: {type: 'array'}}}

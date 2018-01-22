@@ -1,7 +1,7 @@
 version:               '3.3'
 
 services:
-   dashboards:
+   notifications:
      image:            giorgiocasciaro/ubuntu-node:v3
     #  logging:
     #    driver:       none
@@ -14,15 +14,15 @@ services:
        # debugMain:      1
        uploadPath:     /uploads/
        schemaHost:     'http://schema:10000'
-       serviceName:    dashboards
-       netHost:        dashboards
+       serviceName:    notifications
+       netHost:        notifications
       #  netHostHttpPublicPort: 10080
        netCors:        http://localhost:82,http://127.0.0.1:82,http://localhost:8080,http://127.0.0.1:8080,http://localhost:10080,http://127.0.0.1:10080
        NODE_ENV:       development
        sendEmails:     'true'
        smtpConfigJson: '{ "host": "fakesmtp", "port": 1025, "secure": false }'
      volumes:
-       - ../../dashboards:/microservice
+       - ../../notifications:/microservice
        # - ../../../../civil_microservices_shared_modules/:/microservice/node_modules
        - ../../../NPM/jesus:/microservice/service/node_modules/sint-bit-jesus
        - ../../../NPM/cqrs:/microservice/service/node_modules/sint-bit-cqrs

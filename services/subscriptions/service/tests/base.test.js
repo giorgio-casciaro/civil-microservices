@@ -22,7 +22,7 @@ var startTest = async function (netClient) {
       roles: {
         guest: { public: 1, permissions: ['subscriptionsSubscribeWithConfimation', 'subscriptionsRead'] },
         subscriber: { public: 1, permissions: [ 'subscriptionsRead' ] },
-        admin: { public: 0, permissions: [ 'subscriptionsWrite', 'subscriptionsRead', 'subscriptionsReadHidden' ] }
+        admin: { public: 0, permissions: [ 'subscriptionsWrite', 'subscriptionsRead', 'subscriptionsReadAll' ] }
       }
     }
     var func = function ({data}) { return { results: [defaultDashboard] } }
@@ -31,8 +31,8 @@ var startTest = async function (netClient) {
   async function setContext (contextData) {
     var i
     var tokens = {}
-    for (i in contextData.users)tokens[i] = await auth.createToken(i, contextData.users[i].permissions || [], contextData.users[i], CONFIG.jwt)
-    for (i in contextData.entities) await DB.put('subscriptionsViews', Object.assign({ id: 'testDash_testUser', meta: {confirmed: true, created: Date.now(), updated: Date.now()}, dashId: 'testDash', roleId: 'subscriber', userId: 'testUser' }, contextData.entities[i]))
+    for (i in contextData.users)tokens[i] = await auth.createToken(i, contextData.users[i], CONFIG.jwt)
+    for (i in contextData.entities) await DB.put('view', Object.assign({ id: 'testDash_testUser', meta: {confirmed: true, created: Date.now(), updated: Date.now()}, dashId: 'testDash', roleId: 'subscriber', userId: 'testUser' }, contextData.entities[i]))
     Object.assign(netClient.testPuppets, contextData.testPuppets || {})
     log('setContext', { keys: Object.keys(netClient.testPuppets), func: netClient.testPuppets.dashboards_readMulti.toString() })
     return {
@@ -48,15 +48,17 @@ var startTest = async function (netClient) {
       },
       updatePuppets: (testPuppets) => Object.assign(netClient.testPuppets, testPuppets || {}),
       destroy: async() => {
-        for (i in contextData.entities) await DB.remove('subscriptionsViews', contextData.entities[i].id)
+        for (i in contextData.entities) await DB.remove(contextData.entities[i].id)
       }
     }
   }
-  const DB = require('sint-bit-utils/utils/dbCouchbaseV2')
-  const dbGet = (id = 'testDash_userTest', bucket = 'subscriptionsViews') => DB.get(bucket, id)
-  const dbRemove = (id = 'testDash_userTest', bucket = 'subscriptionsViews') => DB.remove(bucket, id)
+  const DB = require('sint-bit-utils/utils/dbCouchbaseV3')
+  await DB.init(CONFIG.couchbase.url, CONFIG.couchbase.username, CONFIG.couchbase.password, CONFIG.couchbase.bucket)
+  const dbGet = (id = 'userTest') => DB.get(id)
+  const dbRemove = (id = 'userTest') => DB.remove(id)
 
   mainTest.sectionHead('RAW CREATE')
+  // mainTest.consoleResume()
 
   var context = await setContext({
     data: { mutation: 'create', items: [{id: undefined, data: { dashId: 'testDash', userId: 'userTest', roleId: 'subscriber', tags: ['testTag'], notifications: ['email', 'sms', 'fb'] }}], extend: { } },
@@ -125,6 +127,14 @@ var startTest = async function (netClient) {
 
   test = await netClient.testLocalMethod('readMulti', { ids: ['fakeid'] }, {token: context.tokens.userTest})
   mainTest.testRaw('readMulti checkError  Subscription not exists', test, (data) => data.errors instanceof Array)
+
+  test = await netClient.testLocalMethod('readMulti', { ids: ['testDash_userTest'], linkedViews: ['permissions'] }, {token: context.tokens.userTest})
+  mainTest.testRaw('readMulti', test, (data) => !data.errors && data.results instanceof Array && data.results[0].permissions instanceof Array)
+  mainTest.log('data.results[0].permissions ', test.results[0].permissions)
+
+  test = await netClient.testLocalMethod('readMulti', { ids: ['testDash_userTest'], linkedViews: ['role'] }, {token: context.tokens.userTest})
+  mainTest.testRaw('readMulti', test, (data) => !data.errors && data.results instanceof Array && data.results[0].role)
+  mainTest.log('data.results[0].role ', test.results[0].role)
 
   await context.destroy()
 

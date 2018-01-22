@@ -1,5 +1,5 @@
 const path = require('path')
-const DB = require('sint-bit-utils/utils/dbCouchbaseV2')
+const DB = require('sint-bit-utils/utils/dbCouchbaseV3')
 var CONFIG = require('./config')
 var mutationsPack = require('sint-bit-cqrs/mutations')({ mutationsPath: path.join(__dirname, '/mutations') })
 const auth = require('sint-bit-utils/utils/auth')
@@ -41,21 +41,21 @@ const updateViews = async function (mutations, views) {
       viewsById[mutation.objId] = mutationsPack.applyMutations(view, [mutation])
       viewsToUpdate.push(viewsById[mutation.objId])
     })
-    return await DB.upsertMulti('subscriptionsViews', viewsToUpdate)
+    return await DB.upsertMulti('view', viewsToUpdate)
   } catch (error) { throw new Error('problems during updateViews ' + error) }
 }
 const mutateAndUpdate = async function (mutation, dataToResolve, meta, views) {
   try {
     debug('mutateAndUpdate', {mutation, dataToResolve, views})
     var mutations = dataToResolve.map((mutationAndData) => mutationsPack.mutate({data: mutationAndData.data, objId: mutationAndData.id, mutation, meta}))
-    DB.upsertMulti('subscriptionsMutations', mutations)
+    DB.upsertMulti('mutation', mutations)
     return await updateViews(mutations, views)
   } catch (error) { throw new Error('problems during mutateAndUpdate ' + error) }
 }
 
 const getViews = async (ids, select = '*', guest = false) => {
   if (typeof ids !== 'object') { ids = [ids]; var single = true }
-  var views = await DB.getMulti('subscriptionsViews', ids)
+  var views = await DB.getMulti(ids)
   if (guest)views = views.map((view, index) => view || guestSubscription(ids[index]))
   if (single) return views[0]
   else return views
@@ -157,9 +157,10 @@ module.exports = {
   },
   init: async function (setNetClient) {
     netClient = setNetClient
-    await DB.init(CONFIG.couchbase.url, CONFIG.couchbase.username, CONFIG.couchbase.password)
-    await DB.createIndex('subscriptionsViews', ['dashId', 'userId'])
-    await DB.createIndex('subscriptionsViews', ['userId'])
+    await DB.init(CONFIG.couchbase.url, CONFIG.couchbase.username, CONFIG.couchbase.password, CONFIG.couchbase.bucket)
+    await DB.createIndex(['DOC_TYPE'])
+    await DB.createIndex(['dashId', 'userId'])
+    await DB.createIndex(['userId'])
   },
   rawMutateMulti: async function (reqData, meta, getStream) {
     if (reqData.extend)reqData.items.forEach(item => Object.assign(item.data, reqData.extend))
@@ -199,17 +200,18 @@ module.exports = {
   readMulti: async function (reqData, meta, getStream) {
     var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
     var currentStates = await getViews(reqData.ids, reqData.select || '*', false)
-    var dashboardsAndPermissions = await linkedDashboards(currentStates, meta, userId, ['subscriptionsRead', 'subscriptionsReadHidden'])
-    if (reqData.linkedViews && reqData.linkedViews.indexOf('user') !== -1) {
+    var dashboardsAndPermissions = await linkedDashboards(currentStates, meta, userId, ['subscriptionsRead', 'subscriptionsReadAll'])
+    if (reqData.linkedViews && reqData.linkedViews.includes('user')) {
       var users = await linkedUsers(currentStates, meta)
     }
     debug('readMulti', {dashboardsAndPermissions, currentStates, users})
     var results = currentStates.map((currentState, index) => {
       if (!currentState) return resultsError(reqData.ids[index], 'Subscription not exists')
-      if (!dashboardsAndPermissions.permissions[currentState.dashId]['subscriptionsReadHidden'] && currentState.userId !== userId && (currentState.meta.deleted || !currentState.meta.confirmed)) return resultsError(currentState.id, 'User cant read hidden subscriptions')
-      if (reqData.linkedViews && reqData.linkedViews.indexOf('role') !== -1) currentState.role = dashboardsAndPermissions.byId[currentState.dashId].roles[currentState.roleId]
-      if (reqData.linkedViews && reqData.linkedViews.indexOf('dashboard') !== -1) currentState.role = dashboardsAndPermissions.byId[currentState.dashId]
-      if (reqData.linkedViews && reqData.linkedViews.indexOf('user') !== -1) currentState.user = users.byId[currentState.userId]
+      if (!dashboardsAndPermissions.permissions[currentState.dashId]['subscriptionsReadAll'] && currentState.userId !== userId && (currentState.meta.deleted || !currentState.meta.confirmed)) return resultsError(currentState.id, 'User cant read hidden subscriptions')
+      if (reqData.linkedViews && reqData.linkedViews.includes('role')) currentState.role = dashboardsAndPermissions.byId[currentState.dashId].roles[currentState.roleId]
+      if (reqData.linkedViews && reqData.linkedViews.includes('permissions')) currentState.permissions = dashboardsAndPermissions.byId[currentState.dashId].roles[currentState.roleId].permissions
+      if (reqData.linkedViews && reqData.linkedViews.includes('dashboard')) currentState.role = dashboardsAndPermissions.byId[currentState.dashId]
+      if (reqData.linkedViews && reqData.linkedViews.includes('user')) currentState.user = users.byId[currentState.userId]
       return currentState
     })
     var errors = results.filter(value => value.__RESULT_TYPE__ === 'error').map((currentState, index) => index)
@@ -237,34 +239,34 @@ module.exports = {
   list: async function (reqData, meta, getStream) {
     var dashId = reqData.dashId
     var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
-    var dashboard = await linkedDashboards(dashId, meta, userId, ['subscriptionsRead', 'subscriptionsReadHidden'])
+    var dashboard = await linkedDashboards(dashId, meta, userId, ['subscriptionsRead', 'subscriptionsReadAll'])
     if (!dashboard.permissions['subscriptionsRead']) { throw new Error('Cant read subscriptions from dashboard ' + dashId) }
     var select = reqData.select || false
     var offset = reqData.from || 0
     var limit = reqData.to || 20 - offset
-    var querySelect = select ? ' SELECT ' + select.join(',') + ' FROM subscriptionsViews ' : ' SELECT item.* FROM subscriptionsViews item '
-    var queryWhere = ' WHERE dashId=$1 '
-    if (!dashboard.permissions['subscriptionsReadHidden'])queryWhere += ' AND (item.userId=$2 OR ((item.meta.deleted IS MISSING OR item.meta.deleted=false) AND item.meta.confirmed=true)) '
+    var querySelect = select ? ' SELECT ' + select.join(',') + ' FROM subscriptions ' : ' SELECT item.* FROM subscriptions item '
+    var queryWhere = ' WHERE DOC_TYPE="view" AND dashId=$1 '
+    if (!dashboard.permissions['subscriptionsReadAll'])queryWhere += ' AND (item.userId=$2 OR ((item.meta.deleted IS MISSING OR item.meta.deleted=false) AND item.meta.confirmed=true)) '
     var queryOrderAndLimit = ' ORDER BY item.meta.updated DESC LIMIT $3  OFFSET $4 '
-    var results = await DB.query('subscriptionsViews', querySelect + queryWhere + queryOrderAndLimit, [dashId, userId, limit, offset])
+    var results = await DB.query(querySelect + queryWhere + queryOrderAndLimit, [dashId, userId, limit, offset])
     debug('list results', results)
     return {results}
   },
   listByDashIdTagsRoles: async function (reqData, meta, getStream) {
     var dashId = reqData.dashId
     var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
-    var dashboard = await linkedDashboards(dashId, meta, userId, ['subscriptionsRead', 'subscriptionsReadHidden'])
+    var dashboard = await linkedDashboards(dashId, meta, userId, ['subscriptionsRead', 'subscriptionsReadAll'])
     if (!dashboard.permissions['subscriptionsRead']) { throw new Error('Cant read subscriptions from dashboard ' + dashId) }
     var select = reqData.select || false
     var offset = reqData.from || 0
     var limit = reqData.to || 20 - offset
     var tags = reqData.tags || []
     var roles = reqData.roles || []
-    var querySelect = select ? ' SELECT ' + select.join(',') + ' FROM subscriptionsViews ' : ' SELECT item.* FROM subscriptionsViews item '
-    var queryWhere = ' WHERE (dashId=$1 AND (ARRAY_LENGTH(ARRAY_INTERSECT(tags,$2)) > 0 OR roleId IN $3 )) '
-    if (!dashboard.permissions['subscriptionsReadHidden'])queryWhere += ' AND (item.userId=$4 OR ((item.meta.deleted IS MISSING OR item.meta.deleted=false) AND item.meta.confirmed=true)) '
+    var querySelect = select ? ' SELECT ' + select.join(',') + ' FROM subscriptions ' : ' SELECT item.* FROM subscriptions item '
+    var queryWhere = ' WHERE  DOC_TYPE="view" AND (dashId=$1 AND (ARRAY_LENGTH(ARRAY_INTERSECT(tags,$2)) > 0 OR roleId IN $3 )) '
+    if (!dashboard.permissions['subscriptionsReadAll'])queryWhere += ' AND (item.userId=$4 OR ((item.meta.deleted IS MISSING OR item.meta.deleted=false) AND item.meta.confirmed=true)) '
     var queryOrderAndLimit = ' ORDER BY item.meta.updated DESC LIMIT $5  OFFSET $6 '
-    var results = await DB.query('subscriptionsViews', querySelect + queryWhere + queryOrderAndLimit, [dashId, tags, roles, userId, limit, offset])
+    var results = await DB.query(querySelect + queryWhere + queryOrderAndLimit, [dashId, tags, roles, userId, limit, offset])
     debug('listByDashIdTagsRoles results', results)
     return {results}
   }

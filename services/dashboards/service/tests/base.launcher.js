@@ -4,14 +4,19 @@ process.on('unhandledRejection', function (reason) {
 })
 
 var startTest = async function () {
-  var SERVICE = await require('../service')()
-  var netClient = SERVICE.netClient
-  await new Promise((resolve) => setTimeout(resolve, 5000))
-  await require('./base.test')(netClient)
+  // console.error('oops', 'startTest1')
+  try {
+    var SERVICE = await require('../service')()
+    var netClient = SERVICE.netClient
+  // await new Promise((resolve) => setTimeout(resolve, 5000))
+    await require('./base.test')(netClient)
 
-  SERVICE.netServer.stop()
+    SERVICE.netServer.stop()
   // SERVICE.schemaClient.stop()
-  await new Promise((resolve) => setTimeout(resolve, 1000))
-  process.exit()
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+    process.exit()
+  } catch (error) {
+    console.error('oops', error)
+  }
 }
 startTest()

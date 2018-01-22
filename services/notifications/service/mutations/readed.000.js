@@ -1,3 +1,4 @@
  module.exports = function (state, data) {
-  return Object.assign({}, state, data)
-}
+   state.readed = true
+   return state
+ }

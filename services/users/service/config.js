@@ -24,7 +24,8 @@ module.exports = {
   couchbase: {
     url: process.env.couchbaseHosts || 'couchbase://couchbase_nodes',
     username: process.env.couchbaseUser || 'Administrator',
-    password: process.env.couchbasePassword || 'password'
+    password: process.env.couchbasePassword || 'password',
+    bucket: process.env.couchbaseBucket || 'users'
   },
   console: { error: process.env.consoleError || true, debug: process.env.consoleDebug || false, log: process.env.consoleLog || true, warn: process.env.consoleWarn || true }
 }
