@@ -7,9 +7,9 @@ const warn = (msg, data) => { console.log('\n' + JSON.stringify(['WARN', 'TEST',
 const error = (msg, data) => { console.log('\n' + JSON.stringify(['ERROR', 'TEST', msg, data])) }
 
 process.env.debugMain = true
-process.env.debugCouchbase = true
-process.env.debugJesus = true
-process.env.debugSchema = true
+// process.env.debugCouchbase = true
+// process.env.debugJesus = true
+// process.env.debugSchema = true
 
 var startTest = async function (netClient) {
   await new Promise((resolve) => setTimeout(resolve, 1000))
@@ -60,6 +60,12 @@ var startTest = async function (netClient) {
 
   var microRandom = Math.floor(Math.random() * 100000)
   var testEmail = `test${microRandom}@test.com`
+
+  mainTest.sectionHead('SERVICE INFO')
+  var context = await setContext({ data: { }, users: { userTest: {permissions: ['dashboardsCreate']} }, entities: [] })
+  var test = await netClient.testLocalMethod('serviceInfo', {}, {token: context.tokens.userTest})
+  mainTest.testRaw('SERVICE INFO', test, (data) => data.schema instanceof Object && data.mutations instanceof Object)
+  await context.destroy()
 
   mainTest.sectionHead('RAW CREATE')
 
@@ -229,7 +235,7 @@ var startTest = async function (netClient) {
   test = await netClient.testLocalMethod('deleteMulti', { ids: ['userTest'] }, {token: context.tokens.userTest})
   // mainTest.log('test', test)
   mainTest.testRaw('deleteMulti', test, (data) => !data.errors && data.results instanceof Array && data.results.length === 1)
-  mainTest.testRaw('deleteMulti dbCheck', await dbGet('userTest'), (data) => data.meta.deleted === true)
+  mainTest.testRaw('deleteMulti dbCheck', await dbGet('userTest'), (data) => data.deleted === true)
 
   test = await netClient.testLocalMethod('readMulti', { ids: ['userTest1'] }, {token: context.tokens.userTest})
   mainTest.testRaw('readMulti checkError readMulti User deleted', test, (data) => data.errors instanceof Array)
@@ -255,11 +261,11 @@ var startTest = async function (netClient) {
   //
   // test = await netClient.testLocalMethod('createMulti', { items: [{ email: testEmail, tags: ['testTag'], toTags: ['testTag'], toRoles: ['subscriber'] }] }, {token: context.tokens.userTest})
   // mainTest.testRaw('createMulti with confirmation', test, (data) => !data.errors && data.results instanceof Array && data.results.length === 1)
-  // mainTest.testRaw('createMulti with confirmation dbCheck', await dbGet(test.results[0].id), (data) => !data.meta.confirmed)
+  // mainTest.testRaw('createMulti with confirmation dbCheck', await dbGet(test.results[0].id), (data) => !data.confirmed)
   // var tempId = test.results[0].id
   // test = await netClient.testLocalMethod('confirmMulti', { ids: [test.results[0].id] }, {token: context.tokens.userAdminTest})
   // mainTest.testRaw('confirmMulti by admin user', test, (data) => !data.errors && data.results instanceof Array && data.results.length === 1)
-  // mainTest.testRaw('confirmMulti dbCheck', await dbGet(test.results[0].id), (data) => data.meta.confirmed === true)
+  // mainTest.testRaw('confirmMulti dbCheck', await dbGet(test.results[0].id), (data) => data.confirmed === true)
   // await dbRemove(tempId)
   // await context.destroy()
 

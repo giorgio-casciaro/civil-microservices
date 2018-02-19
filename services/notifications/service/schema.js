@@ -36,7 +36,7 @@ var meta = {
   updated: { type: 'number' },
   created: { type: 'number' }
 }
-var sendedToInfo = {
+var sends = {
   type: 'array',
   items: {
     channel: { type: 'string' },
@@ -45,7 +45,14 @@ var sendedToInfo = {
     data: { type: 'object' }
   }
 }
-var jsProp = {id: {type: 'string'}, meta, userId: {type: 'string'}, type: {type: 'string'}, objectId: {type: 'string'}, data: {type: 'object'}, readed: {type: 'boolean'}, toSend: {type: 'boolean'}, sendedToInfo}
+var sendTo = {
+  type: 'array',
+  items: {
+    channel: { type: 'string' },
+    options: { type: 'object' }
+  }
+}
+var jsProp = {id: {type: 'string'}, meta, userId: {type: 'string'}, type: {type: 'string'}, objectId: {type: 'string'}, objectType: {type: 'string'}, data: {type: 'object'}, readed: {type: 'boolean'}, sends, sendTo}
 var jsEntity = {type: 'object', properties: jsProp}
 module.exports = {
   net: {
@@ -70,6 +77,9 @@ module.exports = {
     'POST_CREATED': {
       method: 'postEvent'
     },
+    'USERS_CREATED': {
+      method: 'userEvent'
+    },
     'POST_UPDATED': {
       method: 'postEvent'
     },
@@ -93,11 +103,17 @@ module.exports = {
     }
   },
   methods: {
+    'serviceInfo': {
+      public: true,
+      responseType: 'response',
+      requestSchema: {properties: {'schemaHash': {type: 'string'}, 'mutationsHash': {type: 'string'}}},
+      responseSchema: {properties: {'schema': {type: 'object'}, 'schemaHash': {type: 'string'}, 'mutations': {type: 'object'}, 'mutationsHash': {type: 'string'}}}
+    },
     'createMulti': {
       public: true,
       responseType: 'response',
       requestSchema: {
-        properties: {items: {type: 'array', items: {type: 'object', properties: jsProp, required: [ 'userId', 'objectId' ]}}, extend: jsEntity},
+        properties: {items: {type: 'array', items: {type: 'object', properties: jsProp, required: [ 'userId', 'objectId', 'objectType' ]}}, extend: jsEntity, usersViews: {type: 'array'}},
         required: [ 'items' ]
       },
       responseSchema: {properties: {results: {type: 'array', items: jsRes}, errors: {type: 'array'}}}
@@ -171,6 +187,12 @@ module.exports = {
       requestSchema: { properties: { view: {type: 'object'}, users: {type: 'array', items: {type: 'string'}} } },
       responseSchema: {properties: {results: {type: 'array', items: jsRes}, errors: {type: 'array'}}}
     },
+    'userEvent': {
+      public: false,
+      responseType: 'response',
+      requestSchema: { 'additionalProperties': true },
+      responseSchema: { 'additionalProperties': true }
+    },
     'readed': {
       public: true,
       responseType: 'response',
@@ -180,7 +202,7 @@ module.exports = {
     'readedByObjectId': {
       public: true,
       responseType: 'response',
-      requestSchema: { properties: {objectId: {type: 'string'}}, required: [ 'objectId' ] },
+      requestSchema: { properties: {objectId: {type: 'string'}, objectType: {type: 'string'}}, required: [ 'objectType', 'objectId' ] },
       responseSchema: jsRes
     },
     'list': {

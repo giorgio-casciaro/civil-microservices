@@ -17,6 +17,24 @@ var queueObj = require('sint-bit-utils/utils/queueObj')(resultsError)
 
 var itemId = (item) => uuidv4()
 
+var rpcUsersRawReadMulti = (ids, meta) => netClient.rpcCall({to: 'users', method: 'rawReadMulti', data: {ids}, meta})
+var usersRawReadMulti = async(ids, meta) => {
+  var response = await rpcUsersRawReadMulti(ids, meta)
+  return response.results
+}
+var rpcEmailsAddToQueueMulti = (data, meta) => netClient.rpcCall({to: 'emails', method: 'addToQueueMulti', data, meta})
+var emailsAddToQueueMulti = async(data, meta) => {
+  var response = await rpcEmailsAddToQueueMulti(data, meta)
+  debug('rpcEmailsAddToQueueMulti', response)
+  return response.results
+}
+var rpcEmailsRegisterTemplates = (data, meta) => netClient.rpcCall({to: 'emails', method: 'registerTemplates', data, meta})
+var emailsRegisterTemplates = async(data, meta) => {
+  var response = await rpcEmailsRegisterTemplates(data, meta)
+  debug('rpcEmailsRegisterTemplates', response)
+  return response.results
+}
+
 // -----------------------------------------------------------------
 
 const updateViews = async function (mutations, views) {
@@ -31,20 +49,30 @@ const updateViews = async function (mutations, views) {
     debug('updateViews', { views, mutations })
     mutations.forEach((mutation, index) => {
       var view = viewsById[mutation.objId] || {}
-      view.meta = view.meta || {}
-      view.meta.updated = Date.now()
-      view.meta.created = view.meta.created || Date.now()
+      view.VIEW_META = view.VIEW_META || {}
+      view.VIEW_META.updated = Date.now()
+      view.VIEW_META.created = view.VIEW_META.created || Date.now()
       viewsById[mutation.objId] = mutationsPack.applyMutations(view, [mutation])
       viewsToUpdate.push(viewsById[mutation.objId])
     })
-    return await DB.upsertMulti('view', viewsToUpdate)
+    var results = await DB.upsertMulti('view', viewsToUpdate)
+    debug('updateViews results', results)
+    if (!results) return null
+    results = results.map((result, index) => Object.assign(result, { mutation: mutations[index].name }))
+    results.forEach((result, index) => {
+      if (result.error) return null
+      var mutation = mutations[index]
+      // var view = viewsById[mutation.objId]
+      // netClient.emit('NOTIFICATIONS_ENTITY_MUTATION', { id: result.id, mutation })//, dashId: view.dashId, toTags: view.toTags, toRoles: view.toRoles
+    })
+    return results
   } catch (error) { throw new Error('problems during updateViews ' + error) }
 }
 const mutateAndUpdate = async function (mutation, dataToResolve, meta, views) {
   try {
     debug('mutateAndUpdate', {mutation, dataToResolve, views})
     var mutations = dataToResolve.map((mutationAndData) => mutationsPack.mutate({data: mutationAndData.data, objId: mutationAndData.id, mutation, meta}))
-    DB.upsertMulti('mutation', mutations)
+    // DB.upsertMulti('mutation', mutations)
     return await updateViews(mutations, views)
   } catch (error) { throw new Error('problems during mutateAndUpdate ' + error) }
 }
@@ -79,14 +107,75 @@ const getViews = async (ids, select = '*', guest = false) => {
 // var rpcSubscriptionsGetPermissions = (items, meta) => netClient.rpcCall({to: 'subscriptions', method: 'getPermissions', data: {items}, meta})
 var createMulti = async function (reqData, meta, getStream) {
   var ids = reqData.items.map(item => itemId(item))
+  var notificationsSends = []
+  // var byId = {}
+  // var users = []
   var func = async (resultsQueue, data, currentState, userId, permissions) => {
-    // if (currentState) return resultsQueue.addError(data, 'Notifications exists')
+    // byId[data.id] = data
+    // notificationsSends.push({id: data.id, data, userId: data.userId})
     resultsQueue.add(data.id, data)
   }
   var response = await basicMutationRequestMulti({ids, extend: reqData.extend, dataArray: reqData.items, meta, mutation: 'create', func, loadViews: false})
-  // await sendMail('notificationCreated', {to: reqData.email, from: CONFIG.mailFrom, subject: 'Benvenuto in CivilConnect - conferma la mail'}, Object.assign({CONFIG}, reqData))
+  notificationsSends = reqData.items.filter((notificationsSend, index) => response.results[index] && response.results[index].__RESULT_TYPE__ !== 'error')
+  await sendToChannels(notificationsSends, meta)
+  // var usersViews = await usersRawReadMulti(users)
+  // var channelsQueue = {}
+  // var usersViews = reqData.usersViews || await usersRawReadMulti(users, meta)
+  // log('createMulti sendTo', {users, usersViews})
+  //
+  // response.results.forEach((result, index) => {
+  //   if (result.__RESULT_TYPE__ !== 'error') {
+  //     var notification = byId[result.id]
+  //     var usersView = usersViews[index]
+  //     var sendTo = []
+  //     if (notification.sendTo) {
+  //       sendTo = notification.sendTo
+  //       delete notification.sendTo
+  //     }
+  //     log('createMulti sendTo', {sendTo, usersView})
+  //     for (var i in sendTo) {
+  //       var singleSendTo = sendTo[i]
+  //       if (singleSendTo.channel === 'email' && (usersView.notifications.email)) {
+  //         if (!channelsQueue[singleSendTo.channel])channelsQueue[singleSendTo.channel] = []
+  //         channelsQueue[singleSendTo.channel].push(Object.assign({data: notification, email: usersView.email}, singleSendTo.options))
+  //       }
+  //     }
+  //   }
+  // })
+  // if (channelsQueue.email && channelsQueue.email.length) var emailResponse = await emailsAddToQueueMulti({items: channelsQueue['email']}, meta)
+  // log('createMulti channelsQueue', {emailResponse, channelsQueue})
+
   return response
 }
+
+var sendToChannels = async function (notificationsSends, meta) {
+  var channelsQueue = {}
+  var usersViews = await usersRawReadMulti(notificationsSends.map(notificationsSend => notificationsSend.userId), meta)
+  var usersViewsById = arrayToObjBy(usersViews, 'id')
+  log('sendToChannels', {notificationsSends, usersViews})
+
+  notificationsSends.forEach((notification, index) => {
+    var usersView = usersViewsById[notification.userId]
+    log('sendToChannels forEach', {notification, usersView})
+    if (notification.sendTo) {
+      var sendTo = notification.sendTo
+      delete notification.sendTo
+      log('sendToChannels sendTo', {sendTo, usersView})
+      for (var i in sendTo) {
+        var singleSendTo = sendTo[i]
+        if (singleSendTo.channel === 'email' && (usersView.notifications.email)) {
+          if (!channelsQueue[singleSendTo.channel])channelsQueue[singleSendTo.channel] = []
+          channelsQueue[singleSendTo.channel].push(Object.assign({data: notification, email: usersView.email}, singleSendTo.options))
+        }
+      }
+    }
+  })
+  if (channelsQueue.email && channelsQueue.email.length) var emailResponse = await emailsAddToQueueMulti({items: channelsQueue['email']}, meta)
+  var response = {channelsQueue, emailResponse}
+  log('sendToChannels response', response)
+  return response
+}
+
 var basicMutationRequestMulti = async function ({ids, dataArray, mutation, extend, meta, func, loadViews = true}) {
   var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
   var tokenData = await auth.getTokenDataFromToken(meta, CONFIG.jwt)
@@ -166,11 +255,27 @@ module.exports = {
     netClient = setNetClient
     log('CONFIG.couchbase', CONFIG.couchbase)
     await DB.init(CONFIG.couchbase.url, CONFIG.couchbase.username, CONFIG.couchbase.password, CONFIG.couchbase.bucket)
-    await DB.createIndex(['objectId', 'userId'])
+    await DB.createIndex(['objectType', 'objectId', 'userId'])
     await DB.createIndex(['DOC_TYPE'])
-    // await DB.init(CONFIG.couchbase.url, CONFIG.couchbase.notificationname, CONFIG.couchbase.password)
-    // // await DB.createIndex('notificationsViews', ['dashId', 'userId'])
-    // await DB.createIndex('notificationsViews', ['objectId', 'userId'])
+    await DB.createIndex(['VIEW_META'])
+    var templates = []
+    var templateBasePath = './templates/'
+    var fs = require('fs')
+    var path = require('path')
+    require('fs').readdirSync(templateBasePath).forEach(subdir => {
+      var template = {id: subdir}
+      fs.readdirSync(path.join(templateBasePath, subdir)).forEach(file => {
+        var clearName = file.split('.')[0]
+        var contents = fs.readFileSync(path.join(templateBasePath, subdir, file)).toString()
+        log('INIT templates', {contents, path: path.join(templateBasePath, subdir, file), clearName, templateBasePath, subdir, file})
+        template[clearName] = contents
+      })
+      templates.push(template)
+    })
+    log('INIT templates', templates)
+
+    var emailsRegisterTemplatesResp = await emailsRegisterTemplates({items: templates})
+    log('INIT emailsRegisterTemplatesResp', emailsRegisterTemplatesResp)
   },
   rawMutateMulti: async function (reqData, meta, getStream) {
     if (reqData.extend)reqData.items.forEach(item => Object.assign(item.data, reqData.extend))
@@ -191,7 +296,7 @@ module.exports = {
       if (!currentState) return resultsError({id: reqData.ids[index]}, 'Notification not exists')
       // var permissions = subscriptions.permissionsByDashId[currentState.dashId]
       // if (!permissions['notificationsRead']) return resultsError(currentState, 'Notification can\'t read notifications')
-      if ((currentState.meta.deleted || !currentState.meta.confirmed) && !permissions['notificationsReadAll'] && currentState.userId !== userId) return resultsError(currentState, 'Notification cant read hidden notifications')
+      if ((currentState.deleted || !currentState.confirmed) && !permissions['notificationsReadAll'] && currentState.userId !== userId) return resultsError(currentState, 'Notification cant read hidden notifications')
       return currentState
     })
     var errors = results.filter(value => value.__RESULT_TYPE__ === 'error').map((currentState, index) => index)
@@ -222,8 +327,8 @@ module.exports = {
     var limit = reqData.to || 20 - offset
     var querySelect = select ? ' SELECT ' + select.join(',') + ' FROM notifications ' : ' SELECT item.* FROM notifications item '
     var queryWhere = ' where  DOC_TYPE="view"  '
-    if (!permissions['notificationsReadAll'])queryWhere += ' AND (item.id=$1 OR ((item.meta.deleted IS MISSING OR item.meta.deleted=false) )) '
-    var queryOrderAndLimit = ' ORDER BY item.meta.updated DESC LIMIT $2 OFFSET $3 '
+    if (!permissions['notificationsReadAll'])queryWhere += ' AND (item.id=$1 OR ((item.deleted IS MISSING OR item.deleted=false) )) '
+    var queryOrderAndLimit = ' ORDER BY item.VIEW_META.updated DESC LIMIT $2 OFFSET $3 '
     var results = await DB.query(querySelect + queryWhere + queryOrderAndLimit, [userId, limit, offset])
     debug('list results', results)
     return {results}
@@ -243,8 +348,8 @@ module.exports = {
     var queryWhere = ' WHERE DOC_TYPE="view" AND userId=$1 '
     // var querySelect = select ? ' SELECT ' + select.join(',') + ' FROM notificationsViews ' : ' SELECT item.* FROM notificationsViews item '
     // var queryWhere = ' where userId=$1 '
-    if (!permissions['notificationsReadAll'])queryWhere += ' AND (item.meta.deleted IS MISSING OR item.meta.deleted=false) '
-    var queryOrderAndLimit = ' ORDER BY item.meta.updated DESC LIMIT $2 OFFSET $3 '
+    if (!permissions['notificationsReadAll'])queryWhere += ' AND (item.deleted IS MISSING OR item.deleted=false) '
+    var queryOrderAndLimit = ' ORDER BY item.VIEW_META.updated DESC LIMIT $2 OFFSET $3 '
     var results = await DB.query(querySelect + queryWhere + queryOrderAndLimit, [reqData.userId, limit, offset])
     debug('listByUserId results', results)
     return {results}
@@ -253,20 +358,33 @@ module.exports = {
     var id = reqData.id
     var func = (data, currentState, userId, permissions) => {
       if (!currentState) throw new Error('problems during set readed')
-      if (!permissions['notificationsWrite'] && currentState.userId !== userId) throw new Error('user cant write for other notifications')
+      if (!permissions['notificationsWrite'] && currentState.userId !== userId) throw new Error('user cant write for other users ' + userId + ' for ' + currentState.userId)
     }
     await basicMutationRequest({id, data: reqData, mutation: 'readed', meta, func})
     return {success: `Notification readed`}
   },
   postEvent: async function (reqData = {}, meta = {directCall: true}, getStream = null) {
-    var notificationDefaults = { type: reqData.type, data: reqData.data, objectId: reqData.objectId || '' }
+    var notificationDefaults = { type: reqData.type, data: reqData.data, objectType: 'posts', objectId: reqData.objectId || '' }
     var notifications = reqData.users.map((userId) => ({ userId }))
     return createMulti({items: notifications, extend: notificationDefaults}, meta)
   },
+  userEvent: async function (reqData = {}, meta = {directCall: true}, getStream = null) {
+    log('userEvent reqData', {reqData, meta})
+    // var notifications = reqData.users.map((userId) => ({ userId, type: 'USERS', data: {}, objectId: userId }))
+    var notificationType = meta.emit
+    // var notificationDefaults = { type: notificationType, data: {} }
+    var sendTo = [{channel: 'email', options: {template: meta.emit}}]
+    var notifications = reqData.results.map((data) => ({ type: notificationType, data, objectType: 'users', objectId: data.id, userId: data.id, sendTo }))
+    log('userEvent notifications', {notifications})
+    if (meta.emit === 'USERS_CREATED') { }
+    // usersViews: reqData.results,
+    return createMulti({ items: notifications }, meta)
+  },
   async readedByObjectId (reqData, meta = {directCall: true}, getStream = null) {
     var objectId = reqData.objectId
+    var objectType = reqData.objectType
     var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
-    var results = await DB.query('SELECT id from notifications WHERE DOC_TYPE="view" AND objectId=$1 AND userId=$2 LIMIT 1', [objectId, userId])
+    var results = await DB.query('SELECT id from notifications WHERE DOC_TYPE="view" AND objectType=$1 AND objectId=$2 AND userId=$3 LIMIT 1', [objectType, objectId, userId])
     if (!results || !results[0] || !results[0].id) throw new Error('notification not founded')
     var id = results[0].id
     debug('readedByObjectId id', id)
@@ -277,13 +395,28 @@ module.exports = {
     }
     await basicMutationRequest({id, data: reqData, mutation: 'readed', meta, func})
     return {success: `Notification readed`}
+  },
+  async  serviceInfo (reqData, meta = {directCall: true}, getStream = null) {
+    var hash = (s) => { return s.split('').reduce(function (a, b) { a = ((a << 5) - a) + b.charCodeAt(0); return a & a }, 0) }
+    var schema = require('./schema')
+    var schemaOut = {}
+    for (var i in schema.methods) if (schema.methods[i].public) schemaOut[i] = schema.methods[i].requestSchema
+    var mutations = {}
+    require('fs').readdirSync(path.join(__dirname, '/mutations')).forEach(function (file, index) { mutations[file] = require(path.join(__dirname, '/mutations/', file)).toString() })
+    debug('serviceInfo', {schema, mutations})
+    var mutationsHash = hash(JSON.stringify(mutations))
+    var schemaHash = hash(JSON.stringify(schemaOut))
+    var results = {schemaHash, mutationsHash}
+    if (reqData.mutationsHash !== mutationsHash)results.mutations = mutations
+    if (reqData.schemaHash !== schemaHash)results.schema = mutations
+    return results
   }
   // async updatePassword (reqData, meta = {directCall: true}, getStream = null) {
   //   var id = reqData.id
   //   if (reqData.password !== reqData.confirmPassword) throw new Error('Confirm Password not equal')
   //   var func = (data, currentState, userId, permissions) => {
   //     if (currentState.password && !bcrypt.compareSync(reqData.oldPassword, currentState.password)) throw new Error('Old Password not valid')
-  //     if (!currentState || currentState.meta.deleted || !currentState.passwordAssigned || !currentState.emailConfirmed) throw new Error('problems during updatePassword')
+  //     if (!currentState || currentState.deleted || !currentState.passwordAssigned || !currentState.emailConfirmed) throw new Error('problems during updatePassword')
   //     debug('updatePersonalInfo', {userId, currentState})
   //     if (!permissions['notificationsWrite'] && currentState.userId !== userId) throw new Error('user cant write for other notifications')
   //   }
@@ -298,7 +431,7 @@ module.exports = {
   //   var picId = uuidv4()
   //   var func = async (data, currentState, userId, permissions) => {
   //     try {
-  //       if (!currentState || currentState.meta.deleted || !currentState.passwordAssigned || !currentState.emailConfirmed) throw new Error('problems during addPic')
+  //       if (!currentState || currentState.deleted || !currentState.passwordAssigned || !currentState.emailConfirmed) throw new Error('problems during addPic')
   //       if (!permissions['notificationsWrite'] && currentState.userId !== userId) throw new Error('user cant write for other notifications')
   //     } catch (error) {
   //       await new Promise((resolve, reject) => fs.unlink(reqData.pic.path, (err, data) => err ? resolve(err) : resolve(data)))
@@ -324,7 +457,7 @@ module.exports = {
   //   var picMeta = await DB.get('notificationsPics', reqData.id + '_meta')
   //   if (!picMeta || picMeta.deleted) throw new Error('problems with picMeta')
   //   var currentState = await getViews(picMeta.userId)
-  //   if (!currentState || currentState.meta.deleted || !currentState.passwordAssigned || !currentState.emailConfirmed) throw new Error('problems during getPic')
+  //   if (!currentState || currentState.deleted || !currentState.passwordAssigned || !currentState.emailConfirmed) throw new Error('problems during getPic')
   //   if (!picMeta.sizes || !picMeta.sizes[reqData.size]) throw new Error('problems with picSizeId')
   //   var picSizeId = picMeta.sizes[reqData.size]
   //   return DB.get('notificationsPics', picSizeId)
@@ -335,7 +468,7 @@ module.exports = {
   //   if (!picMeta || picMeta.deleted) throw new Error('problems with picMeta')
   //   // var currentState = await getViews(picMeta.userId)
   //   var func = async (data, currentState, userId, permissions) => {
-  //     if (!currentState || currentState.meta.deleted || !currentState.passwordAssigned || !currentState.emailConfirmed) throw new Error('problems during deletePic')
+  //     if (!currentState || currentState.deleted || !currentState.passwordAssigned || !currentState.emailConfirmed) throw new Error('problems during deletePic')
   //     if (!permissions['notificationsWrite'] && currentState.userId !== userId) throw new Error('user cant write for other notifications')
   //   }
   //   await basicMutationRequest({id: picMeta.userId, data: {picId: reqData.id}, mutation: 'deletePic', meta, func})

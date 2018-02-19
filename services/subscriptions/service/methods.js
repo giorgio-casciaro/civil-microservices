@@ -23,6 +23,27 @@ var guestSubscription = (subscriptionId) => {
   return {id: subscriptionId, roleId: 'guest', dashId: dashIdUserId[0], userId: dashIdUserId[1], meta: {confirmed: true}, permissions: []}
 }
 
+// const updateViews = async function (mutations, views) {
+//   try {
+//     if (!views) {
+//       var ids = mutations.map((mutation) => mutation.objId)
+//       views = await getViews(ids)
+//     }
+//     views = views.map((view) => view || {})
+//     var viewsById = arrayToObjBy(views, 'id')
+//     var viewsToUpdate = []
+//     debug('updateViews', { views, mutations })
+//     mutations.forEach((mutation, index) => {
+//       var view = viewsById[mutation.objId] || {}
+//       view.meta = view.meta || {}
+//       view.VIEW_META.updated = Date.now()
+//       view.meta.created = view.meta.created || Date.now()
+//       viewsById[mutation.objId] = mutationsPack.applyMutations(view, [mutation])
+//       viewsToUpdate.push(viewsById[mutation.objId])
+//     })
+//     return await DB.upsertMulti('view', viewsToUpdate)
+//   } catch (error) { throw new Error('problems during updateViews ' + error) }
+// }
 const updateViews = async function (mutations, views) {
   try {
     if (!views) {
@@ -35,13 +56,23 @@ const updateViews = async function (mutations, views) {
     debug('updateViews', { views, mutations })
     mutations.forEach((mutation, index) => {
       var view = viewsById[mutation.objId] || {}
-      view.meta = view.meta || {}
-      view.meta.updated = Date.now()
-      view.meta.created = view.meta.created || Date.now()
+      view.VIEW_META = view.VIEW_META || {}
+      view.VIEW_META.updated = Date.now()
+      view.VIEW_META.created = view.VIEW_META.created || Date.now()
       viewsById[mutation.objId] = mutationsPack.applyMutations(view, [mutation])
       viewsToUpdate.push(viewsById[mutation.objId])
     })
-    return await DB.upsertMulti('view', viewsToUpdate)
+    var results = await DB.upsertMulti('view', viewsToUpdate)
+    debug('updateViews results', results)
+    if (!results) return null
+    results = results.map((result, index) => Object.assign(result, { mutation: mutations[index].name }))
+    results.forEach((result, index) => {
+      if (result.error) return null
+      var mutation = mutations[index]
+      // var view = viewsById[mutation.objId]
+      netClient.emit('SUBSCRIPTIONS_ENTITY_MUTATION', { id: result.id, mutation })//, dashId: view.dashId, toTags: view.toTags, toRoles: view.toRoles
+    })
+    return results
   } catch (error) { throw new Error('problems during updateViews ' + error) }
 }
 const mutateAndUpdate = async function (mutation, dataToResolve, meta, views) {
@@ -187,7 +218,7 @@ module.exports = {
       if (!permissions['subscriptionsWrite']) {
         if (!role.public) return resultsQueue.addError(item, item.dashId + ' ' + userId + ' can\'t write role ' + item.roleId + '  subscriptions')
         if (item.userId === userId) {
-          if (permissions['subscriptionsSubscribe'])item.meta.confirmed = 1
+          if (permissions['subscriptionsSubscribe'])item.confirmed = 1
           else if (!permissions['subscriptionsSubscribeWithConfimation']) return resultsQueue.addError(item, item.dashId + ' ' + userId + ' can\'t subscribe')
         } else return resultsQueue.addError(item, item.dashId + ' ' + userId + ' can\'t create other users subscriptions')
       }
@@ -207,7 +238,7 @@ module.exports = {
     debug('readMulti', {dashboardsAndPermissions, currentStates, users})
     var results = currentStates.map((currentState, index) => {
       if (!currentState) return resultsError(reqData.ids[index], 'Subscription not exists')
-      if (!dashboardsAndPermissions.permissions[currentState.dashId]['subscriptionsReadAll'] && currentState.userId !== userId && (currentState.meta.deleted || !currentState.meta.confirmed)) return resultsError(currentState.id, 'User cant read hidden subscriptions')
+      if (!dashboardsAndPermissions.permissions[currentState.dashId]['subscriptionsReadAll'] && currentState.userId !== userId && (currentState.deleted || !currentState.confirmed)) return resultsError(currentState.id, 'User cant read hidden subscriptions')
       if (reqData.linkedViews && reqData.linkedViews.includes('role')) currentState.role = dashboardsAndPermissions.byId[currentState.dashId].roles[currentState.roleId]
       if (reqData.linkedViews && reqData.linkedViews.includes('permissions')) currentState.permissions = dashboardsAndPermissions.byId[currentState.dashId].roles[currentState.roleId].permissions
       if (reqData.linkedViews && reqData.linkedViews.includes('dashboard')) currentState.role = dashboardsAndPermissions.byId[currentState.dashId]
@@ -246,8 +277,8 @@ module.exports = {
     var limit = reqData.to || 20 - offset
     var querySelect = select ? ' SELECT ' + select.join(',') + ' FROM subscriptions ' : ' SELECT item.* FROM subscriptions item '
     var queryWhere = ' WHERE DOC_TYPE="view" AND dashId=$1 '
-    if (!dashboard.permissions['subscriptionsReadAll'])queryWhere += ' AND (item.userId=$2 OR ((item.meta.deleted IS MISSING OR item.meta.deleted=false) AND item.meta.confirmed=true)) '
-    var queryOrderAndLimit = ' ORDER BY item.meta.updated DESC LIMIT $3  OFFSET $4 '
+    if (!dashboard.permissions['subscriptionsReadAll'])queryWhere += ' AND (item.userId=$2 OR ((item.deleted IS MISSING OR item.deleted=false) AND item.confirmed=true)) '
+    var queryOrderAndLimit = ' ORDER BY item.VIEW_META.updated DESC LIMIT $3  OFFSET $4 '
     var results = await DB.query(querySelect + queryWhere + queryOrderAndLimit, [dashId, userId, limit, offset])
     debug('list results', results)
     return {results}
@@ -264,10 +295,41 @@ module.exports = {
     var roles = reqData.roles || []
     var querySelect = select ? ' SELECT ' + select.join(',') + ' FROM subscriptions ' : ' SELECT item.* FROM subscriptions item '
     var queryWhere = ' WHERE  DOC_TYPE="view" AND (dashId=$1 AND (ARRAY_LENGTH(ARRAY_INTERSECT(tags,$2)) > 0 OR roleId IN $3 )) '
-    if (!dashboard.permissions['subscriptionsReadAll'])queryWhere += ' AND (item.userId=$4 OR ((item.meta.deleted IS MISSING OR item.meta.deleted=false) AND item.meta.confirmed=true)) '
-    var queryOrderAndLimit = ' ORDER BY item.meta.updated DESC LIMIT $5  OFFSET $6 '
+    if (!dashboard.permissions['subscriptionsReadAll'])queryWhere += ' AND (item.userId=$4 OR ((item.deleted IS MISSING OR item.deleted=false) AND item.confirmed=true)) '
+    var queryOrderAndLimit = ' ORDER BY item.VIEW_META.updated DESC LIMIT $5  OFFSET $6 '
     var results = await DB.query(querySelect + queryWhere + queryOrderAndLimit, [dashId, tags, roles, userId, limit, offset])
     debug('listByDashIdTagsRoles results', results)
     return {results}
+  },
+  listByUserId: async function (reqData, meta, getStream) {
+    var dashId = reqData.dashId
+    var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
+    // var dashboard = await linkedDashboards(dashId, meta, userId, ['subscriptionsRead', 'subscriptionsReadAll'])
+    if (userId !== reqData.userId) throw new Error('Cant read subscriptions from for other users ')
+    var select = reqData.select || false
+    var offset = reqData.from || 0
+    var limit = reqData.to || 20 - offset
+    var querySelect = select ? ' SELECT ' + select.join(',') + ' FROM subscriptions ' : ' SELECT item.* FROM subscriptions item '
+    var queryWhere = ' WHERE  DOC_TYPE="view" AND userId=$1  '
+    var queryOrderAndLimit = ' ORDER BY item.VIEW_META.updated DESC LIMIT $2  OFFSET $3'
+    var results = await DB.query(querySelect + queryWhere + queryOrderAndLimit, [userId, limit, offset])
+    var dashboardsAndPermissions = await linkedDashboards(dashId, meta, userId, ['subscriptionsRead', 'subscriptionsReadAll'])
+    results = results.map((currentState, index) => {
+      if (reqData.linkedViews && reqData.linkedViews.includes('role')) currentState.role = dashboardsAndPermissions.byId[currentState.dashId].roles[currentState.roleId]
+      if (reqData.linkedViews && reqData.linkedViews.includes('permissions')) currentState.permissions = dashboardsAndPermissions.byId[currentState.dashId].roles[currentState.roleId].permissions
+      if (reqData.linkedViews && reqData.linkedViews.includes('dashboard')) currentState.role = dashboardsAndPermissions.byId[currentState.dashId]
+      return currentState
+    })
+    debug('listByUserId results', results)
+    return {results}
+  },
+  async  serviceInfo (reqData, meta = {directCall: true}, getStream = null) {
+    var schema = require('./schema')
+    var schemaOut = {}
+    for (var i in schema.methods) if (schema.methods[i].public) schemaOut[i] = schema.methods[i].requestSchema
+    var mutations = {}
+    require('fs').readdirSync(path.join(__dirname, '/mutations')).forEach(function (file, index) { mutations[file] = require(path.join(__dirname, '/mutations/', file)).toString() })
+    debug('serviceInfo', {schema, mutations})
+    return {schema: schemaOut, mutations}
   }
 }

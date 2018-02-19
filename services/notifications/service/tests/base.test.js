@@ -7,9 +7,9 @@ const warn = (msg, data) => { console.log('\n' + JSON.stringify(['WARN', 'TEST',
 const error = (msg, data) => { console.log('\n' + JSON.stringify(['ERROR', 'TEST', msg, data])) }
 
 process.env.debugMain = true
-process.env.debugCouchbase = true
-process.env.debugJesus = true
-process.env.debugSchema = true
+// process.env.debugCouchbase = true
+// process.env.debugJesus = true
+// process.env.debugSchema = true
 
 var startTest = async function (netClient) {
   await new Promise((resolve) => setTimeout(resolve, 1000))
@@ -33,9 +33,9 @@ var startTest = async function (netClient) {
   async function setContext (contextData) {
     var i
     var tokens = {}
-    for (i in contextData.notifications)tokens[i] = await auth.createToken(i, contextData.notifications[i], CONFIG.jwt)
+    for (i in contextData.users)tokens[i] = await auth.createToken(i, contextData.users[i], CONFIG.jwt)
     // for (i in contextData.entities) await DB.put('view', Object.assign({ id: 'testDash_testUser', meta: {confirmed: true, created: Date.now(), updated: Date.now()}, dashId: 'testDash', userId: 'testUser' }, contextData.entities[i]))
-    for (i in contextData.entities) await DB.put('view', Object.assign({ id: 'testDash_userTest', meta: {confirmed: true, created: Date.now(), updated: Date.now()}, dashId: 'testDash', roleId: 'subscriber', userId: 'userTest' }, contextData.entities[i]))
+    for (i in contextData.entities) await DB.put('view', Object.assign({ id: 'testDash_userTest', meta: {confirmed: true, created: Date.now(), updated: Date.now()}, objectId: 'testEntityId', objectType: 'testEntityType', userId: 'userTest' }, contextData.entities[i]))
     Object.assign(netClient.testPuppets, contextData.testPuppets || {})
     return {
       tokens,
@@ -60,16 +60,27 @@ var startTest = async function (netClient) {
   const dbRemove = (id = 'userTest') => DB.remove(id)
   const dbQuery = (where, args) => DB.query('SELECT item.* from notifications item WHERE DOC_TYPE="view" AND ' + where, args)
 
-  mainTest.sectionHead('RAW CREATE')
+  mainTest.sectionHead('SERVICE INFO')
+  var context = await setContext({users: { userTest: {} }})
+  // mainTest.consoleResume()
+  var test = await netClient.testLocalMethod('serviceInfo', {}, {token: context.tokens.userTest})
+  mainTest.testRaw('SERVICE INFO', test, (data) => data.schema instanceof Object && data.mutations instanceof Object)
+  mainTest.log('SERVICE INFO', test)
+  await context.destroy()
 
-  var context = await setContext({
-    data: { mutation: 'create', items: [{id: undefined, data: {userId: 'userTest', objectId: 'testTag'}}], extend: { } },
-    notifications: { userTest: {} },
-    entities: []
-    // testPuppets: { subscriptions_getPermissions: getPuppetSubscriptionsGetPermissions() }
+  mainTest.sectionHead('RAW CREATE')
+  var testPuppets = {
+    users_readMulti: () => { return {results: [{id: 'userTest', name: 'userTest', email: 'userTest@email.com', tags: ['test'], options: { }, notifications: {email: true, sms: true}}]} },
+    emails_addToQueueMulti: () => { return {results: [{'success': 'true', 'id': 'emailQueue'}, {'success': 'true', 'id': 'emailQueue'}]} }
+  }
+  context = await setContext({
+    data: { mutation: 'create', items: [{id: undefined, data: {userId: 'userTest', objectId: 'testEntityId', objectType: 'testEntityType'}}], extend: { } },
+    users: { userTest: {} },
+    entities: [],
+    testPuppets
   })
   mainTest.log('context.data', context.data)
-  var test = await netClient.testLocalMethod('rawMutateMulti', context.data, {token: context.tokens.userTest})
+  test = await netClient.testLocalMethod('rawMutateMulti', context.data, {token: context.tokens.userTest})
   mainTest.testRaw('rawMutateMulti create', test, (data) => data.results instanceof Array && data.results.length === 1)
   // mainTest.consoleResume()
   mainTest.testRaw('rawMutateMulti create dbCheck', await dbGet(test.results[0].id), (data) => data.userId === 'userTest')
@@ -80,25 +91,28 @@ var startTest = async function (netClient) {
   mainTest.sectionHead('CREATE ADN SET READED')
 
   context = await setContext({
-    data: { items: [{ userId: 'userTest', objectId: 'testTag', data: {'testData': 'testData'} }] },
-    notifications: { userTest: {} },
-    entities: []
+    data: { items: [{ userId: 'userTest', objectId: 'testEntityId', objectType: 'testEntityType', data: {'testData': 'testData'}, sendTo: [{channel: 'email', options: {template: 'testTemplate'}}] }] },
+    users: { userTest: {} },
+    entities: [],
+    testPuppets
     // testPuppets: { subscriptions_getPermissions: getPuppetSubscriptionsGetPermissions() }
   })
   // mainTest.consoleResume()
 
   // var results = await DB.query('notificationsViews', 'DELETE FROM notificationsViews WHERE email="test@test.com" LIMIT 1', [])
   // DELETE FROM notificationsViews WHERE email=testEmail
+  // mainTest.consoleResume()
   test = await netClient.testLocalMethod('createMulti', context.data, {token: context.tokens.userTest})
   mainTest.testRaw('createMulti', test, (data) => data.results instanceof Array && data.results.length === 1 && !data.errors)
   mainTest.testRaw('createMulti dbCheck', await dbGet(test.results[0].id), (data) => data.userId === 'userTest')
   var resultId = test.results[0].id
   await new Promise((resolve) => setTimeout(resolve, 500))
+  mainTest.log('createMulti context', context)
 
   test = await netClient.testLocalMethod('readed', {id: resultId}, {token: context.tokens.userTest})
   mainTest.testRaw('readed', test, (data) => data.success && !data.errors)
 
-  test = await netClient.testLocalMethod('readedByObjectId', {objectId: 'testTag'}, {token: context.tokens.userTest})
+  test = await netClient.testLocalMethod('readedByObjectId', {objectId: 'testEntityId', objectType: 'testEntityType'}, {token: context.tokens.userTest})
   mainTest.testRaw('readedByObjectId', test, (data) => data.success && !data.errors)
 
   await context.destroy()
@@ -107,9 +121,9 @@ var startTest = async function (netClient) {
 
   context = await setContext({
     data: {},
-    notifications: { userTest: {} },
-    entities: [{ id: 'notificationTest', userId: 'userTest', objectId: 'testTag', data: {'testData': 'testData'} }]
-    // testPuppets: { subscriptions_getPermissions: getPuppetSubscriptionsGetPermissions() }
+    users: { userTest: {} },
+    entities: [{ id: 'notificationTest', userId: 'userTest', objectId: 'testEntityId', objectType: 'testEntityType', data: {'testData': 'testData'} }],
+    testPuppets// testPuppets: { subscriptions_getPermissions: getPuppetSubscriptionsGetPermissions() }
   })
   test = await netClient.testLocalMethod('readMulti', { ids: ['notificationTest'] }, {token: context.tokens.userTest})
   mainTest.testRaw('readMulti', test, (data) => !data.errors && data.results instanceof Array && data.results.length === 1)
@@ -123,11 +137,12 @@ var startTest = async function (netClient) {
 
   context = await setContext({
     data: {},
-    notifications: { userTest: {}, userAdminTest: {permissions: ['notificationsWrite']} },
+    users: { userTest: {}, userAdminTest: {permissions: ['notificationsWrite']} },
     entities: [
-      { id: 'notificationTest', userId: 'userTest', objectId: 'testTag', data: {'testData': 'testData'} },
-      { id: 'notificationTest1', userId: 'userTest1', objectId: 'testTag', data: {'testData': 'testData'} }
-    ]
+      { id: 'notificationTest', userId: 'userTest', objectId: 'testEntityId', objectType: 'testEntityType', data: {'testData': 'testData'} },
+      { id: 'notificationTest1', userId: 'userTest1', objectId: 'testEntityId', objectType: 'testEntityType', data: {'testData': 'testData'} }
+    ],
+    testPuppets
   })
 
   test = await netClient.testLocalMethod('updateMulti', { items: [{id: 'notificationTest', tags: ['testUpdate']}] }, {token: context.tokens.userTest})
@@ -151,17 +166,18 @@ var startTest = async function (netClient) {
 
   context = await setContext({
     data: {},
-    notifications: { userTest: {}, userTest1: {}, userAdminTest: {permissions: ['notificationsWrite', 'notificationsReadAll', 'notificationsList']} },
+    users: { userTest: {}, userTest1: {}, userAdminTest: {permissions: ['notificationsWrite', 'notificationsReadAll', 'notificationsList']} },
     entities: [
-      { id: 'notificationTest', userId: 'userTest', objectId: 'testTag', data: {'testData': 'testData'} }
-    ]
+      { id: 'notificationTest', userId: 'userTest', objectId: 'testEntityId', objectType: 'testEntityType', data: {'testData': 'testData'} }
+    ],
+    testPuppets
     // testPuppets: { subscriptions_getPermissions: getPuppetSubscriptionsGetPermissions({'permissions': ['notificationsWrite', 'notificationsRead']}) }
   })
 
   test = await netClient.testLocalMethod('deleteMulti', { ids: ['notificationTest'] }, {token: context.tokens.userTest})
   mainTest.log('test', test)
   mainTest.testRaw('deleteMulti', test, (data) => !data.errors && data.results instanceof Array && data.results.length === 1)
-  mainTest.testRaw('deleteMulti dbCheck', await dbGet('notificationTest'), (data) => data.meta.deleted === true)
+  mainTest.testRaw('deleteMulti dbCheck', await dbGet('notificationTest'), (data) => data.deleted === true)
 
   test = await netClient.testLocalMethod('readMulti', { ids: ['notificationTest'] }, {token: context.tokens.userTest1})
   mainTest.testRaw('readMulti checkError readMulti Notification deleted', test, (data) => data.errors instanceof Array)
@@ -179,12 +195,13 @@ var startTest = async function (netClient) {
 
   context = await setContext({
     data: {},
-    notifications: { userListTest: {}, userListTest1: {}, userListAdminTest: {permissions: ['notificationsWrite', 'notificationsReadAll', 'notificationsList']} },
+    users: { userListTest: {}, userListTest1: {}, userListAdminTest: {permissions: ['notificationsWrite', 'notificationsReadAll', 'notificationsList']} },
     entities: [
-      { id: 'notificationTest', userId: 'userListTest', objectId: 'testTag', data: {'testData': 'testData'} },
-      { id: 'notificationTest1', userId: 'userListTest1', objectId: 'testTag', data: {'testData': 'testData'} },
-      { id: 'notificationTest2', userId: 'userListTest', objectId: 'testTag', data: {'testData': 'testData'} }
-    ]
+      { id: 'notificationTest', userId: 'userListTest', objectId: 'testEntityId', objectType: 'testEntityType', data: {'testData': 'testData'} },
+      { id: 'notificationTest1', userId: 'userListTest1', objectId: 'testEntityId', objectType: 'testEntityType', data: {'testData': 'testData'} },
+      { id: 'notificationTest2', userId: 'userListTest', objectId: 'testEntityId', objectType: 'testEntityType', data: {'testData': 'testData'} }
+    ],
+    testPuppets
     // testPuppets: { subscriptions_getPermissions: getPuppetSubscriptionsGetPermissions() }
   })
   await new Promise((resolve) => setTimeout(resolve, 1000)) // DB INDEX UPDATE
@@ -205,25 +222,26 @@ var startTest = async function (netClient) {
 
   await context.destroy()
 
-  mainTest.sectionHead('POST EVENT')
-
-  context = await setContext({
-    data: {},
-    notifications: { userPostEventTest: {}, userPostEventTest1: {}, userPostEventAdminTest: {permissions: ['notificationsWrite', 'notificationsReadAll', 'notificationsList']} },
-    entities: [
-      // { id: 'notificationTest', userId: 'userListTest', objectId: 'testTag', data: {'testData': 'testData'} },
-      // { id: 'notificationTest1', userId: 'userListTest1', objectId: 'testTag', data: {'testData': 'testData'} },
-      // { id: 'notificationTest2', userId: 'userListTest', objectId: 'testTag', data: {'testData': 'testData'} }
-    ]
-    // testPuppets: { subscriptions_getPermissions: getPuppetSubscriptionsGetPermissions() }
-  })
-  var notificationsEventCreatePost = await netClient.emit('TEST_POST_EVENT', { view: { body: 'Test Post', id: 'testPostId' }, users: ['userPostEventTest'] }, {token: context.tokens.userPostEventTest})
-  mainTest.log('notificationsEventCreatePost', notificationsEventCreatePost)
-  // mainTest.consoleResume()
-  var queryResults = await dbQuery('userId=$1', ['userPostEventTest'])
-  queryResults.forEach((item) => dbRemove(item.id))
-  mainTest.testRaw('postEvent dbCheck', queryResults, (list) => list.length === 1)
-  await context.destroy()
+  // mainTest.sectionHead('POST EVENT')
+  //
+  // context = await setContext({
+  //   data: {},
+  //   users: { userPostEventTest: {}, userPostEventTest1: {}, userPostEventAdminTest: {permissions: ['notificationsWrite', 'notificationsReadAll', 'notificationsList']} },
+  //   entities: [
+  //     // { id: 'notificationTest', userId: 'userListTest', objectId: 'testTag', data: {'testData': 'testData'} },
+  //     // { id: 'notificationTest1', userId: 'userListTest1', objectId: 'testTag', data: {'testData': 'testData'} },
+  //     // { id: 'notificationTest2', userId: 'userListTest', objectId: 'testTag', data: {'testData': 'testData'} }
+  //   ],
+  //   testPuppets
+  //   // testPuppets: { subscriptions_getPermissions: getPuppetSubscriptionsGetPermissions() }
+  // })
+  // var notificationsEventCreatePost = await netClient.emit('TEST_POST_EVENT', { view: { body: 'Test Post', id: 'testPostId' }, users: ['userPostEventTest'] }, {token: context.tokens.userPostEventTest})
+  // mainTest.log('notificationsEventCreatePost', notificationsEventCreatePost)
+  // // mainTest.consoleResume()
+  // var queryResults = await dbQuery('userId=$1', ['userPostEventTest'])
+  // queryResults.forEach((item) => dbRemove(item.id))
+  // mainTest.testRaw('postEvent dbCheck', queryResults, (list) => list.length === 1)
+  // await context.destroy()
 
   await new Promise((resolve) => setTimeout(resolve, 1000))
   return mainTest.finish()

@@ -8,7 +8,7 @@
       <User></User>
       <Logout @success="$store.commit('OPEN_VIEWPORT', 'main');$router.push('/')"></Logout>
       <a class="button" @click="$store.commit('OPEN_VIEWPORT', 'main');$router.push('/profile')">profilo</a>
-      <Notifications></Notifications>
+      <!-- <Notifications></Notifications> -->
     </div>
     <div v-if="!$store.state.users.logged">
       <RegisterOrLogin setShow="Login" @loginSuccess="$router.push('/dashboards/')" @registerSuccess="$router.push('/registration/ConfirmEmail/'+$store.state.users.email)"></RegisterOrLogin>
@@ -20,14 +20,14 @@
 <script>
 import {translate} from '@/i18n'
 
-import RegisterOrLogin from '@/users/RegisterOrLogin'
-import User from '@/users/User'
-import Logout from '@/users/Logout'
-import Notifications from '@/users/Notifications'
+import RegisterOrLogin from '@/modules/users/components/RegisterOrLogin'
+import User from '@/modules/users/components/User'
+import Logout from '@/modules/users/components/Logout'
+// import Notifications from '@/users/Notifications'
 var t= function(string) { return translate( 'app', string) }
 export default {
   name: 'Account',
-  components: { RegisterOrLogin,User,Notifications ,Logout},
+  components: { RegisterOrLogin,User ,Logout},
   computed: {
     strTitle: function () { return t('Account') },
     strDescription: function () { return t('Gestisci le tue informazioni personali') },

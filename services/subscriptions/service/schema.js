@@ -63,6 +63,12 @@ module.exports = {
   eventsOut: {
   },
   methods: {
+    'serviceInfo': {
+      public: true,
+      responseType: 'response',
+      requestSchema: {},
+      responseSchema: {properties: {'schema': {type: 'object'}, 'mutations': {type: 'object'}}}
+    },
     'createMulti': {
       public: true,
       responseType: 'response',
@@ -145,6 +151,12 @@ module.exports = {
       public: true,
       responseType: 'response',
       requestSchema: { required: ['dashId'], properties: { dashId, roles: { type: 'array' }, tags: { type: 'array' } } },
+      responseSchema: {properties: {results: {type: 'array', items: jsProp}, errors: {type: 'array'}}}
+    },
+    'listByUserId': {
+      public: true,
+      responseType: 'response',
+      requestSchema: { required: ['userId'], properties: { userId: { type: 'string' }, linkedViews: { type: 'array', items: { type: 'string' } }  } },
       responseSchema: {properties: {results: {type: 'array', items: jsProp}, errors: {type: 'array'}}}
     }
   }

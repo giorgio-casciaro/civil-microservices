@@ -35,7 +35,7 @@ var startTest = async function (netClient) {
     for (i in contextData.users)tokens[i] = await auth.createToken(i, contextData.users[i], CONFIG.jwt)
     for (i in contextData.entities) await DB.put('view', Object.assign({ id: 'testDash_testUser', meta: {confirmed: true, created: Date.now(), updated: Date.now()}, dashId: 'testDash', userId: 'testUser' }, contextData.entities[i]))
     Object.assign(netClient.testPuppets, contextData.testPuppets || {})
-    log('setContext', { keys: Object.keys(netClient.testPuppets), func: netClient.testPuppets.subscriptions_readMulti.toString() })
+    // log('setContext', { keys: Object.keys(netClient.testPuppets), func: netClient.testPuppets.subscriptions_readMulti.toString() })
     return {
       tokens,
       data: contextData.data,
@@ -58,15 +58,21 @@ var startTest = async function (netClient) {
   const dbGet = (id = 'userTest') => DB.get(id)
   const dbRemove = (id = 'userTest') => DB.remove(id)
 
+  mainTest.sectionHead('SERVICE INFO')
+  var context = await setContext({users: { userTest: {} }})
+  var test = await netClient.testLocalMethod('serviceInfo', {}, {token: context.tokens.userTest})
+  mainTest.testRaw('SERVICE INFO', test, (data) => data.schema instanceof Object && data.mutations instanceof Object)
+  await context.destroy()
+
   mainTest.sectionHead('RAW CREATE')
 
-  var context = await setContext({
+  context = await setContext({
     data: { mutation: 'create', items: [{id: undefined, data: { dashId: 'testDash', userId: 'userTest', body: 'test', tags: ['testTag'], toTags: ['testTag'], toRoles: ['subscriber'] }}], extend: { } },
     users: { userTest: {} },
     entities: [],
     testPuppets: { subscriptions_readMulti: getPuppetSubscriptionsReadMulti() }
   })
-  var test = await netClient.testLocalMethod('rawMutateMulti', context.data, {token: context.tokens.userTest})
+  test = await netClient.testLocalMethod('rawMutateMulti', context.data, {token: context.tokens.userTest})
   mainTest.testRaw('rawMutateMulti create', test, (data) => data.results instanceof Array && data.results.length === 1)
   mainTest.testRaw('rawMutateMulti create dbCheck', await dbGet(test.results[0].id), (data) => data.body === 'test')
   await dbRemove(test.results[0].id)

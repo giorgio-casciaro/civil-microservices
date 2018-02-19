@@ -10,11 +10,11 @@ const getTranslation = (translations, group, string) => {
   return false
 }
 export function translate (group, string) {
-  console.log('translate', group, string, store.state.translations)
+  // console.log('translate', group, string, store.state.translations)
   var translation = getTranslation(store.state.translations, group, string)
   if (translation) return translation
   if (!notFounded[string]) {
-    console.log('notFounded', string)
+    // console.log('notFounded', string)
     notFounded[string] = string
     if (dt)clearTimeout(dt)
     dt = setTimeout(sendNotFounded, 1000)

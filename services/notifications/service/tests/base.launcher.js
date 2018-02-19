@@ -4,7 +4,7 @@ process.on('unhandledRejection', function (reason) {
 })
 
 var startTest = async function () {
-  console.error('oops', 'startTest1')
+  // console.error('oops', 'startTest1')
 
   var SERVICE = await require('../service')()
   var netClient = SERVICE.netClient

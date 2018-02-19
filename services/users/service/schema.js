@@ -20,7 +20,8 @@ var jsRes = {
     data: { type: 'object' },
     method: { type: 'string' },
     type: { type: 'string' },
-    id: { type: 'string' }
+    id: { type: 'string' },
+    mutation: {type: 'string'}
   }
   // 'additionalProperties': true
 }
@@ -40,7 +41,7 @@ var meta = {
   created: { type: 'number' }
 }
 // var jsProp = { id: userId, dashId: dashId, roleId, tags: jsFields.tags, userId: { type: 'string' }, meta, notifications: { type: 'array' }, role: { type: 'object' } }
-var jsProp = { id: userId, name: { type: 'string' }, public: { type: 'boolean' }, email: jsFields.email, tags: jsFields.tags, pics, meta, notifications: { type: 'array' } }
+var jsProp = { id: userId, name: { type: 'string' }, public: { type: 'boolean' }, email: jsFields.email, tags: jsFields.tags, pics, meta, options: { type: 'object' }, notifications: { type: 'object' } }
 
 module.exports = {
   net: {
@@ -64,8 +65,24 @@ module.exports = {
   eventsIn: {
   },
   eventsOut: {
+    'USERS_ENTITY_MUTATION': {
+      multipleResponse: false,
+      requestSchema: {'type': 'object'},
+      responseSchema: {'type': 'object'}
+    },
+    'USERS_CREATED': {
+      multipleResponse: false,
+      requestSchema: {'type': 'object'},
+      responseSchema: {'type': 'object'}
+    }
   },
   methods: {
+    'serviceInfo': {
+      public: true,
+      responseType: 'response',
+      requestSchema: {},
+      responseSchema: {properties: {'schema': {type: 'object'}, 'mutations': {type: 'object'}}}
+    },
     'createMulti': {
       public: true,
       responseType: 'response',
@@ -95,6 +112,15 @@ module.exports = {
     },
     'readMulti': {
       public: true,
+      responseType: 'response',
+      requestSchema: {
+        properties: { ids: { type: 'array', items: { type: 'string' } } },
+        required: [ 'ids' ]
+      },
+      responseSchema: {properties: {results: {type: 'array', items: jsProp}, errors: {type: 'array'}}}
+    },
+    'rawReadMulti': {
+      public: false,
       responseType: 'response',
       requestSchema: {
         properties: { ids: { type: 'array', items: { type: 'string' } } },
@@ -144,7 +170,6 @@ module.exports = {
       requestSchema: { properties: { from: { type: 'integer' }, to: { type: 'integer' } } },
       responseSchema: {properties: {results: {type: 'array', items: jsProp}, errors: {type: 'array'}}}
     },
-
     'readEmailConfirmationCode': {
       public: false,
       responseType: 'response',

@@ -1,5 +1,5 @@
 var stdin = process.stdin
-if(stdin.setRawMode)stdin.setRawMode(true)
+if (stdin.setRawMode)stdin.setRawMode(true)
 stdin.resume()
 stdin.setEncoding('utf8')
 
@@ -18,7 +18,7 @@ var basePath = process.cwd()
 var execCommand
 var execCommandFunc = function () {
   if (execCommand)execCommand.kill()
-  console.log('\x1Bc')
+  // console.log('\x1Bc')
   console.log('--------------------------------------------')
   console.log('--------------WATCH RESTART-----------------')
   console.log('--------------------------------------------')

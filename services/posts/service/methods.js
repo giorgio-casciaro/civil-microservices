@@ -26,16 +26,26 @@ const updateViews = async function (mutations, views) {
     views = views.map((view) => view || {})
     var viewsById = arrayToObjBy(views, 'id')
     var viewsToUpdate = []
-    debug('updateViews', { views, mutations })
     mutations.forEach((mutation, index) => {
       var view = viewsById[mutation.objId] || {}
-      view.meta = view.meta || {}
-      view.meta.updated = Date.now()
-      view.meta.created = view.meta.created || Date.now()
+      view.VIEW_META = view.VIEW_META || {}
+      view.VIEW_META.updated = Date.now()
+      view.VIEW_META.created = view.VIEW_META.created || Date.now()
       viewsById[mutation.objId] = mutationsPack.applyMutations(view, [mutation])
       viewsToUpdate.push(viewsById[mutation.objId])
     })
-    return await DB.upsertMulti('view', viewsToUpdate)
+    var results = await DB.upsertMulti('view', viewsToUpdate)
+    if (!results) return null
+    // MUTATION INFO
+    results = results.map((result, index) => Object.assign(result, { mutation: mutations[index].name }))
+    // EMIT MUTATION
+    results.forEach((result, index) => {
+      if (result.error) return null
+      var mutation = mutations[index]
+      var view = viewsById[mutation.objId]
+      netClient.emit('POSTS_ENTITY_MUTATION', { id: result.id, mutation, dashId: view.dashId, toTags: view.toTags, toRoles: view.toRoles })
+    })
+    return results
   } catch (error) { throw new Error('problems during updateViews ' + error) }
 }
 const mutateAndUpdate = async function (mutation, dataToResolve, meta, views) {
@@ -166,7 +176,7 @@ module.exports = {
       if (!permissions['postsWrite']) return resultsQueue.addError(data, userId + ' can\'t write posts')
       if (data.userId !== userId && !permissions['postsWriteOtherUsers']) return resultsQueue.addError(data, data.dashId + ' ' + userId + ' can\'t write posts for other users')
       if (!data.meta)data.meta = {}
-      if (permissions['postsConfirm'])data.meta.confirmed = 1
+      if (permissions['postsConfirm'])data.confirmed = 1
       resultsQueue.add(data.id, data)
     }
     return basicMutationRequest({ids, extend: reqData.extend, dataArray: reqData.items, meta, mutation: 'create', func})
@@ -183,7 +193,7 @@ module.exports = {
       var permissions = subscriptions.permissionsByDashId[currentState.dashId]
       if (!permissions['postsRead']) return resultsError(currentState, 'User can\'t read posts')
       if (currentState.userId !== userId && !permissions['postsReadAll']) {
-        if ((currentState.meta.deleted || !currentState.meta.confirmed)) return resultsError(currentState, 'User cant read hidden posts')
+        if ((currentState.deleted || !currentState.confirmed)) return resultsError(currentState, 'User cant read hidden posts')
         if (!currentState.public) {
           if (!subscription || (!subscription.tags && !subscription.roleId)) return resultsError(currentState, 'User cant read, tags or roleId empty')
           var toTagsIntersection = subscription.tags.filter((n) => currentState.toTags.includes(n)).length > 0
@@ -217,11 +227,20 @@ module.exports = {
     var limit = reqData.to || 20 - offset
     var querySelect = select ? ' SELECT ' + select.join(',') + ' FROM `posts` ' : ' SELECT item.* FROM `posts` item ' // OR ARRAY_LENGTH(ARRAY_INTERSECT(item.toTags,$4)) > 0 OR ARRAY_CONTAINS(item.toRoles,$5)
     var queryWhere = ' WHERE  DOC_TYPE="view" AND dashId=$3 '
-    if (!subscription.permissions['postsReadAll'])queryWhere += ' AND (item[\'public\']=true OR ARRAY_LENGTH(ARRAY_INTERSECT(item.toTags,$5)) > 0 OR ARRAY_CONTAINS(item.toRoles,$6)) AND (item.userId=$4 OR ((item.meta.deleted IS MISSING OR item.meta.deleted=false) AND item.meta.confirmed=true)) '
-    var queryOrderAndLimit = ' ORDER BY item.meta.updated DESC LIMIT $1 OFFSET $2 '
+    if (!subscription.permissions['postsReadAll'])queryWhere += ' AND (item[\'public\']=true OR ARRAY_LENGTH(ARRAY_INTERSECT(item.toTags,$5)) > 0 OR ARRAY_CONTAINS(item.toRoles,$6)) AND (item.userId=$4 OR ((item.deleted IS MISSING OR item.deleted=false) AND item.confirmed=true)) '
+    var queryOrderAndLimit = ' ORDER BY item.VIEW_META.updated DESC LIMIT $1 OFFSET $2 '
     debug('list subscription', subscription.subscription)
     var results = await DB.query(querySelect + queryWhere + queryOrderAndLimit, [limit, offset, dashId, userId, subscription.subscription.tags, subscription.subscription.roleId])
     debug('list results', results)
     return {results}
+  },
+  async  serviceInfo (reqData, meta = {directCall: true}, getStream = null) {
+    var schema = require('./schema')
+    var schemaOut = {}
+    for (var i in schema.methods) if (schema.methods[i].public) schemaOut[i] = schema.methods[i].requestSchema
+    var mutations = {}
+    require('fs').readdirSync(path.join(__dirname, '/mutations')).forEach(function (file, index) { mutations[file] = require(path.join(__dirname, '/mutations/', file)).toString() })
+    debug('serviceInfo', {schema, mutations})
+    return {schema: schemaOut, mutations}
   }
 }

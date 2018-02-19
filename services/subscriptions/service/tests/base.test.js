@@ -32,9 +32,9 @@ var startTest = async function (netClient) {
     var i
     var tokens = {}
     for (i in contextData.users)tokens[i] = await auth.createToken(i, contextData.users[i], CONFIG.jwt)
-    for (i in contextData.entities) await DB.put('view', Object.assign({ id: 'testDash_testUser', meta: {confirmed: true, created: Date.now(), updated: Date.now()}, dashId: 'testDash', roleId: 'subscriber', userId: 'testUser' }, contextData.entities[i]))
+    for (i in contextData.entities) await DB.put('view', Object.assign({ id: 'testDash_testUser', META_VIEW: { created: Date.now(), updated: Date.now()}, confirmed: true, deleted: false, dashId: 'testDash', roleId: 'subscriber', userId: 'testUser' }, contextData.entities[i]))
     Object.assign(netClient.testPuppets, contextData.testPuppets || {})
-    log('setContext', { keys: Object.keys(netClient.testPuppets), func: netClient.testPuppets.dashboards_readMulti.toString() })
+    // log('setContext', { keys: Object.keys(netClient.testPuppets), func: netClient.testPuppets.dashboards_readMulti.toString() })
     return {
       tokens,
       data: contextData.data,
@@ -57,16 +57,22 @@ var startTest = async function (netClient) {
   const dbGet = (id = 'userTest') => DB.get(id)
   const dbRemove = (id = 'userTest') => DB.remove(id)
 
+  mainTest.sectionHead('SERVICE INFO')
+  var context = await setContext({users: { userTest: {} }})
+  var test = await netClient.testLocalMethod('serviceInfo', {}, {token: context.tokens.userTest})
+  mainTest.testRaw('SERVICE INFO', test, (data) => data.schema instanceof Object && data.mutations instanceof Object)
+  await context.destroy()
+
   mainTest.sectionHead('RAW CREATE')
   // mainTest.consoleResume()
 
-  var context = await setContext({
+  context = await setContext({
     data: { mutation: 'create', items: [{id: undefined, data: { dashId: 'testDash', userId: 'userTest', roleId: 'subscriber', tags: ['testTag'], notifications: ['email', 'sms', 'fb'] }}], extend: { } },
     users: { userTest: {} },
     entities: [],
     testPuppets: { dashboards_readMulti: getPuppetDashboard() }
   })
-  var test = await netClient.testLocalMethod('rawMutateMulti', context.data, {token: context.tokens.userTest})
+  test = await netClient.testLocalMethod('rawMutateMulti', context.data, {token: context.tokens.userTest})
   mainTest.testRaw('rawMutateMulti create', test, (data) => data.results instanceof Array && data.results.length === 1)
   mainTest.testRaw('rawMutateMulti create dbCheck', await dbGet('testDash_userTest'), (data) => data.roleId === 'subscriber')
   await dbRemove('testDash_userTest')
@@ -181,7 +187,7 @@ var startTest = async function (netClient) {
 
   test = await netClient.testLocalMethod('deleteMulti', { ids: ['testDash_userTest'] }, {token: context.tokens.userTest})
   mainTest.testRaw('deleteMulti', test, (data) => !data.errors && data.results instanceof Array && data.results.length === 1)
-  mainTest.testRaw('deleteMulti dbCheck', await dbGet('testDash_userTest'), (data) => data.meta.deleted === true)
+  mainTest.testRaw('deleteMulti dbCheck', await dbGet('testDash_userTest'), (data) => data.deleted === true)
 
   test = await netClient.testLocalMethod('readMulti', { ids: ['testDash_userTest'] }, {token: context.tokens.userTest2})
   mainTest.testRaw('readMulti checkError Subscription deleted', test, (data) => data.errors instanceof Array)
@@ -215,11 +221,11 @@ var startTest = async function (netClient) {
 
   test = await netClient.testLocalMethod('createMulti', { items: [{ dashId: 'testDash', roleId: 'subscriber', userId: 'userTest' }] }, {token: context.tokens.userTest})
   mainTest.testRaw('createMulti with confirmation', test, (data) => !data.errors && data.results instanceof Array && data.results.length === 1)
-  mainTest.testRaw('createMulti with confirmation dbCheck', await dbGet('testDash_userTest'), (data) => !data.meta.confirmed)
+  mainTest.testRaw('createMulti with confirmation dbCheck', await dbGet('testDash_userTest'), (data) => !data.confirmed)
 
   test = await netClient.testLocalMethod('confirmMulti', { ids: ['testDash_userTest'] }, {token: context.tokens.userAdminTest})
   mainTest.testRaw('confirmMulti by admin user', test, (data) => !data.errors && data.results instanceof Array && data.results.length === 1)
-  mainTest.testRaw('confirmMulti dbCheck', await dbGet('testDash_userTest'), (data) => data.meta.confirmed === true)
+  mainTest.testRaw('confirmMulti dbCheck', await dbGet('testDash_userTest'), (data) => data.confirmed === true)
   await context.destroy()
 
   mainTest.sectionHead('TAGS')
@@ -263,6 +269,26 @@ var startTest = async function (netClient) {
   mainTest.testRaw('listByDashIdTagsRoles tags:tag2', test, (data) => !data.errors && data.results instanceof Array && data.results.length === 1)
   test = await netClient.testLocalMethod('listByDashIdTagsRoles', { dashId: 'testDash', roles: ['subscriber'] }, {token: context.tokens.userTest})
   mainTest.testRaw('listByDashIdTagsRoles  roles:subscriber ', test, (data) => !data.errors && data.results instanceof Array && data.results.length === 1)
+
+  await context.destroy()
+
+  mainTest.sectionHead('LIST BY USER')
+
+  context = await setContext({
+    data: {},
+    users: { userTest: {}, userAdminTest: {} },
+    entities: [
+      {id: 'testDash_userTest1', userId: 'userTest', dashId: 'testDash', roleId: 'subscriber', tags: ['tag1']},
+      {id: 'testDash_userTest2', userId: 'userTest', dashId: 'testDash', roleId: 'admin', tags: ['tag1', 'tag2']},
+      {id: 'testDash_userTest3', userId: 'userTest', dashId: 'testDash', roleId: 'subscriber', tags: ['tag1']},
+      {id: 'testDash_userTest4', userId: 'userTest', dashId: 'testDash', roleId: 'admin', tags: ['tag1', 'tag2']}
+    ],
+    testPuppets: { dashboards_readMulti: getPuppetDashboard() }
+  })
+  await new Promise((resolve) => setTimeout(resolve, 1000)) // DB INDEX UPDATE
+
+  test = await netClient.testLocalMethod('listByUserId', { userId: 'userTest' }, {token: context.tokens.userTest})
+  mainTest.testRaw('LIST BY USER', test, (data) => !data.errors && data.results instanceof Array && data.results.length === 4)
 
   await context.destroy()
 

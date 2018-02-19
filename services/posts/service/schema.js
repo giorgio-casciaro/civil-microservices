@@ -57,6 +57,12 @@ module.exports = {
   eventsOut: {
   },
   methods: {
+    'serviceInfo': {
+      public: true,
+      responseType: 'response',
+      requestSchema: {},
+      responseSchema: {properties: {'schema': {type: 'object'}, 'mutations': {type: 'object'}}}
+    },
     'createMulti': {
       public: true,
       responseType: 'response',

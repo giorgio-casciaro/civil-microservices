@@ -75,17 +75,24 @@ var startTest = async function (netClient) {
   const dbGet = (id = 'userTest') => DB.get(id)
   const dbRemove = (id = 'userTest') => DB.remove(id)
 
+  mainTest.sectionHead('SERVICE INFO')
+  var context = await setContext({ data: { }, users: { userTest: {permissions: ['dashboardsCreate']} }, entities: [] })
+  var test = await netClient.testLocalMethod('serviceInfo', {}, {token: context.tokens.userTest})
+  mainTest.testRaw('SERVICE INFO', test, (data) => data.schema instanceof Object && data.mutations instanceof Object)
+  await context.destroy()
+  // mainTest.log('SERVICE INFO', test)
+
   mainTest.sectionHead('RAW CREATE')
   // var jsProp = { id: {type: 'string'}, name: { type: 'string' }, description: { type: 'string' }, options: { type: 'object' }, tags, maps, public: { type: 'boolean' }, pics, meta, roles: {type: 'object'} }
 
-  var context = await setContext({
+  context = await setContext({
     data: { mutation: 'create', items: [{id: undefined, data: {name: 'name', description: 'description', tags: ['tag1', 'tag2']}}], extend: { } },
     users: { userTest: {permissions: ['dashboardsCreate']} },
     entities: []
     // testPuppets: { subscriptions_getPermissions: getPuppetSubscriptionsGetPermissions() }
   })
   mainTest.log('context.data', context.data)
-  var test = await netClient.testLocalMethod('rawMutateMulti', context.data, {token: context.tokens.userTest})
+  test = await netClient.testLocalMethod('rawMutateMulti', context.data, {token: context.tokens.userTest})
   mainTest.testRaw('rawMutateMulti create', test, (data) => data.results instanceof Array && data.results.length === 1)
   mainTest.testRaw('rawMutateMulti create dbCheck', await dbGet(test.results[0].id), (data) => data.description === 'description')
   mainTest.log('rawMutateMulti', test)
@@ -153,6 +160,9 @@ var startTest = async function (netClient) {
 
   test = await netClient.testLocalMethod('updateMulti', { items: [{id: 'dashboardTest', tags: ['testUpdate']}] }, {token: context.tokens.userTest})
   mainTest.testRaw('updateMulti', test, (data) => !data.errors && data.results instanceof Array && data.results.length === 1)
+
+  mainTest.log('test', test)
+
     // dbCheck = await DB.get('dashboardsViews', 'userTest')
   mainTest.testRaw('updateMulti dbCheck', await dbGet('dashboardTest'), (data) => data.tags[0] === 'testUpdate')
 
@@ -242,7 +252,7 @@ var startTest = async function (netClient) {
   test = await netClient.testLocalMethod('deleteMulti', { ids: ['dashboardTest'] }, {token: context.tokens.userTest})
   mainTest.log('test', test)
   mainTest.testRaw('deleteMulti', test, (data) => !data.errors && data.results instanceof Array && data.results.length === 1)
-  mainTest.testRaw('deleteMulti dbCheck', await dbGet('dashboardTest'), (data) => data.meta.deleted === true)
+  mainTest.testRaw('deleteMulti dbCheck', await dbGet('dashboardTest'), (data) => data.deleted === true)
 
   test = await netClient.testLocalMethod('readMulti', { ids: ['dashboardTest'] }, {token: context.tokens.userTest1})
   mainTest.testRaw('readMulti checkError readMulti Dashboard deleted', test, (data) => data.errors instanceof Array)

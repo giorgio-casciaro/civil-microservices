@@ -1,0 +1,21 @@
+<template>
+<div class="RegisterOrLogin">
+  <Login v-if="show==='Login'" @success="$emit('loginSuccess')"></Login>
+  <Register v-if="show==='Register'"  @success="$emit('registerSuccess')"></Register>
+  <div class="toLogin" v-if="show==='Register'">{{getter_t("hai già un account?")}}<a class="button" @click="show='Login'">{{getter_t("Accedi")}}</a></div>
+  <div class="toRegister" v-if="show==='Login'">{{getter_t("non hai ancora un account?")}}<a class="button" @click="show='Register'">{{getter_t("Registrati")}}</a></div>
+</div>
+</template>
+<script>
+import storeMixin from '../storeMixin'
+import Login from './Login'
+import Register from './Register'
+export default {
+  mixins: [storeMixin],
+  props:{ setShow: { type: String, default:'Register' } },
+  components: { Login, Register },
+  data() { return {
+    show: this.setShow
+  }}
+}
+</script>

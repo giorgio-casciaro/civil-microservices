@@ -6,6 +6,11 @@ var mutationsPack = require('sint-bit-cqrs/mutations')({ mutationsPath: path.joi
 const auth = require('sint-bit-utils/utils/auth')
 var netClient
 
+process.env.debugMain = true
+// process.env.debugCouchbase = true
+// process.env.debugJesus = true
+// process.env.debugSchema = true
+
 const nodemailer = require('nodemailer')
 const vm = require('vm')
 const fs = require('fs')
@@ -37,7 +42,7 @@ const getUserByMail = async function (email, filterGuest = true) {
 
 // -----------------------------------------------------------------
 
-const updateViews = async function (mutations, views) {
+const updateViews = async function (mutations, views, returnViews) {
   try {
     if (!views) {
       var ids = mutations.map((mutation) => mutation.objId)
@@ -46,24 +51,38 @@ const updateViews = async function (mutations, views) {
     views = views.map((view) => view || {})
     var viewsById = arrayToObjBy(views, 'id')
     var viewsToUpdate = []
-    debug('updateViews', { views, mutations })
+    debug('updateViews', { views, mutations, returnViews })
     mutations.forEach((mutation, index) => {
       var view = viewsById[mutation.objId] || {}
-      view.meta = view.meta || {}
-      view.meta.updated = Date.now()
-      view.meta.created = view.meta.created || Date.now()
+      view.VIEW_META = view.VIEW_META || {}
+      view.VIEW_META.updated = Date.now()
+      view.VIEW_META.created = view.VIEW_META.created || Date.now()
       viewsById[mutation.objId] = mutationsPack.applyMutations(view, [mutation])
       viewsToUpdate.push(viewsById[mutation.objId])
     })
-    return await DB.upsertMulti('view', viewsToUpdate)
+    var results = await DB.upsertMulti('view', viewsToUpdate)
+    debug('updateViews results', results)
+    if (!results) return null
+    results = results.map((result, index) => Object.assign(result, { mutation: mutations[index].mutation + '.' + mutations[index].version }))
+    results.forEach((result, index) => {
+      if (result.error) return null
+      var mutation = mutations[index]
+      debug('updateViews returnViews', { returnViews })
+      if (returnViews)result.view = viewsById[result.id]
+      netClient.emit('USERS_ENTITY_MUTATION', { id: result.id, mutation })//, dashId: view.dashId, toTags: view.toTags, toRoles: view.toRoles
+    })
+    debug('updateViews results expanded', { results, views: viewsToUpdate })
+
+    return results
   } catch (error) { throw new Error('problems during updateViews ' + error) }
 }
-const mutateAndUpdate = async function (mutation, dataToResolve, meta, views) {
+
+const mutateAndUpdate = async function (mutation, dataToResolve, meta, views, returnViews) {
   try {
-    debug('mutateAndUpdate', {mutation, dataToResolve, views})
+    debug('mutateAndUpdate', {mutation, dataToResolve, views, returnViews})
     var mutations = dataToResolve.map((mutationAndData) => mutationsPack.mutate({data: mutationAndData.data, objId: mutationAndData.id, mutation, meta}))
     DB.upsertMulti('mutation', mutations)
-    return await updateViews(mutations, views)
+    return await updateViews(mutations, views, returnViews)
   } catch (error) { throw new Error('problems during mutateAndUpdate ' + error) }
 }
 
@@ -96,7 +115,7 @@ const getViews = async (ids, select = '*', guest = false) => {
 // }
 // var rpcSubscriptionsGetPermissions = (items, meta) => netClient.rpcCall({to: 'subscriptions', method: 'getPermissions', data: {items}, meta})
 
-var basicMutationRequestMulti = async function ({ids, dataArray, mutation, extend, meta, func}) {
+var basicMutationRequestMulti = async function ({ids, dataArray, mutation, extend, meta, func, returnViews}) {
   var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
   var tokenData = await auth.getTokenDataFromToken(meta, CONFIG.jwt)
   // debug('basicMutationRequestMulti tokenData', {meta, jwt: CONFIG.jwt})
@@ -112,7 +131,7 @@ var basicMutationRequestMulti = async function ({ids, dataArray, mutation, exten
     var currentState = currentStates[index]
     await func(resultsQueue, data, currentState, userId, permissions)
   }
-  await resultsQueue.resolve((dataToResolve) => mutateAndUpdate(mutation, dataToResolve, meta, currentStates))
+  await resultsQueue.resolve((dataToResolve) => mutateAndUpdate(mutation, dataToResolve, meta, currentStates, returnViews))
   return resultsQueue.returnValue()
 }
 var basicMutationRequest = async function ({id, data, mutation, meta, func}) {
@@ -176,7 +195,8 @@ module.exports = {
     await DB.init(CONFIG.couchbase.url, CONFIG.couchbase.username, CONFIG.couchbase.password, CONFIG.couchbase.bucket)
     // await DB.createIndex('views', ['dashId', 'userId'])
     await DB.createIndex(['email'])
-    await DB.createIndex(['meta.updated'])
+    await DB.createIndex(['guest'])
+    await DB.createIndex(['VIEW_META.updated'])
     await DB.createIndex(['DOC_TYPE'])
   },
   rawMutateMulti: async function (reqData, meta, getStream) {
@@ -196,10 +216,15 @@ module.exports = {
       data.emailConfirmationCode = uuidv4()
       resultsQueue.add(data.id, data)
     }
-    var response = await basicMutationRequestMulti({ids, extend: reqData.extend, dataArray: reqData.items, meta, mutation: 'create', func})
-    debug('createMulti', response)
+    var response = await basicMutationRequestMulti({ids, extend: reqData.extend, dataArray: reqData.items, meta, mutation: 'create', func, returnViews: true})
+    debug('user createMulti', {response})
+    var noErrorItems = response.results.filter(value => value.__RESULT_TYPE__ !== 'error')
+    // var noErrorViews = response.views.filter((value, index) => response.results[index].__RESULT_TYPE__ !== 'error')
+    var event = await netClient.emit('USERS_CREATED', {results: noErrorItems}, meta)
+    debug('user createMulti', {noErrorItems, event})
+
     // await sendMail('userCreated', {to: reqData.email, from: CONFIG.mailFrom, subject: 'Benvenuto in CivilConnect - conferma la mail'}, Object.assign({CONFIG}, reqData))
-    return response
+    return {results: response.results}
   },
   readMulti: async function (reqData, meta, getStream) {
     var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
@@ -211,9 +236,14 @@ module.exports = {
       if (!currentState) return resultsError({id: reqData.ids[index]}, 'User not exists')
       // var permissions = subscriptions.permissionsByDashId[currentState.dashId]
       // if (!permissions['usersRead']) return resultsError(currentState, 'User can\'t read users')
-      if ((currentState.meta.deleted || !currentState.meta.confirmed) && !permissions['usersReadAll'] && currentState.id !== userId) return resultsError(currentState, 'User cant read hidden users')
+      if ((currentState.deleted || !currentState.confirmed) && !permissions['usersReadAll'] && currentState.id !== userId) return resultsError(currentState, 'User cant read hidden users')
       return currentState
     })
+    var errors = results.filter(value => value.__RESULT_TYPE__ === 'error').map((currentState, index) => index)
+    return {results, errors: errors.length ? errors : undefined}
+  },
+  rawReadMulti: async function (reqData, meta, getStream) {
+    var results = await getViews(reqData.ids, reqData.select || '*', false)
     var errors = results.filter(value => value.__RESULT_TYPE__ === 'error').map((currentState, index) => index)
     return {results, errors: errors.length ? errors : undefined}
   },
@@ -241,8 +271,8 @@ module.exports = {
     var limit = reqData.to || 20 - offset
     var querySelect = select ? ' SELECT ' + select.join(',') + ' FROM users ' : ' SELECT item.* FROM users item '
     var queryWhere = ' where DOC_TYPE="view" '
-    if (!permissions['usersReadAll'])queryWhere += ' AND (item.id=$1 OR ((item.meta.deleted IS MISSING OR item.meta.deleted=false) )) '
-    var queryOrderAndLimit = ' ORDER BY item.meta.updated DESC LIMIT $2 OFFSET $3 '
+    if (!permissions['usersReadAll'])queryWhere += ' AND (item.id=$1 OR ((item.deleted IS MISSING OR item.deleted=false) )) '
+    var queryOrderAndLimit = ' ORDER BY item.VIEW_META.updated DESC LIMIT $2 OFFSET $3 '
     var results = await DB.query(querySelect + queryWhere + queryOrderAndLimit, [userId, limit, offset])
     debug('list results', results)
     return {results}
@@ -261,7 +291,7 @@ module.exports = {
   async logout (reqData, meta = {directCall: true}, getStream = null) {
     // var id = reqData.id
     // var currentState = await getView(id)
-    // if (!currentState || currentState.meta.deleted || currentState.tags.indexOf('passwordAssigned') < 0 || currentState.tags.indexOf('emailConfirmed') < 0) {
+    // if (!currentState || currentState.deleted || currentState.tags.indexOf('passwordAssigned') < 0 || currentState.tags.indexOf('emailConfirmed') < 0) {
     //   throw new Error('user not active')
     // }
     // if (currentState.email !== reqData.email) throw new Error('Problems durig logout')
@@ -294,7 +324,7 @@ module.exports = {
     if (reqData.password !== reqData.confirmPassword) throw new Error('Confirm Password not equal')
     var currentState = await getUserByMail(reqData.email)
     debug('assignPassword', currentState)
-    if (!currentState || currentState.meta.deleted || currentState.passwordAssigned || !currentState.emailConfirmed) throw new Error('problems during assignPassword')
+    if (!currentState || currentState.deleted || currentState.passwordAssigned || !currentState.emailConfirmed) throw new Error('problems during assignPassword')
     var id = currentState.id
     var data = {password: require('bcrypt').hashSync(reqData.password, 10)}
     await mutateAndUpdate('assignPassword', [{id, data}], meta, [currentState])
@@ -303,7 +333,7 @@ module.exports = {
   async updatePersonalInfo (reqData, meta = {directCall: true}, getStream = null) {
     var id = reqData.id
     var func = (data, currentState, userId, permissions) => {
-      if (!currentState || currentState.meta.deleted || !currentState.passwordAssigned || !currentState.emailConfirmed) throw new Error('problems during updatePersonalInfo')
+      if (!currentState || currentState.deleted || !currentState.passwordAssigned || !currentState.emailConfirmed) throw new Error('problems during updatePersonalInfo')
       debug('updatePersonalInfo', {userId, currentState})
       if (!permissions['usersWrite'] && currentState.id !== userId) throw new Error('user cant write for other users')
     }
@@ -315,7 +345,7 @@ module.exports = {
     if (reqData.password !== reqData.confirmPassword) throw new Error('Confirm Password not equal')
     var func = (data, currentState, userId, permissions) => {
       if (currentState.password && !bcrypt.compareSync(reqData.oldPassword, currentState.password)) throw new Error('Old Password not valid')
-      if (!currentState || currentState.meta.deleted || !currentState.passwordAssigned || !currentState.emailConfirmed) throw new Error('problems during updatePassword')
+      if (!currentState || currentState.deleted || !currentState.passwordAssigned || !currentState.emailConfirmed) throw new Error('problems during updatePassword')
       debug('updatePersonalInfo', {userId, currentState})
       if (!permissions['usersWrite'] && currentState.id !== userId) throw new Error('user cant write for other users')
     }
@@ -330,7 +360,7 @@ module.exports = {
     var picId = uuidv4()
     var func = async (data, currentState, userId, permissions) => {
       try {
-        if (!currentState || currentState.meta.deleted || !currentState.passwordAssigned || !currentState.emailConfirmed) throw new Error('problems during addPic')
+        if (!currentState || currentState.deleted || !currentState.passwordAssigned || !currentState.emailConfirmed) throw new Error('problems during addPic')
         if (!permissions['usersWrite'] && currentState.id !== userId) throw new Error('user cant write for other users')
       } catch (error) {
         await new Promise((resolve, reject) => fs.unlink(reqData.pic.path, (err, data) => err ? resolve(err) : resolve(data)))
@@ -345,7 +375,6 @@ module.exports = {
       await DB.put('pic', picBuffers[size], picSizeId)
     }
     await DB.put('pic', {id: picId, userId: id, sizes: picData.sizes}, picId + '_meta')
-
     // debug('addPic picBuffers', picBuffers)
     await basicMutationRequest({id, data: {pic: picData}, mutation: 'addPic', meta, func})
     return {success: `Pic Added`, data: picData}
@@ -356,7 +385,7 @@ module.exports = {
     var picMeta = await DB.get(reqData.id + '_meta')
     if (!picMeta || picMeta.deleted) throw new Error('problems with picMeta')
     var currentState = await getViews(picMeta.userId)
-    if (!currentState || currentState.meta.deleted || !currentState.passwordAssigned || !currentState.emailConfirmed) throw new Error('problems during getPic')
+    if (!currentState || currentState.deleted || !currentState.passwordAssigned || !currentState.emailConfirmed) throw new Error('problems during getPic')
     if (!picMeta.sizes || !picMeta.sizes[reqData.size]) throw new Error('problems with picSizeId')
     var picSizeId = picMeta.sizes[reqData.size]
     return DB.get(picSizeId)
@@ -367,7 +396,7 @@ module.exports = {
     if (!picMeta || picMeta.deleted) throw new Error('problems with picMeta')
     // var currentState = await getViews(picMeta.userId)
     var func = async (data, currentState, userId, permissions) => {
-      if (!currentState || currentState.meta.deleted || !currentState.passwordAssigned || !currentState.emailConfirmed) throw new Error('problems during deletePic')
+      if (!currentState || currentState.deleted || !currentState.passwordAssigned || !currentState.emailConfirmed) throw new Error('problems during deletePic')
       if (!permissions['usersWrite'] && currentState.id !== userId) throw new Error('user cant write for other users')
     }
     await basicMutationRequest({id: picMeta.userId, data: {picId: reqData.id}, mutation: 'deletePic', meta, func})
@@ -385,5 +414,14 @@ module.exports = {
     // // await updateView(id, [mutation])
     // await addTag(id, 'emailConfirmed', meta)
     return {success: `Email confirmed`, data: {email: reqData.email}}
+  },
+  async  serviceInfo (reqData, meta = {directCall: true}, getStream = null) {
+    var schema = require('./schema')
+    var schemaOut = {}
+    for (var i in schema.methods) if (schema.methods[i].public) schemaOut[i] = schema.methods[i].requestSchema
+    var mutations = {}
+    require('fs').readdirSync(path.join(__dirname, '/mutations')).forEach(function (file, index) { mutations[file] = require(path.join(__dirname, '/mutations/', file)).toString() })
+    debug('serviceInfo', {schema, mutations})
+    return {schema: schemaOut, mutations}
   }
 }

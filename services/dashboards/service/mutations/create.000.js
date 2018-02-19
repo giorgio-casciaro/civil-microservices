@@ -1,5 +1,4 @@
 module.exports = function (state, data) {
-  state.meta = {}
   state.pics = data.pics || {}
   state.id = data.id
   state.name = data.name

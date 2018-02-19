@@ -1,12 +1,11 @@
 version:               '3.3'
-
 services:
    notifications:
      image:            giorgiocasciaro/ubuntu-node:v3
     #  logging:
     #    driver:       none
      working_dir:      /microservice
-     command:          sh -c "npm run watch_test"
+     command:          sh -c "npm run watch_start"
      environment:
        # debugJesus:     1
        # debugCouchbase: 1

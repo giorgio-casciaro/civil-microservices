@@ -1,5 +1,4 @@
 module.exports = function (state, data) {
-  state = Object.assign({meta: state.meta}, data)
-  if (!state.tags)state.tags = []
+  state = Object.assign({tags: []}, data)
   return state
 }

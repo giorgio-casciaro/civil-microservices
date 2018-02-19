@@ -1,3 +1,6 @@
+const log = (msg, data) => { console.log('\n' + JSON.stringify(['LOG', 'MAIN', msg, data])) }
+const debug = (msg, data) => { if (process.env.debugMain)console.log('\n' + JSON.stringify(['DEBUG', 'MAIN', msg, data])) }
+const error = (msg, data) => { console.log('\n' + JSON.stringify(['ERROR', 'MAIN', msg, data])); console.error(data) }
 
 module.exports = async function service () {
   // BASE
@@ -8,9 +11,9 @@ module.exports = async function service () {
 
   // SERVICES DEPENDECIES
   const wait = require('sint-bit-utils/utils/wait')
-  console.log('PREINIT SCHEMA')
+  debug('PREINIT SCHEMA')
   await wait.service('http://couchbase_nodes:8091/')
-  console.log('INIT SCHEMA')
+  debug('INIT SCHEMA')
 
   // EXPRESS
   const express = require('express')
@@ -20,13 +23,13 @@ module.exports = async function service () {
   app.use(bodyParser.json())
   app.use(bodyParser.urlencoded({ extended: true }))
   // DB
-  console.log('INIT SCHEMA')
+  debug('INIT SCHEMA')
   const DB = require('sint-bit-utils/utils/dbCouchbaseV2')
   await DB.init(CONFIG.couchbase.url, CONFIG.couchbase.username, CONFIG.couchbase.password)
 
   const loadSchema = async () => {
     var rawSchema = await DB.get('schema', 'schema')
-    console.log('rawSchema', rawSchema)
+    debug('rawSchema', rawSchema)
     return rawSchema || { id: 'schema', services: {} }
   }
   const saveSchema = async (specificSchema) => {
@@ -37,7 +40,7 @@ module.exports = async function service () {
   }
   var SCHEMA = { id: 'schema', services: {} }
   try { SCHEMA = await loadSchema() } catch (error) { await saveSchema() }
-  console.log('SCHEMA', SCHEMA)
+  debug('SCHEMA', SCHEMA)
 
   // LIVE SIGNAL
   var liveSignals = {}
@@ -127,7 +130,7 @@ module.exports = async function service () {
     res.send({success: 'schema removed'})
   })
 
-  console.log('app.listen', CONFIG.httpPort)
+  debug('app.listen', CONFIG.httpPort)
   server.connection = app.listen(CONFIG.httpPort)
 
   return {

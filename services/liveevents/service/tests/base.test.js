@@ -2,93 +2,83 @@ process.on('unhandledRejection', function (reason) {
   console.error('oops', reason)
   process.exit(1)
 })
-var path = require('path')
-var jesusClient = require('sint-bit-jesus/net.client')
-process.env.debugJesus = true
+const auth = require('sint-bit-utils/utils/auth')
+
+const log = (msg, data) => { console.log('\n' + JSON.stringify(['LOG', 'TEST', msg, data])) }
+const warn = (msg, data) => { console.log('\n' + JSON.stringify(['WARN', 'TEST', msg, data])) }
+const error = (msg, data) => { console.log('\n' + JSON.stringify(['ERROR', 'TEST', msg, data])) }
+
+process.env.debugMain = true
+// process.env.debugCouchbase = false
+// process.env.debugJesus = false
+// process.env.debugSchema = false
 
 var startTest = async function (netClient, getServiceSchema) {
+  await new Promise((resolve) => setTimeout(resolve, 1000))
+  var CONFIG = require('../config')
   // var microRandom = Math.floor(Math.random() * 100000)
+  async function setContext (contextData) {
+    var i
+    var tokens = {}
+    for (i in contextData.users)tokens[i] = await auth.createToken(i, contextData.users[i], CONFIG.jwt)
+    Object.assign(netClient.testPuppets, contextData.testPuppets || {})
+    return {
+      tokens,
+      data: contextData.data,
+      updateData: (substitutions) => {
+        var value
+        for (var k in substitutions) {
+          value = contextData.data
+          k.split('/').forEach(addr => (value = value[addr]))
+          value = substitutions[k]
+        }
+      },
+      updatePuppets: (testPuppets) => Object.assign(netClient.testPuppets, testPuppets || {}),
+      destroy: async() => {
+      }
+    }
+  }
   var mainTest = require('sint-bit-utils/utils/microTest')('test Microservice local methods and db connections', 0)
-  var microTest = mainTest.test
-  var finishTest = mainTest.finish
 
-  // FAKE CLIENT
-  const getConsole = (serviceName, serviceId, pack) => require('sint-bit-utils/utils/utils').getConsole({error: true, debug: true, log: true, warn: true}, serviceName, serviceId, pack)
-  var fakeServiceName = 'liveeventsFakeClient'
-  var CONSOLE = getConsole(fakeServiceName, '----', '-----')
-  var DI = {
-    serviceName: fakeServiceName,
-    serviceId: fakeServiceName,
-    CONSOLE,
-    getMethods: () => {},
-    getMethodsConfig: function (service = fakeServiceName, exclude) {
-      if (service === fakeServiceName) return {}
-      return getServiceSchema('methods', service)
-    },
-    getNetConfig: (service = fakeServiceName, exclude) => {
-      if (service === fakeServiceName) {
-        return {
-          'channels': {
-            'httpPublic': {
-              'url': '127.0.0.1:10080',
-              'cors': '127.0.0.1'
-            },
-            'http': { 'url': '127.0.0.1:10081' }
-          }
-        }
-      }
-      return getServiceSchema('net', service, exclude)
-    },
-    getEventsIn: (service = fakeServiceName, exclude) => {
-      if (service === fakeServiceName) return {}
-      return getServiceSchema('eventsIn', service, exclude)
-    },
-    getEventsOut: (service = fakeServiceName, exclude) => {
-      CONSOLE.hl('getEventsOut', service, exclude)
-      if (service === fakeServiceName) {
-        return {
-          'testEvent': {
-            multipleResponse: true,
-            requestSchema: {'additionalProperties': true, properties: {}},
-            responseSchema: {'additionalProperties': true, properties: {}}
+  mainTest.sectionHead('SERVICE INFO')
+  var context = await setContext({
+    users: { userTest: {permissions: ['dashboardsCreate']} },
+    testPuppets: {
+      subscriptions_listByUserId: () => ({
+        results: [
+          {
+            userId: 'userTest',
+            dashId: 'dashTest1',
+            tags: ['tag1', 'tag2'],
+            roleId: 'admin'
           },
-          'testRemoteEvent': {
-            multipleResponse: true,
-            requestSchema: false,
-            responseSchema: false
+          {
+            userId: 'userTest',
+            dashId: 'dashTest2',
+            tags: ['tag1', 'tag3'],
+            roleId: 'subscriber'
           }
-        }
-      }
-      return getServiceSchema('eventsOut', service, exclude)
-    },
-    getRpcOut: (service = fakeServiceName, exclude) => {
-      if (service === fakeServiceName) return {}
-      return getServiceSchema('rpcOut', service, exclude)
+        ]
+      })
     }
-  }
-  var fakeServiceNetClient = jesusClient(DI)
-
-  // EXTEND TESTS
-  const TYPE_OF = (actual, expected) => {
-    if (typeof (expected) !== 'object') {
-      var type = typeof (actual)
-      if (Array.isArray(actual))type = 'array'
-      return type
-    }
-    var filtered = {}
-    Object.keys(expected).forEach((key) => { filtered[key] = typeof actual[key] })
-    return filtered
-  }
-  const FILTER_BY_KEYS = (actual, expected) => {
-    var filtered = {}
-    Object.keys(expected).forEach((key) => { filtered[key] = actual[key] })
-    return filtered
-  }
-  const COUNT = (actual, expected) => actual.length
-  // TESTS
-  // emit(event, data = {}, metaRaw = {}, timeout = false, channel = false)
-  var testEvent = await fakeServiceNetClient.emit('testEvent', {}, {})
-  microTest(testEvent, [{ test: 'test' }], 'testEvent', null)
+  })
+  var eventsStream = await netClient.testLocalMethod('getEvents', {}, {token: context.tokens.userTest})
+  // mainTest.consoleResume()
+  var streamData = []
+  eventsStream.on('data', (data) => { mainTest.log('eventsStream streaming data', data); streamData.push(data) })
+  eventsStream.on('error', (data) => { mainTest.log('eventsStream streaming error', data); streamData.push(data) })
+  eventsStream.on('end', (data) => { mainTest.log('eventsStream streaming close', data); streamData.push(data) })
+  // mainTest.testRaw('SERVICE INFO', eventsStream, (data) => data.schema instanceof Object && data.mutations instanceof Object)
+  await netClient.testLocalMethod('triggerEvent', {data: {test: 'test1'}, filters: {dashId: 'dashTest1'}}, {token: context.tokens.userTest})
+  await netClient.testLocalMethod('triggerEvent', {data: {test: 'test2'}, filters: {dashId: 'dashTest1', toTags: ['tag1']}}, {token: context.tokens.userTest})
+  await netClient.testLocalMethod('triggerEvent', {data: {test: 'test3'}, filters: {dashId: 'dashTest1', toRoles: ['admin']}}, {token: context.tokens.userTest})
+  await netClient.testLocalMethod('triggerEvent', {data: {test: 'test1'}, filters: {dashId: 'dashTest3'}}, {token: context.tokens.userTest})
+  await netClient.testLocalMethod('triggerEvent', {data: {test: 'test2'}, filters: {dashId: 'dashTest1', toTags: ['tag4']}}, {token: context.tokens.userTest})
+  await netClient.testLocalMethod('triggerEvent', {data: {test: 'test3'}, filters: {dashId: 'dashTest1', toRoles: ['fakerole']}}, {token: context.tokens.userTest})
+  await new Promise((resolve) => setTimeout(resolve, 1000))
+  mainTest.testRaw('getEvents', streamData, (data) => data.length === 3)
+  mainTest.log('streamData', streamData)
+  await context.destroy()
 
   // // testLocalMethod (method, data = {}, meta = {}, timeout = false, channel = false) {
   // mainTest.log('PROVA')

@@ -1,0 +1,136 @@
+{
+  "tiles": ["/data/v3/{z}/{x}/{y}.pbf"],
+  "name": "OpenMapTiles",
+  "format": "pbf",
+  "basename": "italy.mbtiles",
+  "id": "openmaptiles",
+  "maskLevel": "8",
+  "vector_layers": [{
+    "id": "water",
+    "minzoom": 0,
+    "maxzoom": 14,
+    "fields": {
+      "class": "String"
+    }
+  }, {
+    "id": "waterway",
+    "minzoom": 0,
+    "maxzoom": 14,
+    "fields": {
+      "name": "String",
+      "class": "String"
+    }
+  }, {
+    "id": "landcover",
+    "minzoom": 0,
+    "maxzoom": 14,
+    "fields": {
+      "class": "String",
+      "subclass": "String"
+    }
+  }, {
+    "id": "landuse",
+    "minzoom": 0,
+    "maxzoom": 14,
+    "fields": {
+      "class": "String"
+    }
+  }, {
+    "id": "park",
+    "minzoom": 0,
+    "maxzoom": 14,
+    "fields": {
+      "class": "String"
+    }
+  }, {
+    "id": "boundary",
+    "minzoom": 0,
+    "maxzoom": 14,
+    "fields": {
+      "admin_level": "Number"
+    }
+  }, {
+    "id": "aeroway",
+    "minzoom": 0,
+    "maxzoom": 14,
+    "fields": {
+      "class": "String"
+    }
+  }, {
+    "id": "transportation",
+    "minzoom": 0,
+    "maxzoom": 14,
+    "fields": {
+      "class": "String",
+      "oneway": "Number",
+      "ramp": "Number",
+      "brunnel": "String",
+      "service": "String"
+    }
+  }, {
+    "id": "building",
+    "minzoom": 0,
+    "maxzoom": 14,
+    "fields": {
+      "render_height": "Number",
+      "render_min_height": "Number"
+    }
+  }, {
+    "id": "water_name",
+    "minzoom": 0,
+    "maxzoom": 14,
+    "fields": {
+      "name": "String",
+      "name_en": "String",
+      "class": "String"
+    }
+  }, {
+    "id": "transportation_name",
+    "minzoom": 0,
+    "maxzoom": 14,
+    "fields": {
+      "name": "String",
+      "ref": "String",
+      "ref_length": "Number",
+      "class": "String"
+    }
+  }, {
+    "id": "place",
+    "minzoom": 0,
+    "maxzoom": 14,
+    "fields": {
+      "name": "String",
+      "name_en": "String",
+      "class": "String",
+      "rank": "Number",
+      "capital": "Number"
+    }
+  }, {
+    "id": "housenumber",
+    "minzoom": 0,
+    "maxzoom": 14,
+    "fields": {
+      "housenumber": "String"
+    }
+  }, {
+    "id": "poi",
+    "minzoom": 0,
+    "maxzoom": 14,
+    "fields": {
+      "name": "String",
+      "name_en": "String",
+      "class": "String",
+      "subclass": "String",
+      "rank": "Number"
+    }
+  }],
+  "attribution": "<a href=\"http://openmaptiles.org/\" target=\"_blank\">&copy; OpenMapTiles</a> <a href=\"http://www.openstreetmap.org/about/\" target=\"_blank\">&copy; OpenStreetMap contributors</a>",
+  "description": "Extract from http://openmaptiles.org",
+  "minzoom": 0,
+  "maxzoom": 14,
+  "center": [12.7058702, 41.1905539, 10],
+  "bounds": [6.5272658, 35.1889616, 18.8844746, 47.1921462],
+  "version": "3.3",
+  "type": "baselayer",
+  "tilejson": "2.0.0"
+}

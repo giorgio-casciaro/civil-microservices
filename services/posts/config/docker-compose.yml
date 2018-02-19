@@ -6,7 +6,7 @@ services:
     #  logging:
     #    driver:       none
      working_dir:      /microservice
-     command:          sh -c "npm run watch_test"
+     command:          sh -c "npm run watch_start"
      environment:
        # debugJesus:     1
        # debugCouchbase: 1

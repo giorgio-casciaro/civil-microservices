@@ -6,7 +6,6 @@ var mutationsPack = require('sint-bit-cqrs/mutations')({ mutationsPath: path.joi
 const auth = require('sint-bit-utils/utils/auth')
 var netClient
 
-const fs = require('fs')
 const log = (msg, data) => { console.log('\n' + JSON.stringify(['LOG', 'MAIN', msg, data])) }
 const debug = (msg, data) => { if (process.env.debugMain)console.log('\n' + JSON.stringify(['DEBUG', 'MAIN', msg, data])) }
 const error = (msg, data) => { console.log('\n' + JSON.stringify(['ERROR', 'MAIN', msg, data])); console.error(data) }
@@ -84,13 +83,23 @@ const updateViews = async function (mutations, views) {
     debug('updateViews', { views, mutations })
     mutations.forEach((mutation, index) => {
       var view = viewsById[mutation.objId] || {}
-      view.meta = view.meta || {}
-      view.meta.updated = Date.now()
-      view.meta.created = view.meta.created || Date.now()
+      view.VIEW_META = view.VIEW_META || {}
+      view.VIEW_META.updated = Date.now()
+      view.VIEW_META.created = view.VIEW_META.created || Date.now()
       viewsById[mutation.objId] = mutationsPack.applyMutations(view, [mutation])
       viewsToUpdate.push(viewsById[mutation.objId])
     })
-    return await DB.upsertMulti('view', viewsToUpdate)
+    var results = await DB.upsertMulti('view', viewsToUpdate)
+    debug('updateViews results', results)
+    if (!results) return null
+    results = results.map((result, index) => Object.assign(result, { mutation: mutations[index].name }))
+    results.forEach((result, index) => {
+      if (result.error) return null
+      var mutation = mutations[index]
+      // var view = viewsById[mutation.objId]
+      netClient.emit('DASHBOARDS_ENTITY_MUTATION', { id: result.id, mutation })//, dashId: view.dashId, toTags: view.toTags, toRoles: view.toRoles
+    })
+    return results
   } catch (error) { throw new Error('problems during updateViews ' + error) }
 }
 const mutateAndUpdate = async function (mutation, dataToResolve, meta, views) {
@@ -261,7 +270,7 @@ module.exports = {
       var userDashboardRole = (userSubscriptionsByDashId[currentState.id] && userSubscriptionsByDashId[currentState.id].roleId) ? userSubscriptionsByDashId[currentState.id].roleId : 'guest'
       var dashboardPermissionsArray = (currentState && currentState.roles && currentState.roles[userDashboardRole] && currentState.roles[userDashboardRole].permissions) ? currentState.roles[userDashboardRole].permissions : []
       var dashboardPermissions = dashboardPermissionsArray.reduce((accumulator, currentValue, currentIndex, array) => Object.assign(accumulator, {[currentValue]: true}), {})
-      if ((currentState.meta.deleted) && (!permissions['dashboardsReadAll'] || !dashboardPermissions['dashboardsWrite'])) return resultsError(currentState, 'User cant read hidden dashboards')
+      if ((currentState.deleted) && (!permissions['dashboardsReadAll'] || !dashboardPermissions['dashboardsWrite'])) return resultsError(currentState, 'User cant read hidden dashboards')
       return extendDashRoles(currentState)
     })
     var errors = results.filter(value => value.__RESULT_TYPE__ === 'error').map((currentState, index) => index)
@@ -292,8 +301,8 @@ module.exports = {
     var limit = reqData.to || 20 - offset
     var querySelect = select ? ' SELECT ' + select.join(',') + ' FROM dashboards ' : ' SELECT item.* FROM dashboards item '
     var queryWhere = ' where  DOC_TYPE="view"'
-    if (!permissions['dashboardsReadAll'])queryWhere += ' AND (item.id=$1 OR ((item.meta.deleted IS MISSING OR item.meta.deleted=false) )) '
-    var queryOrderAndLimit = ' ORDER BY item.meta.updated DESC LIMIT $2 OFFSET $3 '
+    if (!permissions['dashboardsReadAll'])queryWhere += ' AND (item.id=$1 OR ((item.deleted IS MISSING OR item.deleted=false) )) '
+    var queryOrderAndLimit = ' ORDER BY item.VIEW_META.updated DESC LIMIT $2 OFFSET $3 '
     var results = await DB.query(querySelect + queryWhere + queryOrderAndLimit, [userId, limit, offset])
     debug('list results', results)
     return {results}
@@ -311,8 +320,8 @@ module.exports = {
     var limit = reqData.to || 20 - offset
     var querySelect = select ? ' SELECT ' + select.join(',') + ' FROM dashboards  ' : ' SELECT item.* FROM dashboards item '
     var queryWhere = ' where DOC_TYPE="view" AND userId=$1 '
-    if (!permissions['dashboardsReadAll'])queryWhere += ' AND (item.meta.deleted IS MISSING OR item.meta.deleted=false) '
-    var queryOrderAndLimit = ' ORDER BY item.meta.updated DESC LIMIT $2 OFFSET $3 '
+    if (!permissions['dashboardsReadAll'])queryWhere += ' AND (item.deleted IS MISSING OR item.deleted=false) '
+    var queryOrderAndLimit = ' ORDER BY item.VIEW_META.updated DESC LIMIT $2 OFFSET $3 '
     var results = await DB.query(querySelect + queryWhere + queryOrderAndLimit, [reqData.userId, limit, offset])
     debug('listByUserId results', results)
     return {results}
@@ -323,10 +332,10 @@ module.exports = {
     var picId = uuidv4()
     var func = async (data, currentState, userId, permissions, dashboardPermissions) => {
       try {
-        if (!currentState || currentState.meta.deleted) throw new Error('problems during addPic')
+        if (!currentState || currentState.deleted) throw new Error('problems during addPic')
         if (!dashboardPermissions['dashboardsWrite']) throw new Error('user cant write for other dashboards')
       } catch (error) {
-        await new Promise((resolve, reject) => fs.unlink(reqData.pic.path, (err, data) => err ? resolve(err) : resolve(data)))
+        await new Promise((resolve, reject) => require('fs').unlink(reqData.pic.path, (err, data) => err ? resolve(err) : resolve(data)))
         throw error
       }
     }
@@ -349,7 +358,7 @@ module.exports = {
     var picMeta = await DB.get(reqData.id + '_meta')
     if (!picMeta || picMeta.deleted) throw new Error('problems with picMeta')
     var currentState = await getViews(picMeta.userId)
-    if (!currentState || currentState.meta.deleted) throw new Error('problems during getPic')
+    if (!currentState || currentState.deleted) throw new Error('problems during getPic')
     if (!picMeta.sizes || !picMeta.sizes[reqData.size]) throw new Error('problems with picSizeId')
     var picSizeId = picMeta.sizes[reqData.size]
     return DB.get(picSizeId)
@@ -360,13 +369,21 @@ module.exports = {
     if (!picMeta || picMeta.deleted) throw new Error('problems with picMeta')
     // var currentState = await getViews(picMeta.userId)
     var func = async (data, currentState, userId, permissions, dashboardPermissions) => {
-      if (!currentState || currentState.meta.deleted) throw new Error('problems during deletePic')
+      if (!currentState || currentState.deleted) throw new Error('problems during deletePic')
       if (!dashboardPermissions['dashboardsWrite']) throw new Error('user cant write for other dashboards')
     }
     await basicMutationRequest({id: picMeta.userId, data: {picId: reqData.id}, mutation: 'deletePic', meta, func})
     picMeta.deleted = true
     await DB.put('pic', picMeta, reqData.id + '_meta')
     return {success: `Pic Deleted`, data: picMeta}
+  },
+  async  serviceInfo (reqData, meta = {directCall: true}, getStream = null) {
+    var schema = require('./schema')
+    var schemaOut = {}
+    for (var i in schema.methods) if (schema.methods[i].public) schemaOut[i] = schema.methods[i].requestSchema
+    var mutations = {}
+    require('fs').readdirSync(path.join(__dirname, '/mutations')).forEach(function (file, index) { mutations[file] = require(path.join(__dirname, '/mutations/', file)).toString() })
+    debug('serviceInfo', {schema, mutations})
+    return {schema: schemaOut, mutations}
   }
-
 }
