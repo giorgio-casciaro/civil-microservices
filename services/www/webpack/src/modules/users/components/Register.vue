@@ -23,17 +23,20 @@ export default {
     }
   },
   methods: {
-    err (msg, extra = false) {
+    err (errorObj, extra = false) {
       this.error = this.errors= this.waiting=false
-      setTimeout(()=>this.error = this.getter_t(msg),1)
-      setTimeout(()=>this.errors = extra.errors,1)
+      setTimeout(()=>this.error = this.getter_t(errorObj.error),1)
+      // setTimeout(()=>this.errors = extra.errors,1)
       this.$emit("error")
     },
     succ (body) {
+
       this.waiting=false
-      this.$store.commit('users/REGISTERED', body)
+      // this.$store.commit('users/REGISTERED', body)
       this.success = this.getter_t( 'Registrazione avvenuta con successo')
-      setTimeout(()=>this.$emit("success"),2000)
+      console.log("Registrazione avvenuta con successo'",body)
+      // this.$emit("success")
+      setTimeout(()=>this.$emit("success",body),2000)
     }
   }
 }

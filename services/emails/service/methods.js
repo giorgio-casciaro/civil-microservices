@@ -2,7 +2,7 @@ const path = require('path')
 const DB = require('sint-bit-utils/utils/dbCouchbaseV3')
 var CONFIG = require('./config')
 var netClient
-process.env.debugMain = true
+// process.env.debugMain = true
 const log = (msg, data) => { console.log('\n' + JSON.stringify(['LOG', 'MAIN', msg, data])) }
 const debug = (msg, data) => { if (process.env.debugMain)console.log('\n' + JSON.stringify(['DEBUG', 'MAIN', msg, data])) }
 const error = (msg, data) => { console.log('\n' + JSON.stringify(['ERROR', 'MAIN', msg, data])); console.error(data) }
@@ -41,10 +41,10 @@ const sendMail = async (mailData) => {
   // mailOptions.text = populatedTemplate.text
   // mailOptions.subject = populatedTemplate.subject
   populatedTemplate.to = mailData.email
-  debug('sendMail', { populatedTemplate, sendEmails: process.env.sendEmails })
+  log('sendMail', { populatedTemplate, sendEmails: process.env.sendEmails })
   if (!process.env.sendEmails) return true
   var returnResult = await new Promise((resolve, reject) => smtpTrans.sendMail(populatedTemplate, (err, data) => err ? reject(err) : resolve(data)))
-  debug('sendMail', { returnResult })
+  log('sendMail', { returnResult })
   return returnResult
 }
 var sendLoopActive = true
@@ -52,7 +52,7 @@ var sendLoop = async function () {
   try {
     while (sendLoopActive) {
       var result = await DB.queuePop('emailQueue')
-      log('sendLoop', {result})
+      debug('sendLoop', {result})
       if (result) await sendMail(result)
       else await new Promise((resolve) => setTimeout(resolve, 1000))
     }

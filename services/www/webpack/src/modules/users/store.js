@@ -31,11 +31,32 @@ function randomPassword (length) {
   pass += charsNumbers.charAt(Math.floor(Math.random() * charsNumbers.length))
   return pass
 }
+function applyMutation (store, viewId, mutationName, mutationData) {
+  // var viewId = result.id || dataToSend[index].id
+  // console.log('rpcCallAndMutation viewId', {viewId})
+  if (!store.state.views[viewId])store.state.views[viewId] = {}
+  var view = store.state.views[viewId]
+  var mutationNameWithExt = mutationName + '.js'
+  var mutation = store.state.rpcServiceInfo.mutations && store.state.rpcServiceInfo.mutations[mutationNameWithExt] ? store.state.rpcServiceInfo.mutations[mutationNameWithExt] : (state, data) => state
+  console.log('rpcCallAndMutation view before mutation', {viewId, mutationName, view, mutation})
+  view = mutation(view, mutationData)
+  console.log('rpcCallAndMutation view after mutation', {view, mutationData, mutation})
+  return view
+}
 
 var serviceName = 'users'
+var cookieToken = Cookies.getJSON('civil-connect-token')
+var serviceLocalStorage = localStorage.getItem(serviceName)
+
 var lsState = {}
-if (localStorage && localStorage.getItem(serviceName)) lsState = JSON.parse(localStorage.getItem(serviceName))
+if (localStorage && serviceLocalStorage) lsState = JSON.parse(serviceLocalStorage)
+if (cookieToken) {
+  if (lsState.currentUser)lsState.currentUser.token = cookieToken
+  else initState.currentUser.token = cookieToken
+}
+console.log('serviceLocalStorage', {lsState, cookieToken})
 // var token = Cookies.getJSON('civil-connect-token')
+
 var storeModule = {
   namespaced: true,
   state: Object.assign({}, initState, lsState),
@@ -48,10 +69,15 @@ var storeModule = {
     },
     RPC_QUERY (state, rpcServiceInfo) { state.rpcServiceInfo = rpcServiceInfo },
     RESET (state) { for (var i in initState) if (i !== 'rpcServiceInfo')state[i] = initState[i] },
-    LOGIN (state, {token}) {
+    LOGIN (state, {token, currentState}) {
       state.currentUser.isGuest = false
       state.currentUser.token = token
       state.currentUser.logged = true
+      if (currentState) {
+        state.currentUser.currentState = currentState
+        state.currentUser.id = currentState.id
+        state.currentUser.email = currentState.email
+      }
     },
     LOGOUT (state, response) {
       state.currentUser.isGuest = true
@@ -71,45 +97,93 @@ var storeModule = {
       try {
         if (multiToSingle)data = {items: [data]}
         var rpcResp = await call({url: serviceName + '/' + rpcMethod, data})
-        if (multiToSingle && data.results && data.results[0])rpcResp = data.results[0]
-        store.commit(mutation, rpcResp)
-        success(rpcResp)
+        var errors = false
+        if (rpcResp.errors) {
+          errors = rpcResp.results.filter(result => result.__RESULT_TYPE__ === 'error')
+          if (errors.length)error(multiToSingle ? errors[0] : errors)
+        }
+        var results = rpcResp.results.filter(result => result.__RESULT_TYPE__ !== 'error')
+        // if (multiToSingle && rpcResp.results && rpcResp.results[0]) {
+        //   rpcResp = rpcResp.results[0]
+        // }
+        console.log('rpcCallAndStoreMutation 1', {rpcMethod, mutation, data, rpcResp, multiToSingle})
+        if (rpcResp.__RESULT_TYPE__ === 'error' || rpcResp.errors) throw new Error(rpcResp)
+        results.forEach(result => store.commit(mutation, result))
         console.log('rpcCallAndStoreMutation', {rpcMethod, mutation, data, rpcResp})
+        return success(multiToSingle ? results[0] : results)
       } catch (err) {
         console.log('rpcCallAndStoreMutation Error', err)
         error(err)
       }
     },
-    async rpcCallAndMutation (store, {rpcMethod, data = {}, success = () => true, error = () => true, multiToSingle = false}) {
+    async rpcCallAndMutation (store, {rpcMethod, data = {}, success = () => true, error = () => true, multiToSingle = false, single = false}) {
       try {
-        console.log('rpcCallAndMutation ', {rpcMethod, data, success, error, multiToSingle})
-        var schema = store.state.rpcServiceInfo.schema && store.state.rpcServiceInfo.schema[rpcMethod] ? store.state.rpcServiceInfo.schema[rpcMethod] : {}
+        console.log('rpcCallAndMutation ', {state: store.state, rpcMethod, data, success, error, multiToSingle, single})
+        var schema = store.state.rpcServiceInfo && store.state.rpcServiceInfo.schema && store.state.rpcServiceInfo.schema[rpcMethod] ? store.state.rpcServiceInfo.schema[rpcMethod] : {}
         if (multiToSingle && schema.properties.items) schema = schema.properties.items.items
         var validation = validate(schema, data)
         console.log('rpcCallAndMutation validation', validation)
-        if (!validation.valid) return error({type: 'validation', data: validation})
-        var dataToSend = multiToSingle ? {items: [data]} : data
+        if (!validation.valid) return error(validation)
+        var dataToSend = !single && multiToSingle ? {items: [data]} : data
+        console.log('rpcCallAndMutation dataToSend', dataToSend)
         var rpcResp = await call({url: serviceName + '/' + rpcMethod, data: dataToSend})
         console.log('rpcCallAndMutation rpcResp', rpcResp)
-        // if (multiToSingle && rpcResp.results && rpcResp.results[0])rpcResp = rpcResp.results[0]
-        if (rpcResp.__RESULT_TYPE__ === 'error') return error({ type: 'api', data: rpcResp })
-        var results = rpcResp.results.map((result, index) => {
+        var errors = false
+        if (rpcResp.errors) { errors = rpcResp.results.filter(result => result.__RESULT_TYPE__ === 'error') } else if (rpcResp.error) { errors = [rpcResp] }
+        if (errors.length)error(multiToSingle ? errors[0] : errors)
+        var resultsToProcess = rpcResp.results
+        if (single)resultsToProcess = [rpcResp]
+        if (!resultsToProcess) return false
+        console.log('rpcCallAndMutation resultsToProcess', resultsToProcess)
+        var results = resultsToProcess.filter(result => result.__RESULT_TYPE__ !== 'error').map((result, index) => {
           var viewId = result.id || dataToSend[index].id
+          console.log('rpcCallAndMutation viewId', {viewId})
           if (!store.state.views[viewId])store.state.views[viewId] = {}
           var view = store.state.views[viewId]
           var mutationName = result.mutation + '.js'
           var mutation = store.state.rpcServiceInfo.mutations && store.state.rpcServiceInfo.mutations[mutationName] ? store.state.rpcServiceInfo.mutations[mutationName] : (state, data) => state
-          console.log('rpcCallAndMutation view before mutation', {view, mutation})
-          view = mutation(view, dataToSend.items[index])
-          console.log('rpcCallAndMutation view after mutation', {view, data: dataToSend.items[index]})
+          console.log('rpcCallAndMutation view before mutation', {single, multiToSingle, dataToSend, view, mutation})
+          var mutationData = !single ? dataToSend.items[index] : dataToSend
+          view = mutation(view, mutationData)
+          console.log('rpcCallAndMutation view after mutation', {view, mutationData, mutation})
           return view
         })
-        return success(multiToSingle ? results[0] : results)
+        if (results.length) return success(multiToSingle ? results[0] : results)
       } catch (err) {
-        err.__ERROR__ = true
+        err.__RESULT_TYPE__ = 'error'
         console.log('rpcCallAndStoreMutation Error', err)
         error(err)
       }
+    },
+    async rpcCallAndMutationSingle (store, {rpcMethod, data = {}, success = () => true, error = () => true}) {
+      try {
+        console.log('rpcCallAndMutationSingle ', {state: store.state, rpcMethod, data, success, error})
+        var schema = store.state.rpcServiceInfo && store.state.rpcServiceInfo.schema && store.state.rpcServiceInfo.schema[rpcMethod] ? store.state.rpcServiceInfo.schema[rpcMethod] : {}
+        var validation = validate(schema, data)
+        if (!validation.valid) return error(validation)
+        var dataToSend = data
+        var rpcResp = await call({url: serviceName + '/' + rpcMethod, data: dataToSend})
+        if (rpcResp.__RESULT_TYPE__ === 'error') return error(rpcResp)
+        var viewId = rpcResp.id || dataToSend.id
+        var view = applyMutation(store, viewId, rpcResp.mutation + '.js', dataToSend)
+        return success([view])
+      } catch (err) {
+        err.__RESULT_TYPE__ = 'error'
+        console.log('rpcCallAndStoreMutation Error', err)
+        error(err)
+      }
+    },
+    async rpcCallAndStoreMutationSingle (store, {rpcMethod, mutation, data = {}, success = () => true, error = () => true}) {
+      var rpcResp = await call({url: serviceName + '/' + rpcMethod, data})
+      if (rpcResp.__RESULT_TYPE__ === 'error') return error(rpcResp)
+      store.commit(mutation, rpcResp)
+      return success(rpcResp)
+    },
+    async rpcCallAndStoreActionSingle (store, {rpcMethod, action, data = {}, success = () => true, error = () => true}) {
+      var rpcResp = await call({url: serviceName + '/' + rpcMethod, data})
+      if (rpcResp.__RESULT_TYPE__ === 'error') return error(rpcResp)
+      store.dispatch(action, rpcResp)
+      return success(rpcResp)
     },
     rpcQuery (store, {api, data}) { call(serviceName, api, {from: 0, to: pageLength}, (response) => store.commit('RPC_QUERY', {response, reset: false})) },
     rpcQueryLoadMore (store, {api, data}) { call(serviceName, api, {from: store.state.queries[api].length, to: store.state.lastDashboards.length + pageLength}, (response) => store.commit('RPC_QUERY', {response, reset: false})) },
@@ -124,7 +198,7 @@ var storeModule = {
           var rpcResp = await call({url: serviceName + '/refreshToken', data: {token: store.state.currentUser.token}})
           store.commit('LOGIN', rpcResp)
           store.rootState.mainVue.$emit('login')
-          store.dispatch('mountLiveEvents', {root: true})
+          store.dispatch('mountLiveEvents', {}, {root: true})
         } catch (err) {
           store.commit('LOGOUT')
         }
@@ -136,18 +210,19 @@ var storeModule = {
       var options = store.state.currentUser.rememberMe ? {expires: 5} : {}
       Cookies.set('civil-connect-token', store.state.currentUser.token, options)
       store.rootState.mainVue.$emit('login')
-      store.dispatch('saveToLocalStorage', payload)
+      store.dispatch('saveToLocalStorage')
     },
     logout (store, payload) {
       store.commit('LOGOUT', payload)
       Cookies.remove('civil-connect-token')
       store.rootState.mainVue.$emit('logout')
-      store.dispatch('saveToLocalStorage', payload)
+      store.dispatch('saveToLocalStorage')
     },
-    saveToLocalStorage (store, payload) {
+    saveToLocalStorage (store) {
       var temp = store.state.currentUser.token
       delete store.state.currentUser.token
       localStorage.setItem(serviceName, JSON.stringify(store.state))
+      console.log('saveToLocalStorage', localStorage.getItem(serviceName))
       store.state.currentUser.token = temp
     },
     createGuest (store, payload) {
@@ -214,8 +289,8 @@ var storeModule = {
   },
   getters: {
     rpcValidate: (state, getters) => ({rpcMethod, data, multiToSingle = false}) => {
-      console.log('rpcValidate', {rpcMethod, data, schema: state.rpcServiceInfo.schema[rpcMethod]})
-      var schema = state.rpcServiceInfo.schema && state.rpcServiceInfo.schema[rpcMethod] ? state.rpcServiceInfo.schema[rpcMethod] : {}
+      console.log('rpcValidate', {rpcMethod, data, schema: state})
+      var schema = state.rpcServiceInfo && state.rpcServiceInfo.schema && state.rpcServiceInfo.schema[rpcMethod] ? state.rpcServiceInfo.schema[rpcMethod] : {}
       console.log('rpcValidate schema', schema)
       if (multiToSingle && schema.properties.items) schema = schema.properties.items.items
       var result = validate(schema, data)

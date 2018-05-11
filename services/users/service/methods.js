@@ -25,6 +25,7 @@ var queueObj = require('sint-bit-utils/utils/queueObj')(resultsError)
 
 var itemId = (item) => uuidv4()
 
+var serviceStarted = false
 // const getToken = async function (id, meta, jwt, permissions) {
 //   // var permissions = await netClient.emit('getPermissions', {id}, meta)
 //   return auth.createToken(id, permissions, meta, CONFIG.jwt)
@@ -115,7 +116,7 @@ const getViews = async (ids, select = '*', guest = false) => {
 // }
 // var rpcSubscriptionsGetPermissions = (items, meta) => netClient.rpcCall({to: 'subscriptions', method: 'getPermissions', data: {items}, meta})
 
-var basicMutationRequestMulti = async function ({ids, dataArray, mutation, extend, meta, func, returnViews}) {
+var basicMutationRequestMulti = async function ({ids, dataArray, mutation, extend, meta, func = () => {}, returnViews}) {
   var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
   var tokenData = await auth.getTokenDataFromToken(meta, CONFIG.jwt)
   // debug('basicMutationRequestMulti tokenData', {meta, jwt: CONFIG.jwt})
@@ -134,7 +135,7 @@ var basicMutationRequestMulti = async function ({ids, dataArray, mutation, exten
   await resultsQueue.resolve((dataToResolve) => mutateAndUpdate(mutation, dataToResolve, meta, currentStates, returnViews))
   return resultsQueue.returnValue()
 }
-var basicMutationRequest = async function ({id, data, mutation, meta, func}) {
+var basicMutationRequest = async function ({id, data, mutation, meta, func = () => {}, returnViews}}) {
   var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
   var tokenData = await auth.getTokenDataFromToken(meta, CONFIG.jwt)
   var permissionsArray = tokenData.permissions || []
@@ -142,7 +143,8 @@ var basicMutationRequest = async function ({id, data, mutation, meta, func}) {
   debug('basicMutationRequest currentStates', {tokenData, permissions, userId, permissionsArray})
   var currentState = await getViews(id, '*', false)
   await func(data, currentState, userId, permissions)
-  await mutateAndUpdate(mutation, [{id, data}], meta, [ currentState ])
+  var results = await mutateAndUpdate(mutation, [{id, data}], meta, [ currentState ], returnViews)
+  return results[0]
 }
 
 module.exports = {
@@ -198,6 +200,10 @@ module.exports = {
     await DB.createIndex(['guest'])
     await DB.createIndex(['VIEW_META.updated'])
     await DB.createIndex(['DOC_TYPE'])
+    serviceStarted = true
+  },
+  status: async function (reqData, meta, getStream) {
+    return {serviceStarted}
   },
   rawMutateMulti: async function (reqData, meta, getStream) {
     if (reqData.extend)reqData.items.forEach(item => Object.assign(item.data, reqData.extend))
@@ -222,10 +228,26 @@ module.exports = {
     // var noErrorViews = response.views.filter((value, index) => response.results[index].__RESULT_TYPE__ !== 'error')
     var event = await netClient.emit('USERS_CREATED', {results: noErrorItems}, meta)
     debug('user createMulti', {noErrorItems, event})
-
-    // await sendMail('userCreated', {to: reqData.email, from: CONFIG.mailFrom, subject: 'Benvenuto in CivilConnect - conferma la mail'}, Object.assign({CONFIG}, reqData))
-    return {results: response.results}
+    var errors = response.results.filter(value => value.__RESULT_TYPE__ === 'error').map((currentState, index) => index)
+    var results = response.results.map((currentState, index) => {
+      if (currentState.emailConfirmationCode) delete currentState.emailConfirmationCode
+      return currentState
+    })
+    log('user createMulti', {results, errors})
+    return {results, errors}
   },
+  // create: async function (reqData, meta, getStream) {
+  //   if (reqData.password !== reqData.confirmPassword) throw new Error('Confirm Password not equal')
+  //   var currentState = await getUserByMail(reqData.email)
+  //   if (currentState)  throw new Error( 'Users exists')
+  //   reqData.emailConfirmationCode = uuidv4()
+  //   var data = reqData
+  //   await basicMutationRequest({id, data, mutation: 'updatePassword', meta, func})
+  // 
+  //   var data = {password: require('bcrypt').hashSync(reqData.password, 10)}
+  //   await mutateAndUpdate('assignPassword', [{id, data}], meta, [currentState])
+  //   return {success: `Password assigned`}
+  // },
   readMulti: async function (reqData, meta, getStream) {
     var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
     var tokenData = await auth.getTokenDataFromToken(meta, CONFIG.jwt)
@@ -237,6 +259,7 @@ module.exports = {
       // var permissions = subscriptions.permissionsByDashId[currentState.dashId]
       // if (!permissions['usersRead']) return resultsError(currentState, 'User can\'t read users')
       if ((currentState.deleted || !currentState.confirmed) && !permissions['usersReadAll'] && currentState.id !== userId) return resultsError(currentState, 'User cant read hidden users')
+      if (currentState.emailConfirmationCode) delete currentState.emailConfirmationCode
       return currentState
     })
     var errors = results.filter(value => value.__RESULT_TYPE__ === 'error').map((currentState, index) => index)
@@ -402,26 +425,27 @@ module.exports = {
     await basicMutationRequest({id: picMeta.userId, data: {picId: reqData.id}, mutation: 'deletePic', meta, func})
     picMeta.deleted = true
     await DB.put('pic', picMeta, reqData.id + '_meta')
-    return {success: `Pic Deleted`, data: picMeta}
+    return {success: `Pic Deleted`, id: reqData.id, data: picMeta}
   },
   async confirmEmail (reqData, meta = {directCall: true}, getStream = null) {
     var currentState = await getUserByMail(reqData.email)
     if (!currentState) throw new Error('email is confirmed or user is not registered')
     if (currentState.emailConfirmationCode !== reqData.emailConfirmationCode) throw new Error('email confirmation code not valid')
     var id = currentState.id
-    await mutateAndUpdate('confirmEmail', [{id, data: {}}], meta, [currentState])
-    // // var mutation = await mutate({ data: {}, objId: id, mutation: 'confirmEmail', meta })
-    // // await updateView(id, [mutation])
-    // await addTag(id, 'emailConfirmed', meta)
-    return {success: `Email confirmed`, data: {email: reqData.email}}
+    var result = await basicMutationRequest({id, data: {}, mutation: 'confirmEmail', meta})
+    // await mutateAndUpdate('confirmEmail', [{id, data: {}}], meta, [currentState])
+    // return {success: `Email confirmed`, id, data: {email: reqData.email}}
+    result.success = `Email confirmed`
+    return result
   },
   async  serviceInfo (reqData, meta = {directCall: true}, getStream = null) {
     var schema = require('./schema')
+    // log('serviceInfo', {schema})
     var schemaOut = {}
     for (var i in schema.methods) if (schema.methods[i].public) schemaOut[i] = schema.methods[i].requestSchema
     var mutations = {}
     require('fs').readdirSync(path.join(__dirname, '/mutations')).forEach(function (file, index) { mutations[file] = require(path.join(__dirname, '/mutations/', file)).toString() })
-    debug('serviceInfo', {schema, mutations})
+    // log('serviceInfo', {schema, mutations})
     return {schema: schemaOut, mutations}
   }
 }

@@ -23,9 +23,9 @@ services:
      volumes:
        - ../../notifications:/microservice
        # - ../../../../civil_microservices_shared_modules/:/microservice/node_modules
-       - ../../../NPM/jesus:/microservice/service/node_modules/sint-bit-jesus
-       - ../../../NPM/cqrs:/microservice/service/node_modules/sint-bit-cqrs
-       - ../../../NPM/sint-bit-utils:/microservice/service/node_modules/sint-bit-utils
+       - ../../../NPM/jesus:/microservice/node_modules/sint-bit-jesus
+       - ../../../NPM/cqrs:/microservice/node_modules/sint-bit-cqrs
+       - ../../../NPM/sint-bit-utils:/microservice/node_modules/sint-bit-utils
        - ../../../FS/:/uploads/
 
      networks:

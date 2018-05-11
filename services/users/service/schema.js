@@ -15,13 +15,15 @@ var pics = { type: 'array', items: pic }
 var picFile = { type: 'object', properties: { mimetype: { type: 'string' }, path: { type: 'string' } }, required: ['path'] }
 var jsRes = {
   properties: {
+    __RESULT_TYPE__: { type: 'string' },
     success: { type: 'string' },
     error: { type: 'string' },
     data: { type: 'object' },
     method: { type: 'string' },
     type: { type: 'string' },
     id: { type: 'string' },
-    mutation: {type: 'string'}
+    mutation: {type: 'string'},
+    mutationData: { type: 'object' }
   }
   // 'additionalProperties': true
 }
@@ -82,6 +84,12 @@ module.exports = {
       responseType: 'response',
       requestSchema: {},
       responseSchema: {properties: {'schema': {type: 'object'}, 'mutations': {type: 'object'}}}
+    },
+    'status': {
+      public: true,
+      responseType: 'response',
+      requestSchema: {},
+      responseSchema: {type: 'object', 'additionalProperties': true}
     },
     'createMulti': {
       public: true,

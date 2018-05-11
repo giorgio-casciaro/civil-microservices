@@ -1,25 +1,17 @@
 <template>
-  <form class="AssignPassword" @click="active=true" @submit.prevent="waiting=true;call('users','assignPassword',form,succ,err)" @input="validation=validate('users','assignPassword',form)" :class="{validForm:validation.valid,activeForm:active}">
-    <label class="email" v-if="!this.setEmail"  :class="{notValid:validation.errors.email}"><strong>{{strEmail}}</strong><input :placeholder="strPhEmail" :disabled="waiting" type="email" v-model="form.email" /></label>
-    <label class="password" :class="{notValid:validation.errors.password}"><strong>{{strPassword}}</strong><input v-model="form.password" :disabled="waiting"  type="password"/></label>
-    <label class="confirmPassword" :class="{notValid:validation.errors.confirmPassword}"><strong>{{strConfirmPassword}}</strong><input v-model="form.confirmPassword"  :disabled="waiting"  type="password"/></label>
-    <input type="submit" class="assignPassword button" :disabled="waiting" :class="{error,success,waiting}" :value="strAssignPassword">
-    <div v-if="success" class="success" v-html="success"></div>
-    <div v-if="error" class="error" v-html="error"></div>
-    <div v-if="errors" class="errors">
-      <div v-for="(fieldErrors,fieldName) in errors" class="fieldErrors">
-        <div v-for="error in fieldErrors" class="error"><strong>{{fieldName}}</strong> {{t(error)}}</div>
-      </div>
-    </div>
+  <form class="AssignPassword" @click="active=true" @submit.prevent="waiting=true;action_rpcCallAndMutationSingle({rpcMethod:'assignPassword',data:form,success:succ,error:err})" @input="validation=getter_rpcValidate({rpcMethod:'assignPassword',data:form,multiToSingle:true})" :class="{validForm:validation.valid,activeForm:active}">
+    <label class="email" v-if="!this.setEmail"  :class="{notValid:validation.errors.email}"><strong>{{getter_t('Email')}}</strong><input :placeholder="getter_t('email@esempio.com')" :disabled="waiting" type="email" v-model="form.email" /></label>
+    <label class="password" :class="{notValid:validation.errors.password}"><strong>{{getter_t('Password')}}</strong><input v-model="form.password" :disabled="waiting"  type="password"/></label>
+    <label class="confirmPassword" :class="{notValid:validation.errors.confirmPassword}"><strong>{{getter_t('Conferma Password')}}</strong><input v-model="form.confirmPassword"  :disabled="waiting"  type="password"/></label>
+    <input type="submit" class="assignPassword button" :disabled="waiting" :class="{error,success,waiting}" :value="getter_t('Assegna password')">
+    <successAndErrors :success="success"  :error="error" :errors="errors" />
   </form>
 </template>
 
 <script>
-import {translate} from '@/i18n'
-var t= function(string) { return translate( 'users', string) }
-import {validate,call} from '@/api'
-
+import storeMixin from '../storeMixin'
 export default {
+  mixins: [storeMixin],
   name: 'AssignPassword',
   created () {
     if(this.setEmail)this.form.email=this.setEmail
@@ -42,31 +34,41 @@ export default {
       }
     }
   },
-  computed: {
-    strPhEmail: function () { return t( 'email@esempio.com') },
-    strAssignPassword: function () { return t(  'Assegna password') },
-    strEmail: function () { return t(  'Email') },
-    strPassword: function () { return t(  'Password') },
-    strConfirmPassword: function () { return t(  'Conferma password') }
-  },
+  // computed: {
+  //   strPhEmail: function () { return t( 'email@esempio.com') },
+  //   strAssignPassword: function () { return t(  'Assegna password') },
+  //   strEmail: function () { return t(  'Email') },
+  //   strPassword: function () { return t(  'Password') },
+  //   strConfirmPassword: function () { return t(  'Conferma password') }
+  // },
   methods: {
-    validate,
-    t,
-    call,
-    err (msg, extra = false) {
-        this.error = this.errors= this.waiting=false
-        setTimeout(()=>this.error = t( msg),1)
-        setTimeout(()=>this.errors = extra.errors,1)
-        this.$emit("error")
+    err (errorObj, extra = false) {
+      this.error = this.errors= this.waiting=false
+      setTimeout(()=>this.error = this.getter_t(errorObj.error),1)
+      // setTimeout(()=>this.errors = extra.errors,1)
+      this.$emit("error")
     },
     succ (body) {
       this.waiting=false
-      this.$store.commit('users/REGISTERED', body)
-      this.success = t( 'Password Assegnata')
+      // this.$store.commit('users/EMAIL_CONFIRMED', body)
+      this.success = this.getter_t( 'Password Assegnata')
       setTimeout(()=>this.$emit("success"),2000)
-      //autologin
-      this.call('users','login',this.form,(body)=>this.$store.dispatch('users/login', body),(error)=>console.log(error))
+      this.action_rpcCallAndStoreMutationSingle({rpcMethod:'login',mutation:'LOGIN',data:{email:this.form.email,password:this.form.password},success:(msg)=>console.log("action_rpcCallAndStoreMutation success",msg),error:(msg)=>console.log("action_rpcCallAndStoreMutation error",msg)})
     }
+    // err (msg, extra = false) {
+    //     this.error = this.errors= this.waiting=false
+    //     setTimeout(()=>this.error = t( msg),1)
+    //     setTimeout(()=>this.errors = extra.errors,1)
+    //     this.$emit("error")
+    // },
+    // succ (body) {
+    //   this.waiting=false
+    //   this.$store.commit('users/REGISTERED', body)
+    //   this.success = t( 'Password Assegnata')
+    //   setTimeout(()=>this.$emit("success"),2000)
+    //   //autologin
+    //   this.call('users','login',this.form,(body)=>this.$store.dispatch('users/login', body),(error)=>console.log(error))
+    // }
   }
 }
 </script>

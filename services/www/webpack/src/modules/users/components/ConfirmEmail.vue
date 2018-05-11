@@ -1,5 +1,5 @@
 <template>
-  <form class="Login" @click="active=true" @submit.prevent="waiting=true; call('users','confirmEmail',form,succ,err)" @input="validation=validate('users','confirmEmail',form)" :class="{validForm:validation.valid,activeForm:active}">
+  <form class="Login" @click="active=true" @submit.prevent="waiting=true; action_rpcCallAndMutationSingle({rpcMethod:'confirmEmail',data:form,success:succ,error:err})" @input="validation=getter_rpcValidate({rpcMethod:'confirmEmail',data:form,multiToSingle:true})" :class="{validForm:validation.valid,activeForm:active}">
     <label class="email" v-if="!this.setEmail"  :class="{notValid:validation.errors.email}"><strong>{{getter_t('Email')}}</strong><input :placeholder="getter_t('Email')" :disabled="waiting" type="email" v-model="form.email" /></label>
     <label class="code"  :class="{notValid:validation.errors.emailConfirmationCode}" ><strong>{{getter_t('Codice conferma email')}}</strong><input v-model="form.emailConfirmationCode" :disabled="waiting"  type="text" /></label>
     <input type="submit" class="confirmEmail button" :disabled="waiting" :class="{error,success,waiting}" :value="getter_t('Conferma email')">
@@ -33,15 +33,15 @@ export default {
     }
   },
   methods: {
-    err (msg, extra = false) {
+    err (errorObj, extra = false) {
       this.error = this.errors= this.waiting=false
-      setTimeout(()=>this.error = this.getter_t( msg),1)
-      setTimeout(()=>this.errors = extra.errors,1)
+      setTimeout(()=>this.error = this.getter_t(errorObj.error),1)
+      // setTimeout(()=>this.errors = extra.errors,1)
       this.$emit("error")
     },
     succ (body) {
       this.waiting=false
-      this.$store.commit('users/EMAIL_CONFIRMED', body)
+      // this.$store.commit('users/EMAIL_CONFIRMED', body)
       this.success = this.getter_t( 'Email confermata')
       setTimeout(()=>this.$emit("success"),2000)
     }

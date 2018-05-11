@@ -11,7 +11,7 @@
       <!-- <Notifications></Notifications> -->
     </div>
     <div v-if="!$store.state.users.logged">
-      <RegisterOrLogin setShow="Login" @loginSuccess="$router.push('/dashboards/')" @registerSuccess="$router.push('/registration/ConfirmEmail/'+$store.state.users.email)"></RegisterOrLogin>
+      <RegisterOrLogin setShow="Login" @loginSuccess="$router.push('/dashboards/')" ></RegisterOrLogin>
     </div>
     <pre>{{$store.state.users}}</pre>
   </div>

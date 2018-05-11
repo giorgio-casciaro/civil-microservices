@@ -4,7 +4,7 @@
     <h1>Civil Connect</h1>
     <p>Crea e organizza la tua community o segui quella più vicina a te.</p>
     <!-- <pre>{{$store.state}}</pre> -->
-    <UsersRegisterOrLogin v-if="!$store.state.users.currentUser.logged" setShow="Register" @loginSuccess="$router.push('/dashboards/')" @registerSuccess="$router.push('/registration/ConfirmEmail/'+$store.state.users.currentUser.email)"></UsersRegisterOrLogin>
+    <!-- <UsersRegisterOrLogin v-if="!$store.state.users.currentUser.logged" setShow="Register" @loginSuccess="$router.push('/dashboards/')" ></UsersRegisterOrLogin> -->
     <!-- <DashboardsList></DashboardsList> -->
     <!-- <SubscriptionsByUser></SubscriptionsByUser> -->
     <!-- <div><a class="button" href="/#/dashboardCreate">Crea Bacheca</a></div> -->
@@ -12,7 +12,7 @@
 </template>
 
 <script>
-import UsersRegisterOrLogin from '@/modules/users/components/RegisterOrLogin'
+// import UsersRegisterOrLogin from '@/modules/users/components/RegisterOrLogin'
 import pageMixin from './pageMixin'
 // import DashboardsList from '@/modules/dashboards/components/List'
 // import SubscriptionsByUser from '@/modules/subscriptions/components/ByUser'
@@ -20,7 +20,7 @@ export default {
   name: 'Home',
   mixins: [pageMixin],
   components: {
-    UsersRegisterOrLogin,
+    // UsersRegisterOrLogin,
     // DashboardsList,
     // SubscriptionsByUser
   },

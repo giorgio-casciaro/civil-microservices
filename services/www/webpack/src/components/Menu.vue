@@ -8,10 +8,11 @@
     </form>
   </header>
   <ul>
-    <li><a href="https://vuejs.org" target="_blank">Chi siamo</a></li>
-    <li><a href="https://forum.vuejs.org" target="_blank">Supporto</a></li>
-    <br>
-    <li><a href="http://vuejs-templates.github.io/webpack/" target="_blank">Docs for This Template</a></li>
+    <li><router-link to="/" >Home</router-link></li>
+    <li><router-link to="/registration" >Registrazione</router-link></li>
+    <li><router-link to="/login" >Login</router-link></li>
+    <li><router-link to="/profile" >Profilo</router-link></li>
+    <li><router-link to="/dashboards" >Dashboards</router-link></li>
   </ul>
 </section>
 </template>

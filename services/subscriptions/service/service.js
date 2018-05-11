@@ -12,7 +12,7 @@ process.on('unhandledRejection', (err, p) => {
 })
 module.exports = async function start () {
   var CONFIG = require('./config')
-  var getServiceSchema = require('sint-bit-utils/utils/schema')(CONFIG.schemaHost, require('./schema'), CONFIG.service.serviceName)
+  var getServiceSchema = await require('sint-bit-utils/utils/schema')(CONFIG.schemaHost, require('./schema'), CONFIG.service.serviceName)
   var DI = {
     serviceName: CONFIG.service.serviceName,
     serviceId: CONFIG.service.serviceId || generateId(),

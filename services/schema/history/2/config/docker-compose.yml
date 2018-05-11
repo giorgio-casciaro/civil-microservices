@@ -15,8 +15,8 @@ services:
       NODE_ENV:       development
     volumes:
        - ../../schema:/microservice
-       - ../../../NPM/jesus:/microservice/service/node_modules/sint-bit-jesus
-       - ../../../NPM/cqrs:/microservice/service/node_modules/sint-bit-cqrs
+       - ../../../NPM/jesus:/microservice/node_modules/sint-bit-jesus
+       - ../../../NPM/cqrs:/microservice/node_modules/sint-bit-cqrs
     depends_on:
       - aerospike
     ports:

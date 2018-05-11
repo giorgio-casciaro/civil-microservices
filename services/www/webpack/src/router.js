@@ -3,14 +3,15 @@ import Router from 'vue-router'
 import Menu from '@/components/Menu'
 import Account from '@/components/Account'
 import Home from '@/pages/Home'
-import Registration from '@/pages/Registration'
+import UsersRegistration from '@/pages/UsersRegistration'
+import UsersLogin from '@/pages/UsersLogin'
+import UsersProfile from '@/pages/UsersProfile'
 // import Dashboards from '@/pages/Dashboards'
 // import Dashboard from '@/pages/Dashboard'
 // import DashboardSubscriptions from '@/pages/DashboardSubscriptions'
 // import DashboardEditInfo from '@/pages/EditInfo'
 // import DashboardEditMaps from '@/pages/EditMaps'
 // import DashboardEditImages from '@/pages/EditImages'
-// import Profile from '@/pages/Profile'
 
 Vue.use(Router)
 
@@ -25,20 +26,29 @@ export default (extraRoutes = []) => {
         account: Account
       }
     },
-    // {
-    //   path: '/profile/',
-    //   name: 'Profilo',
-    //   components: {
-    //     default: Profile,
-    //     menu: Menu,
-    //     account: Account
-    //   }
-    // },
+    {
+      path: '/profile/',
+      name: 'Profilo',
+      components: {
+        default: UsersProfile,
+        menu: Menu,
+        account: Account
+      }
+    },
     {
       path: '/registration/:step?/:email?/:emailConfirmationCode?',
       name: 'Registrazione',
       components: {
-        default: Registration,
+        default: UsersRegistration,
+        menu: Menu,
+        account: Account
+      }
+    },
+    {
+      path: '/login/:email?',
+      name: 'UsersLogin',
+      components: {
+        default: UsersLogin,
         menu: Menu,
         account: Account
       }

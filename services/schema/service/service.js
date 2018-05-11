@@ -2,7 +2,15 @@ const log = (msg, data) => { console.log('\n' + JSON.stringify(['LOG', 'MAIN', m
 const debug = (msg, data) => { if (process.env.debugMain)console.log('\n' + JSON.stringify(['DEBUG', 'MAIN', msg, data])) }
 const error = (msg, data) => { console.log('\n' + JSON.stringify(['ERROR', 'MAIN', msg, data])); console.error(data) }
 
+process.on('unhandledRejection', (err, p) => {
+  console.error(err)
+  console.log('An unhandledRejection occurred')
+  console.log(`Rejected Promise: ${p}`)
+  console.log(`Rejection: ${err}`)
+})
+
 module.exports = async function service () {
+  var lookSetServiceSchema = false
   // BASE
   const CONFIG = require('./config')
   const getConsole = (serviceName, serviceId, pack) => require('sint-bit-utils/utils/utils').getConsole({error: true, debug: true, log: true, warn: true}, serviceName, serviceId, pack)
@@ -51,7 +59,7 @@ module.exports = async function service () {
     // SCHEMA = await loadSchema()
     var schemaUpdated = false
     var serviceName
-    for (serviceName in SCHEMA) {
+    for (serviceName in SCHEMA.services) {
       if (!liveSignals[serviceName]) {
         delete SCHEMA.services[serviceName]
         schemaUpdated = true
@@ -109,12 +117,18 @@ module.exports = async function service () {
   })
   app.post('/setServiceSchema', async function (req, res) {
     CONSOLE.hl('setServiceSchema', req.body.service)
+    while (lookSetServiceSchema) {
+      CONSOLE.log('lookSetServiceSchema', req.body.service)
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+    }
+    lookSetServiceSchema = true
     SCHEMA = await loadSchema()
     SCHEMA.services[req.body.service] = JSON.parse(req.body.schema)
     liveSignal(req.body.service)
     await saveSchema()
     res.setHeader('Content-Type', 'application/json')
     res.send({success: 'schema received'})
+    lookSetServiceSchema = false
   })
   app.post('/removeServiceSchema', async function (req, res) {
     try {

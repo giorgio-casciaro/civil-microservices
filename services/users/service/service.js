@@ -12,7 +12,8 @@ process.on('unhandledRejection', (err, p) => {
 })
 module.exports = async function start () {
   var CONFIG = require('./config')
-  var getServiceSchema = require('sint-bit-utils/utils/schema')(CONFIG.schemaHost, require('./schema'), CONFIG.service.serviceName)
+  console.log(`USERS  getServiceSchema`)
+  var getServiceSchema = await require('sint-bit-utils/utils/schema')(CONFIG.schemaHost, require('./schema'), CONFIG.service.serviceName)
   var DI = {
     serviceName: CONFIG.service.serviceName,
     serviceId: CONFIG.service.serviceId || generateId(),
@@ -31,7 +32,10 @@ module.exports = async function start () {
 
   var netClient = jesusClient(DI)
   var netServer = jesusServer(DI)
+
+  console.log(`USERS  methods.init(netClient)`)
   await methods.init(netClient)
+  console.log(`USERS  netServer.start`)
   netServer.start()
   return {
     DI,

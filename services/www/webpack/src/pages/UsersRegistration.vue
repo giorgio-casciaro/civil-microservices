@@ -5,14 +5,14 @@
       <h3 v-html="getter_t('Registrazione')"></h3>
       <p v-html="getter_t('Registrati gratis e usa a pieno la piattaforma')"></p>
     </header>
-    <Register @success="goToStep('ConfirmEmail','/registration/ConfirmEmail/',$store.state.users.currentUser.email)"></Register>
+    <Register  @success="respBody=>goToStep('ConfirmEmail','/registration/ConfirmEmail/',respBody)"></Register>
   </div>
   <div v-if="step==='ConfirmEmail'">
     <header>
       <h3 v-html="getter_t('Conferma Mail')"></h3>
       <p v-html="getter_t('Controlla la tua mail e inserisci di seguito il codice che ti abbiamo inviato')"></p>
     </header>
-    <ConfirmEmail @success="goToStep('AssignPassword','/registration/AssignPassword/',$store.state.users.currentUser.email)" :setEmail="email" :setEmailConfirmationCode="emailConfirmationCode"></ConfirmEmail>
+    <ConfirmEmail @success="goToStep('AssignPassword','/registration/AssignPassword/')" :setEmail="email" :setEmailConfirmationCode="emailConfirmationCode"></ConfirmEmail>
   </div>
   <div v-if="step==='AssignPassword'">
     <header>
@@ -33,7 +33,6 @@
 import AssignPassword from '@/modules/users/components/AssignPassword'
 import ConfirmEmail from '@/modules/users/components/ConfirmEmail'
 import Register from '@/modules/users/components/Register'
-import Login from '@/modules/users/components/Login'
 import pageMixin from './pageMixin'
 
 export default {
@@ -45,12 +44,14 @@ export default {
       emailConfirmationCode: this.$route.params.emailConfirmationCode
     }
   },
-  components: { AssignPassword, ConfirmEmail, Register, Login },
-  methods: { 
-  goToStep(step,url,email=''){
-    this.$router.push(url+email)
+  components: { AssignPassword, ConfirmEmail, Register},
+  methods: {
+
+  goToStep(step,url,body){
+    console.log("goToStep",step,url,body)
+    if(body&&body.email)this.email=body.email
+    this.$router.push(url+this.email)
     this.step=step
-    this.email=email
   }
 }
 }
