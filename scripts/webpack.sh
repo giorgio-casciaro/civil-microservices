@@ -7,8 +7,8 @@ cd $DIR/..
 # xdg-open https://127.0.0.1/api_static/app/
 # xdg-open https://127.0.0.1/api/app/getPublicApiSchema
 # xdg-open https://127.0.0.1/api/getPublicMethodsSchema
-xdg-open http://localhost:8091/ui/index.html
-xdg-open http://127.0.0.1:8025/
+xdg-open http://0.0.0.0:8091
+xdg-open http://0.0.0.0:8025
 cd services/www/webpack
 npm run dev
 cd ../../..
