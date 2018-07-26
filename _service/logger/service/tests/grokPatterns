@@ -1,4 +1,0 @@
-KUBELOGKUBELOG %{WORD:level}: %{INT:year}/%{INT:month}/%{INT:day} %{INT:hour}:%{INT:minute}:%{NUMBER:second} %{WORD:type} %{WORD:subtype} {%{GREEDYDATA:jsonLog}} {%{GREEDYDATA:jsonLogSecondary}}
-ELASTICSEARCHLOG \[%{TIMESTAMP_ISO8601:timestamp}\]\[%{WORD:level}\s*\]\[%{PROG:logger}\s*\] %{GREEDYDATA:message}
-BASELOG %{GREEDYDATA:log}
-KUBELOG %{GREEDYDATA:log}

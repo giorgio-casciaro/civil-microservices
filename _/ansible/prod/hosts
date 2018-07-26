@@ -1,5 +1,0 @@
-host_01 ansible_port=22 ansible_host=192.0.2.50
-host_02 ansible_port=22 ansible_host=192.0.2.50
-
-[master]
-host_01
