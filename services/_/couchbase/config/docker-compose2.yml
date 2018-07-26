@@ -1,0 +1,134 @@
+# .Service.ID	Service ID
+# .Service.Name	Service name
+# .Service.Labels	Service labels
+# .Node.ID	Node ID
+# .Node.Hostname	Node Hostname
+# .Task.ID	Task ID
+# .Task.Name	Task name
+# .Task.Slot
+version:                                 '3.3'
+services:
+  couchbase:
+    image:                               couchbase/server:community-5.1.1
+    ports:
+      - 8091:8091
+    command:                             bash -c "echo \"$$configureScript\" > /opt/couchbase/configure.sh ;  bash /opt/couchbase/configure.sh "
+    hostname: couchbase.node1
+    networks:
+     microservicesNet
+    volumes:
+       - ../../couchbase/gitignore/node1:/opt/couchbase/var
+    deploy:
+      resources:
+       limits:
+         cpus: '1'
+         memory: 1000M
+      mode:                              global
+      update_config:
+        parallelism: 1
+        delay: 30s
+
+    environment:
+       COUCHBASE_ADMINISTRATOR_USERNAME: Administrator
+       COUCHBASE_ADMINISTRATOR_PASSWORD: password
+       COUCHBASE_BUCKET:                 default
+       COUCHBASE_BUCKET_PASSWORD:
+       configureScript:                  |-
+          set -m
+          set -x
+
+          echo "CLUSTER IP"
+          echo $$(hostname --ip-address)
+          # echo $$(hostname --ip-address)  > /opt/couchbase/var/lib/couchbase/ip
+
+          ip=$$(hostname --ip-address)
+
+          /entrypoint.sh couchbase-server &
+
+
+          until $$(curl --output /dev/null --silent --head --fail http://0.0.0.0:8091/pools); do
+              printf '.'
+              sleep 1
+          done
+
+          until $$(curl --output /dev/null --silent --head --fail http://couchbase.node1:8091/pools); do
+              printf '.'
+              sleep 1
+          done
+
+          sleep 5
+
+          curl -v http://0.0.0.0:8091/node/controller/setupServices -d services=kv%2Cn1ql%2Cindex%2Cfts
+          curl -v http://0.0.0.0:8091/settings/web -d port=8091 -d username=$$COUCHBASE_ADMINISTRATOR_USERNAME -d password=$$COUCHBASE_ADMINISTRATOR_PASSWORD
+          curl -v  -u $$COUCHBASE_ADMINISTRATOR_USERNAME:$$COUCHBASE_ADMINISTRATOR_PASSWORD http://0.0.0.0:8091/pools/default -d memoryQuota=1512 -d indexMemoryQuota=1512 -d ftsMemoryQuota=1512
+          curl -v  -u $$COUCHBASE_ADMINISTRATOR_USERNAME:$$COUCHBASE_ADMINISTRATOR_PASSWORD http://0.0.0.0:8091/nodes/self/controller/settings  -d data_path=%2Fopt%2Fcouchbase%2Fvar%2Flib%2Fcouchbase%2Fdata  -d index_path=%2Fopt%2Fcouchbase%2Fvar%2Flib%2Fcouchbase%2Findexdata
+          curl  -X POST -v  -u $$COUCHBASE_ADMINISTRATOR_USERNAME:$$COUCHBASE_ADMINISTRATOR_PASSWORD http://0.0.0.0:8091/settings/indexes  -d 'storageMode=forestdb'
+
+          echo "CLUCTER NOT ACTIVE - FIRST NODE"
+          # couchbase-cli node-init  --cluster=couchbase.node1:8091 -u $$COUCHBASE_ADMINISTRATOR_USERNAME -p $$COUCHBASE_ADMINISTRATOR_PASSWORD --node-init-hostname couchbase.node1
+          curl  -X POST -v  -u $$COUCHBASE_ADMINISTRATOR_USERNAME:$$COUCHBASE_ADMINISTRATOR_PASSWORD http://0.0.0.0:8091/node/controller/rename -d 'hostname=couchbase.node1'
+          couchbase-cli cluster-init --cluster=couchbase.node1:8091 --cluster-username $$COUCHBASE_ADMINISTRATOR_USERNAME --cluster-password $$COUCHBASE_ADMINISTRATOR_PASSWORD --cluster-name civil-connect --services=data,index,query,fts
+          curl  -X POST -v  -u $$COUCHBASE_ADMINISTRATOR_USERNAME:$$COUCHBASE_ADMINISTRATOR_PASSWORD http://0.0.0.0:8091/settings/indexes  -d 'storageMode=forestdb'
+
+          fg 1
+
+  couchbase_test_node:
+    image:                               couchbase/server:community-5.1.1
+    command:                             bash -c "echo \"$$configureScript\" > /opt/couchbase/configure.sh ;  bash /opt/couchbase/configure.sh "
+    networks:
+     microservicesNet
+    hostname: couchbase.node2
+    deploy:
+      resources:
+       limits:
+         cpus: '1'
+         memory: 1000M
+    environment:
+       COUCHBASE_ADMINISTRATOR_USERNAME: Administrator
+       COUCHBASE_ADMINISTRATOR_PASSWORD: password
+       COUCHBASE_BUCKET:                 default
+       COUCHBASE_BUCKET_PASSWORD:
+       configureScript:                  |-
+          set -m
+          set -x
+
+          echo "CLUSTER IP AND HOSTNAME"
+          hostname couchbase.node2
+          echo $$(hostname --ip-address)
+          echo $$(hostname)
+          echo $$(hostname --ip-address)  > /opt/couchbase/var/lib/couchbase/ip
+
+          until $$(curl --output /dev/null --silent --head --fail http://couchbase.node1:8091/pools); do
+              printf '.'
+              sleep 1
+          done
+
+          /entrypoint.sh couchbase-server &
+
+          until $$(curl --output /dev/null --silent --head --fail http://0.0.0.0:8091/pools); do
+              printf '.'
+              sleep 1
+          done
+
+          sleep 15
+
+          curl -v http://0.0.0.0:8091/node/controller/setupServices -d services=kv%2Cn1ql%2Cindex%2Cfts
+          curl -v http://0.0.0.0:8091/settings/web -d port=8091 -d username=$$COUCHBASE_ADMINISTRATOR_USERNAME -d password=$$COUCHBASE_ADMINISTRATOR_PASSWORD
+          curl -v  -u $$COUCHBASE_ADMINISTRATOR_USERNAME:$$COUCHBASE_ADMINISTRATOR_PASSWORD http://0.0.0.0:8091/pools/default -d memoryQuota=1512 -d indexMemoryQuota=1512 -d ftsMemoryQuota=1512
+          curl -v  -u $$COUCHBASE_ADMINISTRATOR_USERNAME:$$COUCHBASE_ADMINISTRATOR_PASSWORD http://0.0.0.0:8091/nodes/self/controller/settings  -d data_path=%2Fopt%2Fcouchbase%2Fvar%2Flib%2Fcouchbase%2Fdata  -d index_path=%2Fopt%2Fcouchbase%2Fvar%2Flib%2Fcouchbase%2Findexdata
+          curl  -X POST -v  -u $$COUCHBASE_ADMINISTRATOR_USERNAME:$$COUCHBASE_ADMINISTRATOR_PASSWORD http://0.0.0.0:8091/settings/indexes  -d 'storageMode=forestdb'
+
+          echo "CLUCTER ACTIVE - NOT FIRST NODE"
+          # couchbase-cli node-init  --cluster=couchbase.node1:8091 -u $$COUCHBASE_ADMINISTRATOR_USERNAME -p $$COUCHBASE_ADMINISTRATOR_PASSWORD --node-init-hostname couchbase.node2
+          curl  -X POST -v  -u $$COUCHBASE_ADMINISTRATOR_USERNAME:$$COUCHBASE_ADMINISTRATOR_PASSWORD http://0.0.0.0:8091/node/controller/rename -d 'hostname=couchbase.node2'
+          curl -v  -u $$COUCHBASE_ADMINISTRATOR_USERNAME:$$COUCHBASE_ADMINISTRATOR_PASSWORD http://couchbase.node1:8091/controller/addNode -d "hostname=couchbase.node2&user=$$COUCHBASE_ADMINISTRATOR_USERNAME&password=$$COUCHBASE_ADMINISTRATOR_PASSWORD&services=kv%2Cn1ql%2Cindex%2Cfts"
+          couchbase-cli rebalance --cluster=couchbase.node1:8091 --user Administrator --password password
+
+          fg 1
+networks:
+  microservicesNet:
+    driver:                              overlay
+
+
+#/opt/couchbase/var/lib/couchbase/data
+#/opt/couchbase/var/lib/couchbase/data

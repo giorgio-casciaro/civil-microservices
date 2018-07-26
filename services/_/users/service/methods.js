@@ -1,6 +1,7 @@
 const path = require('path')
 const uuidv4 = require('uuid/v4')
 const DB = require('sint-bit-utils/utils/dbCouchbaseV3')
+const EMAIL = require('sint-bit-utils/utils/email')
 var CONFIG = require('./config')
 var mutationsPack = require('sint-bit-cqrs/mutations')({ mutationsPath: path.join(__dirname, '/mutations') })
 const auth = require('sint-bit-utils/utils/auth')
@@ -104,8 +105,8 @@ var defaultResponseSchema = {
 const getUserByMail = async function (email, filterGuest = true) {
   try {
     var results
-    if (filterGuest)results = await DB.query('SELECT item.* FROM users item WHERE DOC_TYPE="view" AND email=$1 LIMIT 1', [email])
-    else results = await DB.query('SELECT item.* FROM users item WHERE DOC_TYPE="view" AND email=$1 and guest IS MISSING OR guest=false LIMIT 1', [email])
+    if (filterGuest)results = await DB.query('SELECT item.* FROM users item WHERE DOC_TYPE="view" AND email=$1 LIMIT 1', [email], true)
+    else results = await DB.query('SELECT item.* FROM users item WHERE DOC_TYPE="view" AND email=$1 and guest IS MISSING OR guest=false LIMIT 1', [email], true)
     debug('getUserByMail', results, email)
     if (!results || !results[0]) return null
     else return results[0]
@@ -177,23 +178,20 @@ var autotestResults = false
 // class MicroserviceEventEmitter extends EventEmitter {}
 // var microserviceEventEmitter = new MicroserviceEventEmitter()
 var serviceMethods = {
-  init: {
-    config: {public: false},
-    exec: async function (setNetClient) {
-      netClient = setNetClient
-      await DB.init(CONFIG.couchbase.url, CONFIG.couchbase.username, CONFIG.couchbase.password, CONFIG.couchbase.bucket)
+  init: async function (setNetClient) {
+    netClient = setNetClient
+    await DB.init(CONFIG.couchbase.url, CONFIG.couchbase.username, CONFIG.couchbase.password, CONFIG.couchbase.bucket)
       // await DB.createIndex('views', ['dashId', 'userId'])
-      await DB.createIndex(['email'])
-      await DB.createIndex(['guest'])
-      await DB.createIndex(['VIEW_META.updated'])
-      await DB.createIndex(['DOC_TYPE'])
+    await DB.createIndex(['email'])
+    await DB.createIndex(['guest'])
+    await DB.createIndex(['VIEW_META.updated'])
+    await DB.createIndex(['DOC_TYPE'])
 
-      autotestResults = await serviceAutotest()
-      setInterval(async arg => { autotestResults = await serviceAutotest() }, 60000)
+    autotestResults = await serviceAutotest()
+    setInterval(async arg => { autotestResults = await serviceAutotest() }, 60000)
 
-      serviceStarted = true
-      return true
-    }
+    serviceStarted = true
+    return true
   },
   autotest: {
     config: {public: false},
@@ -218,28 +216,28 @@ var serviceMethods = {
     exec: async function (reqData, meta = {directCall: true}, getStream = null) {
       log('serviceMethods', serviceMethods)
       var schemaOut = {}
-      for (var i in serviceMethods) if (serviceMethods[i].config.public) schemaOut[i] = serviceMethods[i].request
+      for (var i in serviceMethods) if (serviceMethods[i].config && serviceMethods[i].config.public) schemaOut[i] = serviceMethods[i].request
       var mutations = {}
       require('fs').readdirSync(path.join(__dirname, '/mutations')).forEach(function (file, index) { mutations[file] = require(path.join(__dirname, '/mutations/', file)).toString() })
       return {schema: schemaOut, mutations}
     }
   },
-  getEvents: {
-    config: {public: true, stream: true, upload: false},
-    request: {properties: {'type': {type: 'string'}, 'service': {type: 'string'}}},
-    response: false,
-    exec: async function (reqData, meta = {directCall: true}, getStream = null) {
-      var stream = getStream()
-      var listener = (event) => {
-        try { stream.write(event) } catch (err) {
-          stream.end(event)
-          netClient.off(reqData.type, listener)
-        }
-      }
-      netClient.on(reqData.type, listener, reqData.service)
-    }
-
-  },
+  // getEvents: {
+  //   config: {public: true, stream: true, upload: false},
+  //   request: {properties: {'type': {type: 'string'}, 'service': {type: 'string'}}},
+  //   response: false,
+  //   exec: async function (reqData, meta = {directCall: true}, getStream = null) {
+  //     var stream = getStream()
+  //     var listener = (event) => {
+  //       try { stream.write(event) } catch (err) {
+  //         stream.end(event)
+  //         netClient.off(reqData.type, listener)
+  //       }
+  //     }
+  //     netClient.on(reqData.type, listener, reqData.service)
+  //   }
+  //
+  // },
   emitEvent: {
     config: {public: false, stream: false, upload: false},
     request: {properties: {'type': {type: 'string'}, 'data': {type: 'object'}}},
@@ -276,9 +274,10 @@ var serviceMethods = {
       if (currentState) throw new Error('Users exists')
       reqData.emailConfirmationCode = uuidv4()
       var id = reqData.id = itemId(reqData)
-    // var tokenData = await getTokenData(meta)
+      // var tokenData = await getTokenData(meta)
       var mutation = mutate(id, 'create', meta, reqData)
       var view = await saveMutationsAndUpdateView(id, [mutation])
+      EMAIL.sendMail({from: CONFIG.smtp.from, to: reqData.email, template: {text: '${emailConfirmationCode}', html: '${emailConfirmationCode}', subject: 'Confirm your email'}, templateData: reqData}, CONFIG.smtp)
       await netClient.emit('USER_CREATED', {view}, meta)
       return {success: `User created`, id, mutations: [mutation]}
     }},

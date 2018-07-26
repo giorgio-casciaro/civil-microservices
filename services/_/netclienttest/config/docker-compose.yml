@@ -69,6 +69,11 @@ services:
        - ../../../NPM/sint-bit-utils:/microservice/node_modules/sint-bit-utils
      networks:
        - microservicesNet
+     # ports:
+     #  - target:        9229
+     #    published:     9230
+     #    protocol:      tcp
+     #    mode:          host
      deploy:
        resources:
         limits:

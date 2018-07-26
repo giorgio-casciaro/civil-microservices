@@ -1,12 +1,9 @@
 process.on('unhandledRejection', function (reason) {
-  console.error('oops', reason)
+  console.error('oops unhandledRejection', reason || new Error('unhandledRejection'))
   process.exit(1)
 })
 
 var startTest = async function () {
-  const wait = require('sint-bit-utils/utils/wait')
-  await wait.service('http://couchbase:8091/', 5000)
-
   var SERVICE = await require('../service')()
   var netClient = SERVICE.netClient
   // await new Promise((resolve) => setTimeout(resolve, 5000))

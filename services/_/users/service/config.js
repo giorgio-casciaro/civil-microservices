@@ -7,12 +7,13 @@ module.exports = {
   // sendEmails: process.env.sendEmails || true,
   // mailFrom: process.env.mailFrom || 'notifications@civilconnect.it',
   // uploadPath: process.env.uploadPath || '/upload/',
-  // smtp: process.env.smtpConfigJson ? JSON.parse(process.env.smtpConfigJson) : {
-  //   host: '127.0.0.1',
-  //   port: 1025,
-  //   secure: false,
-  //   debug: true
-  // },
+  smtp: process.env.smtpConfigJson ? JSON.parse(process.env.smtpConfigJson) : {
+    host: '127.0.0.1',
+    from: 'info@civilconnect.it',
+    port: 1025,
+    secure: false,
+    debug: true
+  },
   http: {
     'url': `${process.env.netHost || '0.0.0.0'}:${process.env.netHostHttpPublicPort || '80'}`,
     'cors': process.env.netCors || process.env.netHost || '127.0.0.1'

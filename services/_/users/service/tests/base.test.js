@@ -33,6 +33,8 @@ var startTest = async function (netClient) {
     }
   }
   var apiCallInternal = async (method, data, meta, asStream) => {
+    // rpc: async (serviceName, methodName, data, meta, asStream, toEveryTask = false, addedStream = false, removedStream = false) => {
+
     var response = await netClient.rpc('civil-microservices_users', method, data, meta, asStream)
     // log('apiCallInternal response', {response})
     return response
@@ -104,28 +106,35 @@ var startTest = async function (netClient) {
   mainTest.sectionHead('GET EVENTS')
   // mainTest.consoleResume()
   context = await setContext({ data: { }, users: { '11111111-1111-1111-1111-111111111111': {permissions: ['dashboardsCreate']} }, entities: [] })
-  test = await apiCallInternal('getEvents', {type: 'log'}, {token: context.tokens['11111111-1111-1111-1111-111111111111']}, true)
+  test = await apiCallInternal('getEvents', {type: 'log', service: 'test'}, {token: context.tokens['11111111-1111-1111-1111-111111111111']}, true)
   var eventsCounter = 0
-  test.on('data', (data) => { log('test getEvents stream ondata >>>', data); eventsCounter++ })
+  test.on('readable', () => { while ((test.read()) !== null) { eventsCounter++ } }).on('error', (data) => log('stream error', data)).on('end', (data) => log('stream end', data))
+  // test.on('data', (data) => { log('test getEvents stream ondata >>>', data); eventsCounter++ })
   for (var i = 0; i < 10; i++) await apiCallInternal('emitEvent', {type: 'log', data: {'test': i}}, {token: context.tokens['11111111-1111-1111-1111-111111111111']}, true)
-  await test.end()
   await new Promise((resolve) => setTimeout(resolve, 1000))
+  // mainTest.consoleResume()
+  await test.destroy()
+  await new Promise((resolve) => setTimeout(resolve, 5000))
   mainTest.testRaw('GET EVENTS', eventsCounter, (data) => data === 10)
   await context.destroy()
 
+  mainTest.sectionHead('GET EVENTS 2')
   // mainTest.consoleResume()
   context = await setContext({ data: { }, users: { '11111111-1111-1111-1111-111111111111': {permissions: ['dashboardsCreate']} }, entities: [] })
-  var test1 = await apiCallInternal('getEvents', {type: 'log', service: 'test'}, {token: context.tokens['11111111-1111-1111-1111-111111111111']}, true)
-  var test2 = await apiCallInternal('getEvents', {type: 'log', service: 'test'}, {token: context.tokens['11111111-1111-1111-1111-111111111111']}, true)
-  eventsCounter = 0
-  test1.on('data', (data) => { log('test1 getEvents stream ondata >>>', data); eventsCounter++ })
-  test2.on('data', (data) => { log('test2 getEvents stream ondata >>>', data); eventsCounter++ })
+  test = await apiCallInternal('getEvents', {type: 'log', service: 'test'}, {token: context.tokens['11111111-1111-1111-1111-111111111111']}, true)
+  test2 = await apiCallInternal('getEvents', {type: 'log', service: 'test'}, {token: context.tokens['11111111-1111-1111-1111-111111111111']}, true)
+  var eventsBCounter = 0
+  test.on('readable', () => { while ((test.read()) !== null) { log('test1', eventsBCounter); eventsBCounter++ } }).on('error', (data) => log('stream error', data)).on('end', (data) => log('stream end', data))
+  test2.on('readable', () => { while ((test2.read()) !== null) { log('test2', eventsBCounter); eventsBCounter++ } }).on('error', (data) => log('stream error', data)).on('end', (data) => log('stream end', data))
+  //
+  // // test1.on('data', (data) => { log('test1 getEvents stream ondata >>>', data); eventsCounter++ })
+  // // test2.on('data', (data) => { log('test2 getEvents stream ondata >>>', data); eventsCounter++ })
   for (i = 0; i < 10; i++) await apiCallInternal('emitEvent', {type: 'log', data: {'test': i}}, {token: context.tokens['11111111-1111-1111-1111-111111111111']}, true)
-  await test1.end()
-  await test2.end()
-  await new Promise((resolve) => setTimeout(resolve, 1000))
-  mainTest.testRaw('GET EVENTS', eventsCounter, (data) => data === 10)
-  await context.destroy()
+  await new Promise((resolve) => setTimeout(resolve, 10000))
+  await test.destroy()
+  await test2.destroy()
+  mainTest.testRaw('GET EVENTS', eventsBCounter, (data) => data === 10)
+  // await context.destroy()
 
   mainTest.sectionHead('RAW CREATE')
   // mainTest.consoleResume()

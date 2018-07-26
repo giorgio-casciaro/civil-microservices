@@ -2,7 +2,7 @@ version:               '3.3'
 
 services:
    users:
-     image:            giorgiocasciaro/ubuntu-node:v3
+     image:            giorgiocasciaro/ubuntu-node-10:0.0.1
     #  logging:
     #    driver:       none
      working_dir:      /microservice
@@ -20,7 +20,7 @@ services:
        netCors:        http://localhost:82,http://127.0.0.1:82,http://localhost:8080,http://127.0.0.1:8080,http://localhost:10080,http://127.0.0.1:10080
        NODE_ENV:       development
        sendEmails:     'true'
-       smtpConfigJson: '{ "host": "fakesmtp", "port": 1025, "secure": false }'
+       smtpConfigJson: '{ "host": "fakesmtp", "from": "info@civilconnect.it", "port": 1025, "secure": false }'
      volumes:
        - /var/run/docker.sock:/var/run/docker.sock
        - ../../users:/microservice

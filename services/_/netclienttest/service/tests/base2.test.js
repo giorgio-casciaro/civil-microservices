@@ -128,13 +128,13 @@ var startTest = async function (netClient) {
   var eventCallInterval = setInterval(async () => {
     eventCallCounter++
     var eventCallCounterLoc = eventCallCounter
-    eventCallBuffer.push(eventEmitCounter)
+    eventCallBuffer.push(eventCallCounter)
     var test
     try {
       test = await netClient.rpc('civil-microservices_netclientworkers2', 'call', {service: 'civil-microservices_netclientworkers1', method: 'emitEvent', data: {type: 'test2', data: {'test': 'test', eventCallCounter}}})
     } catch (err) {
       test = err.message || err
-      log('rpc error', err)
+      // log('rpc error', err)
     }
     if (!test || !test.success)eventCallErrors.push({test, eventCallCounter: eventCallCounterLoc})
     eventCallResponsesCounter++
@@ -152,118 +152,132 @@ var startTest = async function (netClient) {
 
   await new Promise((resolve) => setTimeout(resolve, 5000))
   log('before SHOTDOWN', {eventCallCounter})
-  log('XXXXXXXXXX SHOTDOWN XXXXXXXXXXXXXXXX ->civil-microservices_netclientworkers1', await netClient.rpc('civil-microservices_netclientworkers1', 'shutdown', {}))
+  try { log('XXXXXXXXXX SHOTDOWN XXXXXXXXXXXXXXXX ->civil-microservices_netclientworkers1', await netClient.rpc('civil-microservices_netclientworkers1', 'shutdown', {})) } catch (err) { log('err', err) }
   await new Promise((resolve) => setTimeout(resolve, 1000))
-  log('XXXXXXXXXX SHOTDOWN XXXXXXXXXXXXXXXX ->civil-microservices_netclientworkers1', await netClient.rpc('civil-microservices_netclientworkers1', 'shutdown', {}))
+  try { log('XXXXXXXXXX SHOTDOWN XXXXXXXXXXXXXXXX ->civil-microservices_netclientworkers1', await netClient.rpc('civil-microservices_netclientworkers1', 'shutdown', {})) } catch (err) { log('err', err) }
   await new Promise((resolve) => setTimeout(resolve, 1000))
-  log('XXXXXXXXXX SHOTDOWN XXXXXXXXXXXXXXXX ->civil-microservices_netclientworkers2', await netClient.rpc('civil-microservices_netclientworkers2', 'shutdown', {}))
+  try { log('XXXXXXXXXX SHOTDOWN XXXXXXXXXXXXXXXX ->civil-microservices_netclientworkers2', await netClient.rpc('civil-microservices_netclientworkers2', 'shutdown', {})) } catch (err) { log('err', err) }
   await new Promise((resolve) => setTimeout(resolve, 1000))
-  log('XXXXXXXXXX SHOTDOWN XXXXXXXXXXXXXXXX ->civil-microservices_netclientworkers2', await netClient.rpc('civil-microservices_netclientworkers2', 'shutdown', {}))
+  try { log('XXXXXXXXXX SHOTDOWN XXXXXXXXXXXXXXXX ->civil-microservices_netclientworkers2', await netClient.rpc('civil-microservices_netclientworkers2', 'shutdown', {})) } catch (err) { log('err', err) }
   log('after SHOTDOWN', {eventCallCounter})
   await new Promise((resolve) => setTimeout(resolve, 5000))
   clearInterval(eventCallInterval)
   log('clearInterval', {eventCallCounter})
-  await new Promise((resolve) => setTimeout(resolve, 5000))
+  await new Promise((resolve) => setTimeout(resolve, 10000))
   var filtered = eventCallBuffer.filter(number => eventReceiverBBuffer.indexOf(number) < 0)
 
   log('eventEmitBBuffer', {eventCallCounter, eventCallResponsesCounter, filtered, eventCallErrorsLength: eventCallErrors.length, total: testEventsBCounter + eventCallErrors.length})
   testEventsB.destroy()
   mainTest.testRaw('SERVICE PROXY TOTAL EVENTS', {eventCallCounter, testEventsBCounter, eventCallErrors}, (data) => data.eventCallCounter <= data.testEventsBCounter + data.eventCallErrors.length)
-  //
-  // mainTest.sectionHead('SERVICE RPC')
-  // mainTest.consoleResume()
-  // var rpcCounter = 0
-  // var rpcOkCounter = 0
-  // var rpcStartTime = Date.now()
-  // var rpcCicles = 10000
-  //
-  // while (rpcCounter < rpcCicles) {
-  //   rpcCounter++
-  //   var random = Math.floor(Math.random() * 1000000)
-  //   var test
-  //   try { test = await netClient.rpc('civil-microservices_netclientworkers1', 'echo', {random}) } catch (err) {
-  //     test = err
-  //     log('rpc error', err)
-  //   }
-  //     // mainTest.testRaw('SERVICE RPC', test, (data) => data.random === random)
-  //     // mainTest.consoleResume()
-  //   if (test && test.random === random)rpcOkCounter++
-  // }
-  // await new Promise((resolve) => setTimeout(resolve, 1000))
-  // log('osInfo', await netClient.rpc('civil-microservices_netclientworkers1', 'osInfo', {}))
-  // mainTest.testRaw('SERVICE RPC', {rpcCounter, rpcOkCounter, Seconds: (Date.now() - rpcStartTime) / 1000, millisecondsPerRequest: (Date.now() - rpcStartTime) / rpcCicles}, (data) => data.rpcCounter === data.rpcOkCounter)
-  //
-  // mainTest.sectionHead('SERVICE RPC')
-  // mainTest.consoleResume()
-  // var rpcCounter = 0
-  // var rpcOkCounter = 0
-  // var rpcStartTime = Date.now()
-  // var rpcCicles = 10000
-  //
-  // while (rpcCounter < rpcCicles) {
-  //   rpcCounter++
-  //   var random = Math.floor(Math.random() * 1000000)
-  //   var test
-  //   try { test = await netClient.rpc('civil-microservices_netclientworkers1', 'echo', {random}) } catch (err) {
-  //     test = err
-  //     log('rpc error', err)
-  //   }
-  //     // mainTest.testRaw('SERVICE RPC', test, (data) => data.random === random)
-  //     // mainTest.consoleResume()
-  //   if (test && test.random === random)rpcOkCounter++
-  // }
-  // await new Promise((resolve) => setTimeout(resolve, 1000))
-  // log('osInfo', await netClient.rpc('civil-microservices_netclientworkers1', 'osInfo', {}))
-  // mainTest.testRaw('SERVICE RPC', {rpcCounter, rpcOkCounter, Seconds: (Date.now() - rpcStartTime) / 1000, millisecondsPerRequest: (Date.now() - rpcStartTime) / rpcCicles}, (data) => data.rpcCounter === data.rpcOkCounter)
-  //
-  // mainTest.sectionHead('SERVICE RPC NO AWAIT')
-  // mainTest.consoleResume()
-  // var rpcCounter = 0
-  // var rpcOkCounter = 0
-  // var rpcStartTime = Date.now()
-  // var rpcCicles = 1000
-  //
-  // while (rpcCounter < rpcCicles) {
-  //   rpcCounter++
-  //   netClient.rpc('civil-microservices_netclientworkers1', 'echo', {}).then(test => { if (test)rpcOkCounter++ })
-  //   // try { test = await netClient.rpc('civil-microservices_netclientworkers1', 'echo', {random}) } catch (err) {
-  //   //   test = err
-  //   //   log('rpc error', err)
-  //   // }
-  //   //   // mainTest.testRaw('SERVICE RPC', test, (data) => data.random === random)
-  //   //   // mainTest.consoleResume()
-  // }
-  // await new Promise((resolve) => setTimeout(resolve, 1000))
-  // log('osInfo', await netClient.rpc('civil-microservices_netclientworkers1', 'osInfo', {}))
-  // mainTest.testRaw('SERVICE RPC', {rpcCounter, rpcOkCounter, Seconds: (Date.now() - rpcStartTime) / 1000, millisecondsPerRequest: (Date.now() - rpcStartTime) / rpcCicles}, (data) => data.rpcCounter === data.rpcOkCounter)
-  //
-  // mainTest.sectionHead('SERVICE LONG RPC')
-  // mainTest.consoleResume()
-  // var rpcCounter = 0
-  // var rpcOkCounter = 0
-  // var rpcStartTime = Date.now()
-  // var rpcCicles = 100000
-  // // log('XXXXXXXXXX SHOTDOWN XXXXXXXXXXXXXXXX ->civil-microservices_netclientworkers1', await netClient.rpc('civil-microservices_netclientworkers1', 'shutdown', {}))
-  // // await new Promise((resolve) => setTimeout(resolve, 1000))
-  // // log('XXXXXXXXXX SHOTDOWN XXXXXXXXXXXXXXXX ->civil-microservices_netclientworkers1', await netClient.rpc('civil-microservices_netclientworkers1', 'shutdown', {}))
-  // // await new Promise((resolve) => setTimeout(resolve, 1000))
-  //
-  // while (rpcCounter < rpcCicles) {
-  //   rpcCounter++
-  //   var random = Math.floor(Math.random() * 1000000)
-  //   var test
-  //   try { test = await netClient.rpc('civil-microservices_netclientworkers1', 'echo', {random}) } catch (err) {
-  //     test = err
-  //     log('rpc error', err)
-  //   }
-  //     // mainTest.testRaw('SERVICE RPC', test, (data) => data.random === random)
-  //     // mainTest.consoleResume()
-  //   if (test && test.random === random)rpcOkCounter++
-  // }
-  // await new Promise((resolve) => setTimeout(resolve, 1000))
-  // log('osInfo', await netClient.rpc('civil-microservices_netclientworkers1', 'osInfo', {}))
-  // mainTest.testRaw('SERVICE RPC', {rpcCounter, rpcOkCounter, Seconds: (Date.now() - rpcStartTime) / 1000, millisecondsPerRequest: (Date.now() - rpcStartTime) / rpcCicles}, (data) => data.rpcCounter === data.rpcOkCounter)
 
+  mainTest.sectionHead('SERVICE RPC')
+  mainTest.consoleResume()
+  var rpcCounter = 0
+  var rpcOkCounter = 0
+  var rpcStartTime = Date.now()
+  var rpcCicles = 10000
+
+  while (rpcCounter < rpcCicles) {
+    rpcCounter++
+    var random = Math.floor(Math.random() * 1000000)
+    var test
+    try { test = await netClient.rpc('civil-microservices_netclientworkers1', 'echo', {random}) } catch (err) {
+      test = err
+      log('rpc error', err)
+    }
+      // mainTest.testRaw('SERVICE RPC', test, (data) => data.random === random)
+      // mainTest.consoleResume()
+    if (test && test.random === random)rpcOkCounter++
+  }
+  await new Promise((resolve) => setTimeout(resolve, 1000))
+  log('osInfo', await netClient.rpc('civil-microservices_netclientworkers1', 'osInfo', {}))
+  mainTest.testRaw('SERVICE RPC', {rpcCounter, rpcOkCounter, Seconds: (Date.now() - rpcStartTime) / 1000, millisecondsPerRequest: (Date.now() - rpcStartTime) / rpcCicles}, (data) => data.rpcCounter === data.rpcOkCounter)
+
+  mainTest.sectionHead('SERVICE RPC')
+  mainTest.consoleResume()
+  var rpcCounter = 0
+  var rpcOkCounter = 0
+  var rpcStartTime = Date.now()
+  var rpcCicles = 100000
+
+  while (rpcCounter < rpcCicles) {
+    rpcCounter++
+    var random = Math.floor(Math.random() * 1000000)
+    var test
+    try { test = await netClient.rpc('civil-microservices_netclientworkers1', 'echo', {random}) } catch (err) {
+      test = err
+      log('rpc error', err)
+    }
+      // mainTest.testRaw('SERVICE RPC', test, (data) => data.random === random)
+      // mainTest.consoleResume()
+    if (test && test.random === random)rpcOkCounter++
+  }
+  await new Promise((resolve) => setTimeout(resolve, 1000))
+  log('osInfo', await netClient.rpc('civil-microservices_netclientworkers1', 'osInfo', {}))
+  mainTest.testRaw('SERVICE RPC', {rpcCounter, rpcOkCounter, Seconds: (Date.now() - rpcStartTime) / 1000, millisecondsPerRequest: (Date.now() - rpcStartTime) / rpcCicles}, (data) => data.rpcCounter === data.rpcOkCounter)
+
+  mainTest.sectionHead('SERVICE RPC NO AWAIT')
+  mainTest.consoleResume()
+  var rpcCounter = 0
+  var rpcOkCounter = 0
+  var rpcStartTime = Date.now()
+  var rpcCicles = 50000
+
+  while (rpcCounter < rpcCicles) {
+    rpcCounter++
+    netClient.rpc('civil-microservices_netclientworkers1', 'echo', {}).then(test => { if (test)rpcOkCounter++ })
+    // try { test = await netClient.rpc('civil-microservices_netclientworkers1', 'echo', {random}) } catch (err) {
+    //   test = err
+    //   log('rpc error', err)
+    // }
+    //   // mainTest.testRaw('SERVICE RPC', test, (data) => data.random === random)
+    //   // mainTest.consoleResume()
+  }
+  await new Promise((resolve) => setTimeout(resolve, 1000))
+  var testEventsCCounter = 0
+
+  var testEventsC = await netClient.rpc('civil-microservices_netclientworkers1', 'getEvents', {type: 'testLongRpc', service: 'testLongRpc'}, {}, true, true, (stream) => {
+    log('addedStream', {testEventsCCounter})
+    stream.on('readable', () => {
+      while ((stream.read()) !== null) {
+        testEventsCCounter++
+      }
+    }).on('error', (data) => log('stream error', data)).on('end', (data) => log('stream end', data))
+  }, (stream) => {
+    log('removeStream', {testEventsBCounter})
+  })
+  log('testEventsB')
+  await new Promise((resolve) => setTimeout(resolve, 2000))
+
+  log('osInfo', await netClient.rpc('civil-microservices_netclientworkers1', 'osInfo', {}))
+  mainTest.testRaw('SERVICE RPC', {rpcCounter, rpcOkCounter, Seconds: (Date.now() - rpcStartTime) / 1000, millisecondsPerRequest: (Date.now() - rpcStartTime) / rpcCicles}, (data) => data.rpcCounter === data.rpcOkCounter)
+  var countLongRpc = 0
+  var longRpc = async () => {
+    testEventsCCounter = 0
+    countLongRpc++
+    mainTest.sectionHead('SERVICE LONG RPC ' + countLongRpc)
+    mainTest.consoleResume()
+    try { log('XXXXXXXXXX SHOTDOWN XXXXXXXXXXXXXXXX ->civil-microservices_netclientworkers?', await netClient.rpc('civil-microservices_netclientworkers' + Math.floor(Math.random() + 1), 'shutdown', {})) } catch (err) { log('err', err) }
+
+    var rpcCounter = 0
+    var rpcOkCounter = 0
+    var rpcStartTime = Date.now()
+    var rpcCicles = 10000
+    while (rpcCounter < rpcCicles) {
+      rpcCounter++
+      var test
+      try { test = await netClient.rpc('civil-microservices_netclientworkers2', 'call', {service: 'civil-microservices_netclientworkers1', method: 'emitEvent', data: {type: 'testLongRpc', data: {'test': 'test'}}}) } catch (err) {
+        test = err
+        log('rpc error', err)
+      }
+      if (test)rpcOkCounter++
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5000))
+    log('osInfo', await netClient.rpc('civil-microservices_netclientworkers1', 'osInfo', {}))
+    log('osInfo', await netClient.rpc('civil-microservices_netclientworkers2', 'osInfo', {}))
+    mainTest.testRaw('SERVICE RPC', {rpcCounter, rpcOkCounter, Seconds: (Date.now() - rpcStartTime, testEventsCCounter) / 1000, millisecondsPerRequest: (Date.now() - rpcStartTime) / rpcCicles}, (data) => data.rpcCounter === data.rpcOkCounter === testEventsCCounter)
+  }
+  while (countLongRpc < 1000) await longRpc()
   return mainTest.finish()
 }
 module.exports = startTest

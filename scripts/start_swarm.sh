@@ -1,6 +1,13 @@
 #/bin/bash
+
 docker stop $(docker ps -a -q)
-docker rm $(docker ps -a -q)
+docker rm -f -v $(docker ps -a -q)
+# docker system prune  --force --volumes
+docker network prune --force
+docker swarm leave --force
+docker swarm init
+sleep 1
+
 DIR=$(dirname "$(readlink -f "$0")")
 
 CIVIL_SERV=""
@@ -11,10 +18,7 @@ if [ -z "$1" ];
     cd $DIR
     $TERM -e 'sh webpack.sh' &
     cd $DIR/..
-    docker network prune --force
-    docker swarm leave --force
-    docker swarm init
-    sleep 1
+
     for dir in ./services/*
     do
      serviceName=$(basename $dir)
@@ -27,9 +31,10 @@ if [ -z "$1" ];
     done
     sleep 5
     xdg-open http://127.0.0.1:9000
-    reset
+    # reset
     echo $CIVIL_SERV
     bash -c "$CIVIL_SERV& fg"
+
     # sudo sysctl -w vm.max_map_count=262144
 fi
 # reset

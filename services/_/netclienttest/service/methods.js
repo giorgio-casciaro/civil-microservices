@@ -18,60 +18,8 @@ var getEventsConnected = false
 var getEventsConnectedHostnames = {}
 var getEventsConnectedServices = {}
 var serviceMethods = {
-  init: {
-    config: {public: false},
-    exec: async function (setNetClient) {
-      netClient = setNetClient
-    }
-  },
-  getEvents: {
-    config: {public: true, stream: true, upload: false, warmUp: 0},
-    request: {properties: {'type': {type: 'string'}, 'service': {type: 'string'}}},
-    response: false,
-    exec: async function (reqData, meta = {directCall: true}, getStream = null) {
-      var stream = getStream()
-      var listener = (event) => {
-        // log('getEvents event', {event})
-        stream.write(event)
-        // try { stream.write(event) } catch (err) {
-        //   log('getEvents stream error', err)
-        //   stream.end(event)
-        //   netClient.off(reqData.type, listener)
-        // }
-      }
-      stream.on('end', () => netClient.off(reqData.type, listener))
-      netClient.on(reqData.type, listener, reqData.service, true)
-      if (reqData.service) {
-        if (!getEventsConnectedServices[meta.service]) {
-          getEventsConnectedServices[meta.service] = true
-          // log('getEmitQueue', netClient.getEmitQueue(reqData.type))
-          netClient.getEmitQueue(reqData.type).forEach((eventData) => listener(eventData))
-        }
-      } else if (!getEventsConnectedHostnames[meta.hostname]) {
-        getEventsConnectedHostnames[meta.hostname] = true
-      }
-    }
-  },
-  emitEvent: {
-    config: {public: false, stream: false, upload: false},
-    request: {properties: {'type': {type: 'string'}, 'data': {type: 'object'}}},
-    response: false,
-    exec: async function (reqData, meta = {directCall: true}, getStream = null) {
-      // if (!getEventsConnected) return {error: `no getEventsConnected`, data: {meta}}
-      // log('netClient.emit reqData', reqData)
-      netClient.emit(reqData.type, reqData.data)
-      return {success: `Event Emitted`, data: {reqData}}
-    }
-  },
-  osInfo: {
-    config: {public: false, stream: false, upload: false},
-    request: {},
-    response: false,
-    exec: async function (reqData, meta = {directCall: true}, getStream = null) {
-      var os = require('os')
-      // return {success: `osInfo`, data: {cpus: os.cpus(), totalmem: os.totalmem(), freemem: os.freemem(), hostname: os.hostname(), loadavg: os.loadavg(), networkInterfaces: os.networkInterfaces(), uptime: os.uptime()}}
-      return {success: `osInfo`, data: {totalmem: os.totalmem(), freemem: os.freemem(), hostname: os.hostname(), loadavg: os.loadavg(), uptime: os.uptime()}}
-    }
+  init: async function (setNetClient) {
+    netClient = setNetClient
   },
   call: {
     config: {public: false, stream: false, upload: false},
