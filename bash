@@ -1,1 +1,0 @@
-docker-compose  -f ./services/aerospike/docker-compose.yml -f ./services/app/docker-compose.yml -f ./services/schema/docker-compose.yml -f ./services/users/docker-compose.yml -f ./services/www/docker-compose.yml down

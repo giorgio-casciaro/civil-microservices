@@ -434,7 +434,7 @@ var serviceMethods = {
       await DB.put('picMeta', picMeta, reqData.id + '_meta')
       return {success: `Pic Deleted`, id: reqData.id, data: picMeta, mutations: [mutation]}
     }},
-  updatePassword: {
+  changePassword: {
     config: {public: true, stream: false, upload: false},
     request: {properties: {id: entitySchemaProperties.id, password: entitySchemaProperties.password, oldPassword: entitySchemaProperties.password, confirmPassword: entitySchemaProperties.password}},
     response: defaultResponseSchema,
@@ -448,7 +448,7 @@ var serviceMethods = {
       if (!currentState || currentState.deleted || !currentState.emailConfirmed) throw new Error('entity state problems (not present, deleted or not ready)')
       if (!tokenData.permissions['usersWrite'] && currentState.id !== tokenData.userId) throw new Error('user cant write for other users')
       var data = {password: bcrypt.hashSync(reqData.password, 10)}
-      var mutation = mutate(currentState.id, 'updatePassword', meta, data)
+      var mutation = mutate(currentState.id, 'changePassword', meta, data)
       var view = await saveMutationsAndUpdateView(currentState.id, [mutation], currentState)
       return {success: `Password updated`, id: reqData.id, mutations: [mutation]}
     }},
@@ -492,12 +492,13 @@ var serviceMethods = {
     response: defaultResponseSchema,
     exec: async function (reqData, meta = {directCall: true}, getStream = null) {
       var id = reqData.id
-      var currentState = await getView(id, reqData.fields)
       var tokenData = await getTokenData(meta)
+      if (!tokenData.permissions['usersReadAll'] && id !== tokenData.userId) reqData.fields = ['VIEW_META', 'id', 'publicName', 'deleted', 'emailConfirmed']
+      var currentState = await getView(id, reqData.fields)
       log('read', {reqData, currentState})
       if (!currentState) throw new Error('entity state problems (not present, deleted or not ready)')
-      // if (!currentState || currentState.deleted  || !currentState.emailConfirmed) throw new Error('entity state problems (not present, deleted or not ready)')
-      if (!tokenData.permissions['usersReadAll'] && id !== tokenData.userId) throw new Error('user cant read  other users')
+      if ((!tokenData.permissions['usersReadAll'] && id !== tokenData.userId) && (currentState.deleted || !currentState.emailConfirmed)) throw new Error('entity state problems (not present, deleted or not ready)')
+      // if (!tokenData.permissions['usersReadAll'] && id !== tokenData.userId) throw new Error('user cant read  other users')
       if (currentState.emailConfirmationCode) delete currentState.emailConfirmationCode
       if (currentState.password) delete currentState.password
       return { success: `User readed`, id, view: currentState, partial: !!reqData.fields }
@@ -575,33 +576,34 @@ var serviceMethods = {
   list: {
     config: {public: true, stream: false, upload: false},
     request: { properties: { from: { type: 'integer' }, to: { type: 'integer' }, loadIfUpdatedAfter: { type: 'integer' }, fields: {type: 'array', item: {type: 'string'}} } },
-    response: {properties: {results: {type: 'array', items: entitySchemaProperties}, errors: {type: 'array'}}},
+    response: {properties: { success: { type: 'string' }, results: {type: 'array', items: entitySchemaProperties}, timestamp: {type: 'integer'}, errors: {type: 'array'}}},
     // request: {properties: {'type': {type: 'string'}}},
     // response: defaultResponseSchema,
     exec: async function (reqData, meta = {directCall: true}, getStream = null) {
       var userId = await auth.getUserIdFromToken(meta, CONFIG.jwt)
       var tokenData = await getTokenData(meta)
-      var offset = reqData.from || 0
-      var limit = reqData.to || 20 - offset
-      var queryBody = ' where DOC_TYPE="view" '
-      if (!tokenData.permissions['usersReadAll'])queryBody += ' AND (item.id=$1 OR ((item.deleted IS MISSING OR item.deleted=false) )) '
-      queryBody += ' ORDER BY item.VIEW_META.updated DESC LIMIT $2 OFFSET $3 '
-      var results = await DB.queryIdIfModifiedBefore(reqData.loadIfUpdatedAfter, reqData.fields, queryBody, [userId, limit, offset])
-
-      // reqData.loadIfUpdatedAfter
-      // var fields = reqData.fields || false
       // var offset = reqData.from || 0
       // var limit = reqData.to || 20 - offset
-      // var queryFields = fields ? fields.map(field => 'item.' + field).join(',') : reqData.loadIfUpdatedAfter ? '  item ' : '  item.* '
-      // var querySelect = reqData.loadIfUpdatedAfter ? ' SELECT CASE WHEN VIEW_META.updated>' + reqData.loadIfUpdatedAfter + ' THEN ' + queryFields + ' ELSE id END ' : ' SELECT ' + queryFields
-      // var queryFrom = ' FROM users item '
-      // var queryWhere = ' where DOC_TYPE="view" '
-      // if (!tokenData.permissions['usersReadAll'])queryWhere += ' AND (item.id=$1 OR ((item.deleted IS MISSING OR item.deleted=false) )) '
-      // var queryOrderAndLimit = ' ORDER BY item.VIEW_META.updated DESC LIMIT $2 OFFSET $3 '
-      // var results = await DB.query(querySelect + queryFrom + queryWhere + queryOrderAndLimit, [userId, limit, offset])
-      // if (reqData.loadIfUpdatedAfter)results = results.map(result => result['$1'])
+      // var queryBody = ' where DOC_TYPE="view" '
+      // if (!tokenData.permissions['usersReadAll'])queryBody += ' AND (item.id=$1 OR ((item.deleted IS MISSING OR item.deleted=false) )) '
+      // queryBody += ' ORDER BY item.VIEW_META.updated DESC LIMIT $2 OFFSET $3 '
+      // var results = await DB.queryIdIfModifiedBefore(reqData.loadIfUpdatedAfter, reqData.fields, queryBody, [userId, limit, offset])
+
+      // reqData.loadIfUpdatedAfter
+      var fields = reqData.fields || false
+      // if (!tokenData.permissions['usersReadAll'])fields = ['id', 'publicName', 'VIEW_META']
+      var offset = reqData.from || 0
+      var limit = reqData.to || 20 - offset
+      var queryFields = fields ? fields.map(field => 'item.' + field).join(',') : reqData.loadIfUpdatedAfter ? '  item ' : '  item.* '
+      var querySelect = reqData.loadIfUpdatedAfter ? ' SELECT CASE WHEN VIEW_META.updated>' + reqData.loadIfUpdatedAfter + ' THEN ' + queryFields + ' ELSE id END ' : ' SELECT ' + queryFields
+      var queryFrom = ' FROM users item '
+      var queryWhere = ' where DOC_TYPE="view" '
+      if (!tokenData.permissions['usersReadAll'])queryWhere += ' AND (item.id=$1 OR ((item.deleted IS MISSING OR item.deleted=false) AND (item.emailConfirmed=true) )) '
+      var queryOrderAndLimit = ' ORDER BY item.VIEW_META.updated DESC LIMIT $2 OFFSET $3 '
+      var results = await DB.query(querySelect + queryFrom + queryWhere + queryOrderAndLimit, [userId, limit, offset])
+      if (reqData.loadIfUpdatedAfter)results = results.map(result => result['$1'])
       debug('list results', results)
-      return {success: `entities listed`, results}
+      return {success: `entities listed`, results, timestamp: Date.now()}
     }
   }
 }

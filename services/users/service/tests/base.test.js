@@ -40,7 +40,7 @@ var startTest = async function (netClient) {
     return response
   }
 
-  await new Promise((resolve) => setTimeout(resolve, 1000))
+  await new Promise((resolve) => setTimeout(resolve, 30000))
   var CONFIG = require('../config')
   const auth = require('sint-bit-utils/utils/auth')
   var mainTest = require('sint-bit-utils/utils/microTest')('test Microservice local methods and db connections', 1)
@@ -233,8 +233,8 @@ var startTest = async function (netClient) {
   test = await apiCall('getPic', {id: picId, size: 'full'}, {token: loginToken})
   mainTest.testRaw('getPic deleted', test, (data) => !data.success && data.error)
 
-  test = await apiCall('updatePassword', {id: resultId, password: 'new_pass', confirmPassword: 'new_pass', oldPassword: 'password'}, {token: loginToken})
-  mainTest.testRaw('updatePassword', test, (data) => data.success && !data.error)
+  test = await apiCall('changePassword', {id: resultId, password: 'new_pass', confirmPassword: 'new_pass', oldPassword: 'password'}, {token: loginToken})
+  mainTest.testRaw('changePassword', test, (data) => data.success && !data.error)
 
   await dbRemove(resultId)
   await context.destroy()
