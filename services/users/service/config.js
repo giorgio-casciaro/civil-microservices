@@ -1,12 +1,7 @@
 var path = require('path')
 var fs = require('fs')
 module.exports = {
-
-  // schemaHost: process.env.schemaHost || 'http://127.0.0.1:10000',
-  // confirmEmailUrl: process.env.confirmEmailUrl || 'http://127.0.0.1:10080/#/confirmEmailUrl',
-  // sendEmails: process.env.sendEmails || true,
-  // mailFrom: process.env.mailFrom || 'notifications@civilconnect.it',
-  // uploadPath: process.env.uploadPath || '/upload/',
+  serviceName: process.env.serviceName,
   smtp: process.env.smtpConfigJson ? JSON.parse(process.env.smtpConfigJson) : {
     host: '127.0.0.1',
     from: 'info@civilconnect.it',

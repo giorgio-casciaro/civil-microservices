@@ -8,6 +8,8 @@ process.on('unhandledRejection', (err, p) => {
 var methods = require('./methods')
 var sharedMethods = require('sint-bit-utils/utils/sharedMethods')
 var CONFIG = require('./config')
+if (!process.env.IPADDRESS)process.env.IPADDRESS = require('os').networkInterfaces()['eth0'][0].address
+console.log('process.env', process.env)
 
 module.exports = async function start () {
   var netClient = require('sint-bit-utils/utils/netClient')
