@@ -17,8 +17,10 @@ if [ -z "$1" ];
     do
      serviceName=$(basename $dir)
      file="${dir}/config/docker-compose.yml"
+
+     echo "Check $serviceName $file"
      if [ -f "$file" ]; then
-     echo $serviceName $file
+     echo "Founded $serviceName $file"
      bash -c "docker stack deploy -c $file civil-microservices"
      # CIVIL_SERV="$CIVIL_SERV docker service logs --follow civil-microservices_$serviceName &"
 

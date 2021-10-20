@@ -1,3 +1,7 @@
- module.exports = function (state, data) {
-  return Object.assign({}, state, data)
+module.exports = {
+  fieldsWrite: '*',
+  fieldsRead: [],
+  exec: function (state, data) {
+    return Object.assign({}, state, data)
+  }
 }

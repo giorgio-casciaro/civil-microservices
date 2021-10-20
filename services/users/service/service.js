@@ -6,18 +6,18 @@ process.on('unhandledRejection', (err, p) => {
 })
 
 var methods = require('./methods')
-var sharedMethods = require('sint-bit-utils/utils/sharedMethods')
 var CONFIG = require('./config')
 if (!process.env.IPADDRESS)process.env.IPADDRESS = require('os').networkInterfaces()['eth0'][0].address
-console.log('process.env', process.env)
+// console.log('process.env', process.env)
 
 module.exports = async function start () {
+  await require('sint-bit-utils/utils/wait').service('http://' + require('./config').couchbase.url, 5000)
+
   var netClient = require('sint-bit-utils/utils/netClient')
-  await sharedMethods.init(netClient)
+
   await methods.init(netClient)
-  for (var i in methods)sharedMethods[i] = methods[i]
-  var httpServer = require('sint-bit-jesus/servers/http')({methods: sharedMethods, config: CONFIG.http})
-  var zeromqServer = require('sint-bit-jesus/servers/zeromq')({methods: sharedMethods, config: CONFIG.zeromq})
+  var httpServer = require('sint-bit-jesus/servers/http')({methods, config: CONFIG.http})
+  var zeromqServer = require('sint-bit-jesus/servers/zeromq')({methods, config: CONFIG.zeromq})
   await httpServer.start()
   await zeromqServer.start()
   return {

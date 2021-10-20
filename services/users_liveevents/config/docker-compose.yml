@@ -1,20 +1,20 @@
 version:                  '3.3'
 
 services:
-   users:
+   users_liveevents:
      image:               giorgiocasciaro/ubuntu-node-10:0.0.1
     #  logging:
     #    driver:          none
      working_dir:         /microservice
-     command:             sh -c "npm run watch_start"
+     command:             sh -c "npm run watch_test"
      environment:
        # debugJesus:      1
        # debugCouchbase:    1
        # debugSchema:       1
        # debugMain:         1
        uploadPath:        /uploads/
-       serviceName:       users
-       netHost:           users
+       serviceName:       users_liveevents
+       netHost:           users_liveevents
        couchbaseHosts:    51.15.224.160:8091
        couchbaseUser:     Administrator
        couchbasePassword: Vopakz_331
@@ -24,7 +24,7 @@ services:
        smtpConfigJson: '{ "host": "fakesmtp", "from": "info@civilconnect.it", "port": 1025, "secure": false }'
      volumes:
        - /var/run/docker.sock:/var/run/docker.sock
-       - ../../users:/microservice
+       - ../../users_liveevents:/microservice
        # - ../../../../civil_microservices_shared_modules/:/microservice/node_modules
        - ../../../NPM/jesus:/microservice/node_modules/sint-bit-jesus
        - ../../../NPM/cqrs:/microservice/node_modules/sint-bit-cqrs

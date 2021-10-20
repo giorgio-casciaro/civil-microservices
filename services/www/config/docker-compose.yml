@@ -95,6 +95,15 @@ services:
       - 82:82
       - 83:83
       - 443:443
+     deploy:
+        mode:              global
+        resources:
+          limits:
+            cpus:          '0.50'
+            memory:        100M
+          reservations:
+            cpus:          '0.20'
+            memory:        50M
 
 
 networks:

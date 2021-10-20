@@ -1,4 +1,8 @@
-module.exports = function (state, data) {
-  state.deleted = true
-  return state
+module.exports = {
+  fieldsWrite: ['deleted'],
+  fieldsRead: [],
+  exec: function (state, data) {
+    state.deleted = true
+    return state
+  }
 }
